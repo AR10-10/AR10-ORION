@@ -55,6 +55,13 @@ import { startLiquidationStream } from '../../js/real-data/binance-liquidations-
 import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
+// MD-7 (Visual Confidence Trace, pedido direto do Operador): o MESMO
+// findSwings/FRACTAL_K que market-structure-engine.js/support-resistance-
+// engine.js/fvg-order-block-engine.js já importam — nunca um segundo
+// ZigZag (o Operador foi explícito: "não reativar o zigzag completo").
+// Import direto porque este wrapper não classifica nada (zero rótulo de
+// estrutura) — só expõe os pivôs confirmados crus para o traçado visual.
+import { FRACTAL_K, findSwings } from '../../src/research/engines/fractal-swings.js';
 // OMEGA CORE V-MAX Fase 7 (completar o Radar/OIH): mesmo motor real de
 // S/R que o ciclo principal já usa (via analysis-frame.js) — importado
 // aqui diretamente porque o scanner do Radar roda para ativos que NÃO
@@ -77,12 +84,37 @@ import { analyze as analyzeInstitutionalBlocks } from '../../src/research/engine
 // Entrega 47 (pedido direto do Operador): graduação do ZigZag do
 // Laboratório de Evolução (isolado/testado desde a Entrega 35, nunca
 // importado até aqui — ver QUARANTINE.md). Motor puro inalterado.
-import { computeZigZag as computeZigZagPure } from '../../src/research/engines/zigzag-engine.js';
+import {
+  computeZigZag as computeZigZagPure,
+  ZIGZAG_DEFAULT_DEVIATION_PCT,
+  ZIGZAG_DEFAULT_DEPTH,
+} from '../../src/research/engines/zigzag-engine.js';
 // Graduação de supertrend-engine.js. O motor e sua suíte de execução real
 // (18 casos) existiam desde a entrega anterior e nunca tinham chegado ao
 // sistema ao vivo — 0 importadores, mesmo padrão de falha registrado para
 // institutional-blocks.js. Ver QUARANTINE.md.
 import { computeSuperTrend as computeSuperTrendPure } from '../../src/research/engines/supertrend-engine.js';
+// Auditoria do ecossistema de indicadores (pedido direto do Operador: "qual
+// ferramenta que está faltando"): Pivot Points (Classic/Floor Trader) era o
+// único gap real não-redundante encontrado — ver header do motor. Motor
+// puro novo, isolado e testado (10 casos de execução real) antes de entrar
+// aqui. Ver QUARANTINE.md.
+import { computePivotPoints as computePivotPointsPure } from '../../src/research/engines/pivot-points-engine.js';
+// Ichimoku Kinko Hyo (Hosoda) — última ferramenta clássica ausente que
+// sobreviveu ao julgamento de redundância da auditoria do ecossistema
+// (as outras 6 são substituíveis pelo que já existe; ver header do motor).
+import {
+  computeIchimoku as computeIchimokuPure,
+  ichimokuCloudPosition as ichimokuCloudPositionPure,
+} from '../../src/research/engines/ichimoku-engine.js';
+// Divergência de Delta (preço × CVD) — motor de 2026-08-24 que ficou em
+// quarentena por retenção curta de CVD; o bloqueio caiu quando
+// ORDERFLOW_HISTORY_CAPACITY subiu de 120 para 900 (~1h). Graduado agora.
+import { analyze as analyzeDeltaDivergencePure } from '../../src/research/engines/delta-divergence-engine.js';
+// Andrews Pitchfork (Median Line Analysis) — ultima ferramenta de grafico
+// com nome proprio ausente que nao estava bloqueada por dado nem por
+// decisao. Graduado do Laboratorio.
+import { analyze as analyzeAndrewsPitchforkPure } from '../../src/research/engines/andrews-pitchfork-engine.js';
 // Padrões de vela japoneses (candlestick-patterns.js) — pedido direto do
 // Operador ("o gráfico tem que refletir os padrão das vela... existe padrão
 // de vela que muda o sentido do mercado"). Auditoria antes de construir
@@ -111,7 +143,6 @@ import { detectHvnLvn, bucketMidPrice, type VolumeProfileResult } from './nexus/
 // motores graduados (fractal-swings.js, extração da Auditoria Mestra) —
 // a perna da retração Fibonacci é a MESMA perna real da extensão 61.8% do
 // motor de S/R, nunca uma segunda definição de swing.
-import { findSwings, FRACTAL_K } from '../../src/research/engines/fractal-swings.js';
 import { buildFibonacciConfluence, type ConfluenceSource, type FibonacciConfluenceMatrix } from './nexus/fibonacci-confluence';
 // Fase Ω Priority 1 (Adaptive Multi-Timeframe Intelligence): motor puro
 // já reaproveita analyzeMarketStructure/classifyMarketRegime/S-R/RSI por
@@ -238,8 +269,9 @@ export interface RealCycleResult {
   target2Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
   // Achado de auditoria (ADITIVO V-MAX: Ferramentas Institucionais):
   // support-resistance-engine.js já calcula fib_extension_long_target/
-  // fib_extension_short_target TODO ciclo (extensão de Fibonacci 61.8%
-  // sobre a última perna confirmada) — o comentário da própria EPC §5/§6
+  // fib_extension_short_target TODO ciclo (extensão de Fibonacci de
+  // 161.8% sobre a última perna confirmada — a notação profissional do
+  // nível; ver a identidade documentada em support-resistance-engine.js) — o comentário da própria EPC §5/§6
   // no chart ("falta aparecer entrada e alvo/alvo2/alvo3") já esperava
   // este campo, mas ele morria dentro de research-engine.js (só como
   // texto formatado em rota_a_long/rota_b_short) e nunca chegava aqui.
@@ -446,6 +478,85 @@ function getHtfMarketStructure(symbol: string): { label: string | null; updatedA
     return { label: htfCache.structureLabel, updatedAt: htfCache.fetchedAt };
   }
   return { label: null, updatedAt: null };
+}
+
+// Pivot Points (Classic) — MESMO padrão não-bloqueante de
+// getHtfMarketStructure acima: pivots diários mudam no máximo 1x por dia
+// real (fronteira 00:00 UTC), então buscar toda vez que o Operador troca de
+// ativo/timeframe seria uma sonda de rede redundante sem nenhum ganho de
+// informação. PIVOT_REFRESH_MS é bem mais folgado que HTF_REFRESH_MS de
+// propósito: o dado de referência não muda dentro do dia.
+const PIVOT_INTERVAL = '1d';
+const PIVOT_REFRESH_MS = 30 * 60_000;
+const ONE_DAY_MS = 24 * 60 * 60_000;
+export interface PivotPointsSnapshot {
+  status: 'OK' | 'DADOS_INSUFICIENTES';
+  pp: number | null;
+  r1: number | null; r2: number | null; r3: number | null;
+  s1: number | null; s2: number | null; s3: number | null;
+  referenceDayCloseTime: number | null;
+  updatedAt: number | null;
+}
+const PIVOT_INSUFICIENTE: Omit<PivotPointsSnapshot, 'updatedAt'> = {
+  status: 'DADOS_INSUFICIENTES', pp: null, r1: null, r2: null, r3: null, s1: null, s2: null, s3: null,
+  referenceDayCloseTime: null,
+};
+let pivotCache: { symbol: string; snapshot: PivotPointsSnapshot } | null = null;
+let pivotFetchInFlight = false;
+
+function refreshPivotPointsInBackground(symbol: string): void {
+  if (pivotFetchInFlight) return;
+  pivotFetchInFlight = true;
+  (async () => {
+    try {
+      // limit:3 dá folga real: mesmo se a API devolver só dias JÁ FECHADOS
+      // (sem o dia em formação), ainda sobra >=1 candle após o filtro de
+      // tempo abaixo. V15.1 GOD TIER: Futuros exclusivo, sem fallback.
+      const snapshot = await requestFuturesCandleSnapshot({
+        symbol, timeframe: PIVOT_INTERVAL, limit: 3, maxAgeMs: PIVOT_REFRESH_MS,
+      });
+      if (!snapshot.ok) {
+        pivotCache = { symbol, snapshot: { ...PIVOT_INSUFICIENTE, updatedAt: Date.now() } };
+        return;
+      }
+      // O candle de referência tem que estar REALMENTE fechado — nunca
+      // uma posição no array assumida (a API pode ou não incluir o dia
+      // ainda em formação como último elemento; não se sabe por contrato,
+      // só por checagem real de tempo). Um dia só conta como fechado
+      // quando seu período INTEIRO já passou.
+      const now = Date.now();
+      const diasFechados = snapshot.candles.filter((c) => c.t + ONE_DAY_MS <= now);
+      const result = computePivotPointsPure(diasFechados);
+      if (result.status !== 'OK') {
+        pivotCache = { symbol, snapshot: { ...PIVOT_INSUFICIENTE, updatedAt: Date.now() } };
+        return;
+      }
+      pivotCache = {
+        symbol,
+        snapshot: {
+          status: 'OK', pp: result.pp, r1: result.r1, r2: result.r2, r3: result.r3,
+          s1: result.s1, s2: result.s2, s3: result.s3,
+          referenceDayCloseTime: (result.referenceCandle.time as number | null) ?? null,
+          updatedAt: now,
+        },
+      };
+    } catch {
+      pivotCache = { symbol, snapshot: { ...PIVOT_INSUFICIENTE, updatedAt: Date.now() } };
+    } finally {
+      pivotFetchInFlight = false;
+    }
+  })();
+}
+
+/** Snapshot atual (síncrono, cache) + dispara refresh em segundo plano
+ *  quando o cache expirou — nunca bloqueia o ciclo principal por um dado
+ *  puramente contextual/secundário (mesmo contrato de getHtfMarketStructure). */
+export function getPivotPoints(symbol: string): PivotPointsSnapshot {
+  const now = Date.now();
+  const cacheValid = !!pivotCache && pivotCache.symbol === symbol && now - (pivotCache.snapshot.updatedAt ?? 0) < PIVOT_REFRESH_MS;
+  if (!cacheValid) refreshPivotPointsInBackground(symbol);
+  if (pivotCache && pivotCache.symbol === symbol) return pivotCache.snapshot;
+  return { ...PIVOT_INSUFICIENTE, updatedAt: null };
 }
 
 // One full real cycle: real Binance probe -> real WASM analysis frame ->
@@ -702,6 +813,33 @@ export async function getTradFiChartCandles(
   }));
 }
 
+// getMexcChartCandles — Ordem "MEXC ASSET DISCOVERY" + "UNIVERSAL ASSET
+// DISCOVERY" (mesmo pedido, a 2ª generaliza a 1ª): MESMA FORMA/CONTRATO de
+// getChartCandles/getTradFiChartCandles acima (candle canônico {time,open,
+// high,low,close,volume} | null honesto), agora para um baseAsset MEXC
+// (ex. 'BTC') em vez do par cripto Binance padrão ou de um instrumento
+// TradFi. Auditado antes de escrever (CLAUDE.md item 1): o provider MEXC e
+// o cache-suffix `-MEXC` JÁ existiam e já são reais — requestRadarCandleSnapshot
+// (scanRadarCandidate, background do Radar) usa exatamente este mesmo par
+// provider+sufixo há sessões; este wrapper só expõe o mesmo caminho real
+// um nível acima, para o gráfico principal em vez do scanner de fundo.
+// Symbol permanece o baseAsset puro ('BTC', nunca 'BTC_USDT') — a conversão
+// para o formato nativo underscore da MEXC já acontece dentro de
+// mexc-futures-public.js's toMexcSymbol, nunca duplicada aqui.
+export async function getMexcChartCandles(
+  symbol: string,
+  limit = 200,
+  timeframe = '15m',
+): Promise<Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }> | null> {
+  const snapshot: BusSnapshot = await getMarketDataBus().requestSnapshot({
+    symbol: `${symbol}-MEXC`, timeframe, limit, collect: getMarketDataProvider('MEXC').collect, maxAgeMs: 25_000,
+  });
+  if (!snapshot.ok) return null;
+  return snapshot.candles.map((c: { t: number; o: number; h: number; l: number; c: number; v: number }) => ({
+    time: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v,
+  }));
+}
+
 // Auditoria de arquitetura (revisão completa): paginação histórica real do
 // gráfico — achado: CHART_CANDLE_LIMIT era uma janela fixa de 200 candles,
 // sem NENHUM caminho para carregar mais história ao arrastar para trás
@@ -793,27 +931,121 @@ export type { ConfluenceSource, FibonacciConfluenceMatrix, FibConfluenceLevel } 
 // ─────────────────────────────────────────────────────────────────────────────
 // V-MAX Fase 1.4 — Matriz de Confluência Fibonacci (agente transversal).
 //
-// A perna é derivada EXATAMENTE como no support-resistance-engine.js
-// (último swing high/low fractal via o MESMO findSwings compartilhado,
-// direção = qual confirmou por último) — a retração aqui e a extensão
-// 61.8% já em produção falam da MESMA perna real. Cálculo O(n·k) trivial
-// (mesma classe do computeSmcZones que já roda em useMemo), não precisa
-// de worker. Camada de análise/exibição — nunca alimenta o Core Engine.
+// A perna era derivada EXATAMENTE como no support-resistance-engine.js
+// (último swing high/low fractal, K=2), e por isso a retração aqui e a
+// extensão de 161.8% em produção falavam da MESMA perna. ISSO MUDOU nesta
+// rodada, e a divergência está registrada de propósito em vez de escondida:
+//
+//   retração (aqui) ...... perna do ZigZag, limiar escalado pelo ATR real
+//                          do tempo gráfico — a perna ESTRUTURAL
+//   extensão 161.8% ...... support-resistance-engine.js, ainda fractal K=2
+//                          — a última ondulação confirmada
+//
+// PENDÊNCIA CONSCIENTE, não esquecimento: unificar as duas exige mexer no
+// motor que alimenta `extendedTarget` (engine-bridge.ts, campo que o
+// Operador VÊ como alvo). Trocar um alvo exibido é mudança de outra
+// natureza que lapidar uma camada de confluência, e não entra de carona
+// numa rodada de Fibonacci sem o Operador decidir. Enquanto isso, os dois
+// números continuam individualmente corretos — só não são a mesma perna.
+//
+// Cálculo O(n) trivial (mesma classe do computeSmcZones que já roda em
+// useMemo), não precisa de worker. Camada de análise/exibição — LEI 24:
+// nunca alimenta o Core Engine.
 // ─────────────────────────────────────────────────────────────────────────────
+// ═══ A PERNA DO FIBONACCI ESCALA COM O TEMPO GRÁFICO ═══
+//
+// PEDIDO DO OPERADOR: "ele tem que pegar [que] eu estou no gráfico em tal
+// período e puxar baseado naquilo, pra o Fibonacci ficar igual os
+// profissional".
+//
+// DEFEITO REAL, medido: a perna vinha de `findSwings(candles, FRACTAL_K)`
+// com FRACTAL_K = 2 — um swing confirmado por 2 velas de cada lado, ou
+// seja, a MENOR ondulação que existe. O Fibonacci era traçado no último
+// tremor do preço, não na perna estrutural, e o critério era o MESMO em 1m
+// e em 1W. FRACTAL_K é uma constante fixa; nada ali olhava o tempo gráfico.
+//
+// PESQUISA REAL antes de inventar variante própria (Disciplina §2 —
+// TradingView Auto Fib Retracement e implementações derivadas): o padrão
+// da categoria não usa fractal cru. Usa ZigZag com LIMIAR DE
+// SIGNIFICÂNCIA, e a sensibilidade escala com a volatilidade — "a
+// significance threshold that can be set as a multiple of ATR... letting
+// the sensitivity of the zigzag scale with volatility". Os níveis são
+// projetados sobre o ÚLTIMO SWING CONFIRMADO (0 = origem, 1 = extremo).
+//
+// REAPROVEITAMENTO, ZERO MATEMÁTICA NOVA: este repositório já tinha as
+// duas peças e elas nunca tinham se encontrado — `zigzag-engine.js`
+// (graduado, deviation% + depth, os 2 parâmetros reais do indicador) e o
+// ATR% de Wilder já calculado por `regime-engine.js`. O ATR do tempo
+// gráfico SELECIONADO é exatamente o que torna o limiar consciente do
+// período: 1W tem ATR% muito maior que 1m, então o mesmo múltiplo produz
+// uma perna proporcional em cada um, sem nenhuma tabela por timeframe.
+//
+// ATUALIZAÇÃO (auditoria do ecossistema de indicadores): esta escala deixou
+// de ser exclusiva da perna do Fibonacci. `atrScaledZigZagDeviationPct`
+// abaixo nasceu aqui com o nome `fibLegDeviationPct`, mas a lógica sempre
+// foi 100% genérica — "limiar de reversão do ZigZag escalado pelo ATR do
+// tempo gráfico", sem nada específico de Fibonacci nela. O ZigZag VISÍVEL
+// no gráfico (ZigZagPlugin.tsx) tinha o mesmo defeito que a perna do
+// Fibonacci tinha antes desta rodada: limiar FIXO, idêntico em 1m e em 1W.
+// Renomeado para o nome que descreve o algoritmo, não o primeiro chamador —
+// mesmo precedente já aplicado a fractal-swings.js e price-clustering.js.
+
+/** Múltiplo de ATR que vira o limiar de reversão do ZigZag.
+ *
+ *  ANCORADO, não escolhido por gosto: o default clássico do indicador é 5%
+ *  (documentado em zigzag-engine.js a partir de StockCharts/CFI/Capital.com).
+ *  Com múltiplo 5, um ativo de ATR% = 1 reproduz exatamente esse 5% — o
+ *  comportamento conhecido continua sendo o caso base, e o que muda é só a
+ *  ESCALA quando a volatilidade real do período é outra. */
+export const ZIGZAG_ATR_MULTIPLE = 5;
+/** Piso e teto do limiar. O piso impede que um ATR degenerado (perto de
+ *  zero) transforme cada vela num pivô; o teto respeita a faixa usual
+ *  documentada do indicador (5-30% conforme volatilidade/timeframe). */
+export const ZIGZAG_ATR_DEVIATION_MIN_PCT = 0.5;
+export const ZIGZAG_ATR_DEVIATION_MAX_PCT = 30;
+
+/** Limiar de reversão do ZigZag derivado do ATR real do tempo gráfico em
+ *  uso — usado tanto pela perna do Fibonacci (computeRealFibonacciConfluence
+ *  abaixo) quanto pelo ZigZag visível no gráfico (ZigZagPlugin.tsx via
+ *  ChartWidget em App.tsx): mesmo indicador, mesmo limiar adaptativo, um só
+ *  lugar que decide o número.
+ *
+ *  Sem ATR real cai no default CLÁSSICO do próprio motor (5%) — que é uma
+ *  convenção pesquisada e documentada, nunca um número neutro fabricado.
+ *  Isso é deliberado: fazer o ZigZag SUMIR por falta de ATR seria trocar
+ *  um defeito por outro pior. */
+export function atrScaledZigZagDeviationPct(atrPercent: number | null | undefined): number {
+  if (!Number.isFinite(atrPercent) || (atrPercent as number) <= 0) {
+    return ZIGZAG_DEFAULT_DEVIATION_PCT;
+  }
+  const escalado = (atrPercent as number) * ZIGZAG_ATR_MULTIPLE;
+  return Math.min(ZIGZAG_ATR_DEVIATION_MAX_PCT, Math.max(ZIGZAG_ATR_DEVIATION_MIN_PCT, escalado));
+}
+
 export function computeRealFibonacciConfluence(
-  candles: Array<{ high: number; low: number }>,
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
   sources: ConfluenceSource[],
+  atrPercent?: number | null,
 ): FibonacciConfluenceMatrix | null {
   if (!Array.isArray(candles) || candles.length === 0) return null;
-  const swingHighs = findSwings(candles, FRACTAL_K, true);
-  const swingLows = findSwings(candles, FRACTAL_K, false);
-  if (swingHighs.length < 1 || swingLows.length < 1) return null;
-  const lastHigh = swingHighs[swingHighs.length - 1];
-  const lastLow = swingLows[swingLows.length - 1];
-  const legIsUp = lastHigh.index > lastLow.index;
-  // lastLow acima de lastHigh (tendência forte cruzada) não é uma perna
-  // retracionável — buildFibonacciConfluence devolve null (FAIL_CLOSED).
-  return buildFibonacciConfluence(lastLow.price, lastHigh.price, legIsUp, sources);
+  const pivots = computeZigZagPure(
+    candles,
+    atrScaledZigZagDeviationPct(atrPercent),
+    ZIGZAG_DEFAULT_DEPTH,
+  );
+  // O motor só devolve pivô CONFIRMADO (a perna em formação nunca aparece),
+  // então os 2 últimos são o último swing fechado — origem e extremo, na
+  // mesma definição que a pesquisa descreve. Menos de 2 pivôs é uma resposta
+  // real ("sem perna relevante com este limiar"), nunca um erro: FAIL_CLOSED.
+  if (pivots.status !== 'OK' || pivots.points.length < 2) return null;
+  const extremo = pivots.points[pivots.points.length - 1];
+  const origem = pivots.points[pivots.points.length - 2];
+  const legIsUp = extremo.price > origem.price;
+  const legLow = Math.min(origem.price, extremo.price);
+  const legHigh = Math.max(origem.price, extremo.price);
+  // Perna degenerada (extremos iguais) — buildFibonacciConfluence devolve
+  // null por conta própria (FAIL_CLOSED), nunca uma faixa de largura zero.
+  return buildFibonacciConfluence(legLow, legHigh, legIsUp, sources);
 }
 
 // ~um bucket por ~8px de altura típica de chart (janela de legibilidade,
@@ -822,7 +1054,7 @@ export function computeRealFibonacciConfluence(
 const VP_BUCKET_COUNT = 96;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4 item
+// Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4 item
 // 2): buildRiskSuggestion (ipad_runtime/src/risk/risk-engine.js, chamado
 // direto por App.tsx, não por este arquivo) nunca tinha um nome de tipo TS
 // real — cada consumidor via inferência estrutural implícita. Nomeado aqui
@@ -1279,6 +1511,134 @@ export function computeSuperTrend(
   return result.points;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Ichimoku Kinko Hyo — wrapper fino sobre o motor puro, nunca uma segunda
+// implementação. As séries já vêm POSICIONADAS no índice de desenho pelo
+// próprio motor (ver contrato de deslocamento no header dele) — este
+// wrapper não reaplica shift nenhum, que é justamente onde integrações de
+// Ichimoku costumam errar o sinal.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface IchimokuResult {
+  tenkan: number[];
+  kijun: number[];
+  senkouA: number[];
+  senkouB: number[];
+  chikou: number[];
+  futureSenkouA: number[];
+  futureSenkouB: number[];
+  displacement: number;
+}
+
+export interface IchimokuCloudReading {
+  position: 'ACIMA' | 'ABAIXO' | 'DENTRO';
+  cloudTop: number;
+  cloudBottom: number;
+  thicknessPct: number | null;
+  bearishCloud: boolean;
+}
+
+/** Fail-closed (Regra de Ouro 3): sem candles suficientes para o
+ *  aquecimento real de 52, devolve null — nunca uma nuvem parcial. */
+export function computeIchimoku(
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
+): IchimokuResult | null {
+  const result = computeIchimokuPure(candles) as { status: string } & IchimokuResult;
+  if (result.status !== 'OK') return null;
+  return result;
+}
+
+/** Leitura descritiva da nuvem no último candle — CONTEXTO, nunca direção
+ *  (LEI 24: o único emissor de LONG/SHORT/WAIT continua sendo o Core
+ *  Engine; "preço acima da nuvem" aqui tem o mesmo peso de
+ *  "ESTRUTURA_ALTA" do market-structure-engine). */
+export function computeIchimokuCloudReading(
+  result: IchimokuResult | null,
+  lastClose: number | null | undefined,
+): IchimokuCloudReading | null {
+  if (!result || !Number.isFinite(lastClose)) return null;
+  return ichimokuCloudPositionPure(
+    { status: 'OK', ...result },
+    lastClose as number,
+  ) as IchimokuCloudReading | null;
+}
+
+// ── Divergência de Delta (preço × CVD) ──────────────────────────────────
+// Wrapper fino sobre o motor puro, nunca uma segunda implementação. A
+// conversão de unidade acontece AQUI e só aqui: a store retém CVD com
+// `time` em MILISSEGUNDOS (OrderflowHistoryEntry) e os candles do gráfico
+// usam `time` em SEGUNDOS — o motor documenta esse contrato e faz a
+// divisão internamente, então o que este wrapper faz é só garantir a
+// FORMA que ele espera, sem tocar em nenhum dos dois valores.
+export interface DeltaDivergenceMark {
+  type: 'BAIXISTA' | 'ALTISTA';
+  /** Índices no array ORIGINAL de candles — já alinhados ao que está na tela. */
+  fromIndex: number;
+  toIndex: number;
+  fromPrice: number;
+  toPrice: number;
+  fromCvd: number;
+  toCvd: number;
+}
+
+export interface DeltaDivergenceReading {
+  status: 'OK' | 'DADOS_INSUFICIENTES';
+  /** Motivo real e legível quando não há leitura — nunca um silêncio. */
+  reason: string | null;
+  divergence: DeltaDivergenceMark | null;
+  /** Quantas velas o CVD retido realmente cobre. É o número que a UI usa
+   *  para dizer ao Operador exatamente o que falta, em vez de "sem dado". */
+  coveredCandles: number;
+}
+
+// ── Andrews Pitchfork ───────────────────────────────────────────────────
+// Wrapper fino sobre o motor puro, nunca uma segunda implementacao.
+export interface PitchforkPivot {
+  index: number;
+  price: number;
+  isHigh: boolean;
+}
+
+export interface PitchforkGeometry {
+  p0: PitchforkPivot;
+  p1: PitchforkPivot;
+  p2: PitchforkPivot;
+  /** Preco por BARRA (nunca por milissegundo) — ver o cabecalho do motor:
+   *  o eixo x espaca barras uniformemente, e uma inclinacao em tempo de
+   *  relogio entortaria o garfo em cada fim de semana. */
+  slope: number;
+  /** Fato dos pivos (P0 e fundo => ascendente), nunca uma direcao de trade
+   *  (LEI 24). */
+  ascending: boolean;
+  median: { index: number; price: number };
+  upper: { index: number; price: number };
+  lower: { index: number; price: number };
+  midpoint: { index: number; price: number };
+}
+
+export interface AndrewsPitchforkReading {
+  status: 'OK' | 'DADOS_INSUFICIENTES';
+  reason: string | null;
+  pitchfork: PitchforkGeometry | null;
+}
+
+export function computeAndrewsPitchfork(
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
+): AndrewsPitchforkReading | null {
+  if (!Array.isArray(candles)) return null;
+  return analyzeAndrewsPitchforkPure({ ohlcv_series: candles }) as AndrewsPitchforkReading;
+}
+
+export function computeDeltaDivergence(
+  candles: Array<{ time: number; open: number; high: number; low: number; close: number }>,
+  cvdSamples: Array<{ time: number; cvd: number }>,
+): DeltaDivergenceReading | null {
+  if (!Array.isArray(candles) || !Array.isArray(cvdSamples)) return null;
+  return analyzeDeltaDivergencePure({
+    ohlcv_series: candles,
+    cvd_samples: cvdSamples,
+  }) as DeltaDivergenceReading;
+}
+
 export function computeZigZag(
   candles: Array<{ open: number; high: number; low: number; close: number }>,
   deviationPct?: number,
@@ -1287,6 +1647,43 @@ export function computeZigZag(
   const result = computeZigZagPure(candles, deviationPct, depth);
   if (result.status !== 'OK') return [];
   return result.points;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MD-7 (Visual Confidence Trace) — Traçado Roxo Estrutural. Pedido direto do
+// Operador: "restaurar o traçado roxo dos pivôs... usar o mecanismo de
+// swings já existente, especialmente fractal-swings — não implementar um
+// segundo ZigZag". Wrapper fino: chama findSwings(candles, FRACTAL_K, ...)
+// duas vezes (highs/lows) — o MESMO par de chamadas que market-structure-
+// engine.js já faz para rotular HH/HL/LH/LL — e devolve os pontos
+// mesclados em ordem cronológica de índice, no MESMO shape ZigZagPoint já
+// usado pelo ZigZag (index/price/kind), zero segundo tipo.
+//
+// Só pivôs CONFIRMADOS: findSwings só inclui um pivô no índice i quando
+// existem FRACTAL_K candles reais depois dele confirmando o máximo/mínimo
+// local (i < candles.length - k) — Zero Look-Ahead por construção do
+// próprio motor, não uma garantia extra deste wrapper. A borda viva
+// (últimos FRACTAL_K candles) nunca aparece até confirmar, exatamente como
+// o resto do sistema já trata swing high/low.
+//
+// Mescla simples por índice, nunca uma alternância forçada: dois highs
+// confirmados consecutivos (sem low confirmado real entre eles) aparecem
+// como dois pontos conectados direto — é o que o motor realmente detectou,
+// nunca uma reinterpretação. Zero matemática nova além do merge-sort.
+export function computeStructuralSwings(
+  candles: Array<{ high: number; low: number }>,
+): ZigZagPoint[] {
+  const highs = findSwings(candles, FRACTAL_K, true).map((p: { index: number; price: number }) => ({
+    index: p.index,
+    price: p.price,
+    kind: 'HIGH' as const,
+  }));
+  const lows = findSwings(candles, FRACTAL_K, false).map((p: { index: number; price: number }) => ({
+    index: p.index,
+    price: p.price,
+    kind: 'LOW' as const,
+  }));
+  return [...highs, ...lows].sort((a, b) => a.index - b.index);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

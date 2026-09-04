@@ -307,7 +307,13 @@ describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sis
     const a = app();
     expect(a).toContain('useState<AssetSymbol>(() => restoredSession.asset)');
     expect(a).toContain('useState(() => restoredSession.timeframe)');
-    expect(a).toContain('useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode)');
+    // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY": marketMode
+    // ganhou um 3º valor ("MEXC") — RestoredSession/readRestoredSession em
+    // si NUNCA mudaram (o tipo lá continua "CRYPTO" | "TRADFI" de
+    // propósito: selecionar um ativo MEXC é runtime-only nesta Etapa 1,
+    // nunca persistido — ver selectedMexcAsset, estado separado que não
+    // entra neste efeito nem em RestoredSession).
+    expect(a).toContain('useState<"CRYPTO" | "TRADFI" | "MEXC">(() => restoredSession.marketMode)');
     expect(a).toContain('useState<TradFiAsset | null>(() => restoredSession.tradFiAsset)');
     const m = a.match(/persistSessionState\(\{[\s\S]*?\}\);\n  \}, \[selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, chartLayerAutoMode, emaPeriod\]\);/);
     expect(m, 'efeito único de persistência não encontrado').not.toBeNull();
@@ -505,95 +511,35 @@ describe('§6: painel Síntese Operacional — 6 eixos derivados do MESMO NexusD
   });
 });
 
+// Achado 3.1 (mesmo espírito): a §3 abaixo REVOGOU a premissa dos 2 testes
+// que existiam aqui ("EnhancedChart: linha do ponto D..." e "Continuidade:
+// a figura XABCD/Wolfe COMPLETA... é uma polilinha nativa real") — pendência
+// #6 migrou o zigue-zague/PRZ/EPA/NECKLINE/APEX/triângulo inteiro de
+// createPriceLine/addSeries nativo pra HarmonicGeometryPlugin.tsx (canvas
+// próprio). As refs que os 2 testes checavam (harmonicPolylineRef,
+// harmonicLinesRef, triangleResistanceLineRef, etc.) não existem mais em
+// EnhancedChart_110_Percent.tsx. Registrado aqui de propósito em vez de
+// apagado sem rastro (mesma disciplina já usada quando a Achado 3.1
+// original revogou a premissa dos 2 testes de sweep em
+// liquidity-sweep-lines-plugin-wiring.test.ts) — a cobertura real do
+// winner-selection/zigue-zague/rótulos agora vive em
+// harmonic-geometry-plugin-wiring.test.ts.
 describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no gráfico', () => {
-  it('EnhancedChart: linha do ponto D do melhor padrão (fit desc entre as 3 famílias, Carta Branca) + EPA quando Wolfe — fio de seda, rótulo honesto', () => {
-    const c = chart();
-    expect(c).toContain('harmonicHits?: HarmonicPatternHit[] | null;');
-    expect(c).toContain('trianglePattern?: TrianglePatternHit | null;');
-    expect(c).toContain('headShouldersPattern?: HeadShouldersHit | null;');
-    const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
-    expect(idx).toBeGreaterThan(-1);
-    // Carta Branca: o efeito unificado cresceu para caber as 3 famílias —
-    // janela ampliada o bastante para cobrir do início até depois do ramo
-    // HEAD_SHOULDERS (medido via node -e contra o arquivo real: ~9.3k chars).
-    const block = c.slice(idx, idx + 9500);
-    expect(block).toContain('const harmonicTop = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
-    expect(block).toContain('const harmonicValid = harmonicTop && Number.isFinite(harmonicTop.points.D.price) ? harmonicTop : null;');
-    // EPC §4 (rótulos compactos por iniciais): PRZ com glifo ↑/↓, EPA sem
-    // as descrições parentéticas — o disclaimer/significado seguem no
-    // painel Chart Patterns e em harmonic-patterns.ts.
-    expect(block).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
-    expect(block).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`'); // §6: + ETA do ápice (compacto EPC §4)
-    expect(block).toContain('lineStyle: LineStyle.Solid,');
-    // Carta Branca: Triângulo (2 retas reais) + Ombro-Cabeça-Ombro (outline
-    // reusando o mesmo zigue-zague + neckline extrapolada) — ver os 2 ramos.
-    expect(block).toContain('winner.family === "TRIANGLE" && trianglePattern');
-    expect(block).toContain('winner.family === "HEAD_SHOULDERS" && headShouldersPattern');
-    expect(block).toContain('`${trianglePattern.kind} ${dirGlyph} APEX ${(trianglePattern.fitScore * 100).toFixed(0)}%${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
-    expect(block).toContain('`${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`');
-    const cleanupIdx = c.indexOf('chart.remove();');
-    expect(c.slice(cleanupIdx, cleanupIdx + 700)).toContain('harmonicLinesRef.current = [];');
-  });
-
-  it('Continuidade: a figura XABCD/Wolfe COMPLETA (não só o ponto D/PRZ) é uma polilinha nativa real, limpa fail-closed antes do early-return, tempo estritamente crescente na borda de renderização (Carta Branca: mesma polilinha reusada pelo outline do Ombro-Cabeça-Ombro, guard agora cobre as 3 famílias)', () => {
-    const c = chart();
-    expect(c).toContain('const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);');
-    const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
-    const block = c.slice(idx, idx + 9500);
-    // limpa a polilinha (E as 3 séries novas do Triângulo/neckline) ANTES
-    // do guard real de "nenhuma das 3 famílias tem hit" — nunca deixa uma
-    // figura velha na tela.
-    const clearIdx = block.indexOf('harmonicPolylineRef.current?.setData([]);');
-    const guardIdx = block.indexOf('if (candidates.length === 0) return;');
-    expect(clearIdx).toBeGreaterThan(-1);
-    expect(guardIdx).toBeGreaterThan(clearIdx);
-    expect(block).toContain('triangleResistanceLineRef.current?.setData([]);');
-    expect(block).toContain('triangleSupportLineRef.current?.setData([]);');
-    expect(block).toContain('necklineExtensionLineRef.current?.setData([]);');
-    // drawZigzagOutline: função compartilhada real (harmônico E H&S usam a
-    // MESMA implementação, zero segunda cópia) — os 5 pontos reais (X
-    // opcional/A/B/C/D na chamada harmônica), nunca um ponto fabricado
-    // para AB=CD.
-    expect(block).toContain('const drawZigzagOutline = (points: Array<HarmonicPoint | undefined>) => {');
-    expect(block).toContain('.filter((p): p is HarmonicPoint => p !== undefined)');
-    expect(block).toContain('drawZigzagOutline([top.points.X, top.points.A, top.points.B, top.points.C, top.points.D]);');
-    expect(block).toContain('drawZigzagOutline([hs.leftShoulder, hs.neckline1, hs.head, hs.neckline2, hs.rightShoulder]);');
-    // trava defensiva real na borda (a lib exige tempo estritamente crescente)
-    expect(block).toContain('.sort((a, b) => a.time - b.time)');
-    expect(block).toContain('i === 0 || p.time !== arr[i - 1].time');
-    expect(block).toContain('if (polylinePoints.length >= 2) harmonicPolylineRef.current?.setData(polylinePoints);');
-    // criada como série nativa (mesmo padrão de EMA/Nexus Line/Trend Channel) — zero rótulo de eixo/último valor
-    const seriesIdx = c.indexOf('const harmonicPolyline = chart.addSeries(LineSeries, {');
-    expect(seriesIdx).toBeGreaterThan(-1);
-    const seriesBlock = c.slice(seriesIdx, seriesIdx + 300);
-    expect(seriesBlock).toContain('priceLineVisible: false');
-    expect(seriesBlock).toContain('lastValueVisible: false');
-    expect(seriesBlock).toContain('lineStyle: LineStyle.Solid');
-    // limpa no unmount, mesma disciplina de todas as outras refs (incluindo as 3 novas)
-    const cleanupIdx = c.indexOf('chart.remove();');
-    expect(cleanupIdx, 'bloco de cleanup do chart não encontrado').toBeGreaterThan(-1);
-    // Delimitado pelo FECHAMENTO real do callback de cleanup, nunca por uma
-    // contagem de caracteres: cada ref nova adicionada ali empurrava a
-    // janela fixa e derrubava este teste sem nenhum fio realmente rompido
-    // (aconteceu na graduação do SuperTrend, que somou 2 refs ao bloco).
-    const cleanupEnd = c.indexOf('\n    };', cleanupIdx);
-    expect(cleanupEnd, 'fim do bloco de cleanup não encontrado').toBeGreaterThan(cleanupIdx);
-    const cleanupBlock = c.slice(cleanupIdx, cleanupEnd);
-    expect(cleanupBlock).toContain('harmonicPolylineRef.current = null;');
-    expect(cleanupBlock).toContain('triangleResistanceLineRef.current = null;');
-    expect(cleanupBlock).toContain('triangleSupportLineRef.current = null;');
-    expect(cleanupBlock).toContain('necklineExtensionLineRef.current = null;');
-  });
-
   it('títulos das linhas de alvo carregam distância % ao preço VIVO + ETA em faixa do contrato fundido (guard de preço)', () => {
     const c = chart();
     // REVERTIDO POR PEDIDO REPETIDO DO OPERADOR (duas rodadas, com captura
     // real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" na tela): a
-    // porcentagem saiu do canvas de vez. Regra de Ouro 4 satisfeita — a
-    // distância percentual continua real e visível no painel do Trade Plan
-    // (App.tsx), que já a renderizava antes desta mudança.
-    // A distância vive no PAINEL, não no canvas — é lá que a asserção
-    // passa a morar.
+    // porcentagem de DISTÂNCIA até o alvo saiu do canvas de vez. Regra de
+    // Ouro 4 satisfeita — a distância percentual continua real e visível no
+    // painel do Trade Plan (App.tsx), que já a renderizava antes desta
+    // mudança. A distância vive no PAINEL, não no canvas — é lá que a
+    // asserção passa a morar.
+    //
+    // Isto NÃO é o mesmo "%" que withScore() (mesmo arquivo, abaixo) volta a
+    // desenhar numa rodada posterior — aquele é a % de CONFLUÊNCIA do plano
+    // (institutional-score.ts), um número por PLANO, não por alvo, pedido
+    // de volta explicitamente pelo Operador. Duas percentagens diferentes;
+    // só a de distância-por-alvo continua banida do canvas.
     expect(c).not.toContain('const distPct =');
     const app = read('../src/App.tsx');
     expect(app).toContain("(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)");
@@ -602,11 +548,38 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
     expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
   });
 
+  it('withScore devolve a % real de confluência do plano às etiquetas EN/ST/TP1/TP2 (revertido, com autorização explícita)', () => {
+    // Pedido do Operador: "tenha a porcentagem pra poder lá aparecer" —
+    // confirmado via AskUserQuestion (duas opções escolhidas: setas de
+    // entrada E reverter em EN/ST/TP1/TP2), depois do achado acima. Compacto
+    // de propósito — um token só, nunca a frase inteira que motivou a
+    // remoção original.
+    const c = chart();
+    expect(c).toContain('institutionalScoreValue?: number | null;');
+    expect(c).toContain('const withScore = (text?: string | null) => [text, scoreToken].filter(Boolean).join(" ") || undefined;');
+    expect(c).toContain('secondaryText: withScore(tradePlan.entry.basis)');
+    expect(c).toContain('secondaryText: withScore(stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary)');
+    expect(c).toContain('secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined)');
+    const app = read('../src/App.tsx');
+    expect(app).toContain('institutionalScoreValue={institutionalScore?.score ?? null}');
+  });
+
   it('ChartWidget passa harmonicHits (mesma fatia da ANALYSIS) e decision (contrato fundido) ao gráfico', () => {
     const a = app();
     expect(a).toContain('const chartHarmonics = useHarmonicPatternsSnapshot();');
-    expect(a).toContain('harmonicHits={chartHarmonics}');
     expect(a).toContain('decision={nexusDecision ?? null}');
+  });
+
+  // SMC Harmonic Fusion (pedido do Operador): o gráfico não recebe mais o
+  // array cru — App.tsx filtra por confluência real (OB/FVG/POC/exaustão/
+  // sweep, smc-harmonic-fusion.ts) antes de passar. `chartHarmonics` cru
+  // continua existindo (painel ANALYSIS, harmonicBestFitScore) — só o
+  // que chega ao CANVAS mudou.
+  it('ChartWidget passa harmonicHits já FILTRADO por confluência real (chartHarmonicsConfirmed), nunca o array cru de chartHarmonics', () => {
+    const a = app();
+    expect(a).toContain('harmonicHits={chartHarmonicsConfirmed}');
+    expect(a).not.toContain('harmonicHits={chartHarmonics}');
+    expect(a).toContain('harmonicConfluence={bestConfirmedHarmonicFusion}');
   });
 });
 
@@ -772,17 +745,16 @@ describe('Evolução do Organismo (Fase 2, "menor cálculos duplicados"): cache 
 });
 
 describe('Achado real do Operador ("linha amarela que eu não sei o que significa" + "etiquetas não podem ficar em cima do valor do ativo"): Liquidity Sweep migra pro eixo anti-colisão, Session Key Levels perde o rótulo flutuante', () => {
-  it('Liquidity Sweep: title nativo da price line fica vazio (nunca teve efeito visual real com axisLabelVisible:false — o texto real agora vive em priceAxisLabels, um rótulo de verdade onde antes não havia nenhum)', () => {
-    const c = chart();
-    // v3 (decaimento por idade): a cor nativa virou template dinâmico
-    // (alpha real multiplicado no desenho), não mais uma string fixa.
-    const idx = c.indexOf('color: `rgba(255, 162, 0, ${(alpha * 0.85).toFixed(3)})`,');
-    expect(idx, 'price line de Liquidity Sweep não encontrada').toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 1300);
-    expect(block).toContain('title: "",');
-    expect(block).not.toContain('⚡ SWEEP');
-  });
-
+  // Pendência #6 (migração nativo→canvas, "chegar na perfeição") REVOGOU a
+  // premissa do teste que vivia aqui ("title nativo da price line fica
+  // vazio com axisLabelVisible:false") — registrado de propósito em vez de
+  // apagado, mesma disciplina do bloco "Lapidação institucional" abaixo.
+  // A price line nativa (e o campo `title` morto que a acompanhava) não
+  // existe mais: LiquiditySweepLinesPlugin.tsx desenha em canvas puro, que
+  // nunca teve esse campo pra começo de conversa — a pergunta que o teste
+  // fazia deixou de fazer sentido, não só de falhar. Ver
+  // liquidity-sweep-lines-plugin-wiring.test.ts para a cobertura real do
+  // plugin novo.
   it('Liquidity Sweep: o texto real (⚡ SWEEP ↑/↓ N%) agora vive em priceAxisLabels, dedupe por preço, side:"left" (estrutural/histórico)', () => {
     const c = chart();
     const idx = c.indexOf('if (visibility.liquidity_sweep) {', c.indexOf('const priceAxisLabels = useMemo'));
@@ -899,21 +871,26 @@ describe('Lapidação institucional (diretiva com imagem de referência): Liquid
   // vs. um pico no heatmap lateral), não cor. Agora ambos usam o mesmo
   // `attention` canônico.
   it('Achado 3.1: Sweep e pico do Heatmap convergem para o MESMO âmbar canônico — o que os distingue é geometria, nunca 12° de matiz', () => {
-    const c = chart();
+    // Pendência #6: a price line nativa (antes em EnhancedChart_110_
+    // Percent.tsx) migrou pra LiquiditySweepLinesPlugin.tsx — os dois agora
+    // usam a MESMA chamada chartPaletteRgba("attention", ...) em vez de
+    // dois rgba(255,162,0,...) redigitados coincidentemente iguais.
+    const sweep = read('../src/chart/LiquiditySweepLinesPlugin.tsx');
     const heatmap = read('../src/chart/LiquidationHeatmapPlugin.tsx');
-    expect(c).toContain('color: "rgba(255, 162, 0, 0.85)", // mesmo tom laranja da price line');
-    expect(c).toContain('color: `rgba(255, 162, 0, ${(alpha * 0.85).toFixed(3)})`,');
-    expect(heatmap).toContain('const PEAK_LABEL_COLOR = "rgba(255, 162, 0, 0.85)";');
+    expect(sweep).toContain('chartPaletteRgba("attention", alpha * 0.85)');
+    expect(heatmap).toContain('const PEAK_LABEL_COLOR = chartPaletteRgba("attention", 0.85);');
   });
 
   it('Achado 3.1: o âmbar do Sweep/Heatmap está no matiz da família attention — a trava de canvas-palette.test.ts governa o resto', () => {
-    // 255,162,0 = matiz 38°, o canônico de `attention`. Os tons antigos desta
-    // dupla (255,140,0 = H33 e 255,191,0 = H45) não existem mais.
-    const c = chart();
+    // Os tons antigos desta dupla (255,140,0 = H33, 255,191,0 = H45,
+    // 255,200,0 = H47) não existem mais — nem redigitados, nem via helper.
+    const sweep = read('../src/chart/LiquiditySweepLinesPlugin.tsx');
     const heatmap = read('../src/chart/LiquidationHeatmapPlugin.tsx');
-    expect(c).not.toContain('rgba(255, 140, 0');
+    expect(sweep).not.toContain('rgba(255, 140, 0');
+    expect(sweep).not.toContain('rgba(255, 162, 0');
     expect(heatmap).not.toContain('rgba(255, 191, 0');
     expect(heatmap).not.toContain('rgba(255, 200, 0');
+    expect(heatmap).not.toContain('rgba(255, 162, 0');
   });
 
   it('Kill Zones NÃO entra nesta diferenciação — o TOM âmbar (255,176,32) segue o mesmo. Achado 2.6: os alphas base foram recalibrados (0.06/0.22 → 0.38/0.55) porque a geometria deixou de ser lavagem de altura total e virou faixa de 6px; LABEL_ALPHA sumiu junto com o rótulo (duplicação do badge do header)', () => {
@@ -1167,12 +1144,10 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
     expect(h).toContain('etaIndex?: number;');
   });
 
-  it('gráfico: terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe (rótulos compactos EPC §4)', () => {
-    const c = chart();
-    expect(c).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
-    expect(c).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
-    // Carta Branca: dependency array cresceu para as 2 famílias novas; intervalo real de barra continua vindo de data.
-    expect(c).toContain('}, [harmonicHits, trianglePattern, headShouldersPattern, data, visibility.harmonics]);');
+  it('terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe (rótulos compactos EPC §4) — migrado pra HarmonicGeometryPlugin.tsx (pendência #6), cobertura completa em harmonic-geometry-plugin-wiring.test.ts', () => {
+    const plugin = readFileSync(resolve(__dirname, '../src/chart/HarmonicGeometryPlugin.tsx'), 'utf8');
+    expect(plugin).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+    expect(plugin).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
   });
 
   it('ANALYSIS usa PRZ no lugar do rótulo D cru', () => {
@@ -1223,7 +1198,9 @@ describe('Continuidade §6: níveis apertados => rótulos TP compactos, preço N
     expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
     expect(c).toContain('obstacleSuffix(target.obstacleCount).trim() || null,');
     expect(c).toContain('reached ? "REACHED" : null,');
-    expect(c).toContain('secondaryText: secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined,');
+    // withScore() (Pedido do Operador, rodada posterior) envolve o texto —
+    // ver o teste de withScore acima; o conteúdo interno continua o mesmo.
+    expect(c).toContain('secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined),');
   });
 
   it('a âncora do preço real permanece documentada onde a decisão de compactar agora vive (label-compaction.ts): applyOptions nunca recebe um price deslocado no título compacto', () => {

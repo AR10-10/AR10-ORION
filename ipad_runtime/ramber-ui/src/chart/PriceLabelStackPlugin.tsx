@@ -43,6 +43,7 @@
 // seletivo.
 import { useEffect, useRef } from "react";
 import { CHART_LABEL_Z_INDEX } from "./chart-layer-depth";
+import { measurePlotArea, resolveAxisWidthForLabels } from "./chart-plot-area";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import {
   resolveLabelStackPositions,
@@ -283,6 +284,10 @@ interface PriceLabelStackPluginProps {
 
 export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStackPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Ultima largura de eixo REALMENTE aplicada. Sem esta memoria o bloco de
+  // largura sob demanda dispararia um applyOptions por frame enquanto a
+  // medicao ainda nao tivesse convergido.
+  const larguraDeEixoAplicadaRef = useRef<number | null>(null);
   const labelsRef = useRef(labels);
   const markDirtyRef = useRef<(() => void) | null>(null);
 
@@ -315,6 +320,33 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+      // ── A COLUNA DO EIXO (pedido direto do Operador: "a barra da lateral
+      // que fica a numeracao dos ativos... os objetos ficar saindo do inicio
+      // deles pra entrar dentro do grafico, e tem uma medida padrao ali") ──
+      //
+      // O DEFEITO, medido em Chromium (viewport iPad 834px, opcoes reais de
+      // rightPriceScale): cada etiqueta era alinhada a borda do CONTAINER
+      // (`cssWidth - 2 - boxWidth`), entao o X de inicio dependia do
+      // comprimento do texto — borda esquerda serrilhada — e as largas
+      // invadiam as velas:
+      //
+      //   "VWAP 68.412,5"  invadia  20,3 px de vela
+      //   "R1 69.180,0"    invadia   8,2 px
+      //   "CHOCH"          invadia      0 px, mas comecava 48 px a direita
+      //                                 da VWAP — dai o serrilhado
+      //
+      // A CORRECAO: uma COLUNA. Todas as etiquetas do lado direito passam a
+      // dividir a MESMA borda esquerda e a MESMA largura, como a coluna de
+      // rotulos de qualquer terminal profissional. A borda fica na fronteira
+      // real medida do eixo; so quando o texto mais largo do conjunto nao
+      // couber ali a coluna inteira desliza para a esquerda o minimo
+      // necessario — todas juntas, nunca uma de cada vez.
+      //
+      // A HIERARQUIA live/primary/context continua intacta: ela nunca foi
+      // horizontal. O que separa os tres niveis e altura da caixa, fonte,
+      // opacidade do chip e o anel do "live" — tudo preservado.
+      const { axisLeft, axisWidth: axisWidthAtual } = measurePlotArea(chart, cssWidth);
       ctx.font = FONT_BASE;
 
       // Mesma escala responsiva da Fase A (chart-ultrawide-scale.ts) —
@@ -416,6 +448,58 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           gapEntre,
         );
 
+        // Largura de caixa de CADA etiqueta, medida antes de desenhar
+        // qualquer uma: a coluna so pode ser resolvida conhecendo a mais
+        // larga do conjunto. Mesma medicao (mesma fonte, mesmo padding) que
+        // o desenho usa logo abaixo — nunca uma estimativa paralela.
+        const larguras = new Map<(typeof resolved)[number], number>();
+        let larguraMaxima = 0;
+        for (const entry of resolved) {
+          const t = resolveLabelTier(entry.side, entry.tier);
+          const big = t === "live" || t === "critical";
+          ctx.font = big ? fontLive : fontCompact;
+          let w = ctx.measureText(entry.text).width;
+          if (entry.secondaryText) {
+            ctx.font = fontSecondary;
+            w += SECONDARY_GAP_PX + ctx.measureText(entry.secondaryText).width;
+          }
+          w += (big ? LABEL_PADDING_X : COMPACT_PADDING_X) * 2;
+          larguras.set(entry, w);
+          if (w > larguraMaxima) larguraMaxima = w;
+        }
+        // A borda direita da coluna e uma so (a margem do container); a
+        // esquerda e a fronteira do eixo, ou o quanto a mais a etiqueta mais
+        // larga exigir. `Math.min` e o que garante que a coluna nunca fique
+        // a DIREITA do eixo quando tudo e estreito — sem ele, textos curtos
+        // voltariam a flutuar colados na borda do container.
+        const colunaDireita = cssWidth - RIGHT_MARGIN_PX;
+        const colunaEsquerda = Math.min(axisLeft, colunaDireita - larguraMaxima);
+        const colunaLargura = colunaDireita - colunaEsquerda;
+
+        // O EIXO GANHA A LARGURA DO PROPRIO CONTEUDO (ver o bloco "LARGURA
+        // DO EIXO SOB DEMANDA" em chart-plot-area.ts). So o lado direito
+        // pede isso — o esquerdo nao tem eixo. `resolveAxisWidthForLabels`
+        // devolve null no caso comum ("nao toque no eixo"), entao em regime
+        // este bloco nao faz nada; ele age no frame em que uma etiqueta
+        // realmente nao cabe.
+        if (side === "right") {
+          const alvo = resolveAxisWidthForLabels(larguraMaxima, axisWidthAtual, RIGHT_MARGIN_PX);
+          if (alvo !== null && alvo !== larguraDeEixoAplicadaRef.current) {
+            larguraDeEixoAplicadaRef.current = alvo;
+            // Fora do frame atual: aplicar no meio do desenho re-entraria no
+            // layout da lib enquanto ela ainda esta pintando.
+            queueMicrotask(() => {
+              try {
+                chart.priceScale("right").applyOptions({ minimumWidth: alvo });
+              } catch {
+                // Eixo desmontado entre o agendamento e a execucao: nada a
+                // fazer, e derrubar o grafico por causa de uma borda seria
+                // pior que a borda errada.
+              }
+            });
+          }
+        }
+
         for (const entry of resolved) {
           // Decaimento real por idade (BOS/CHOCH) — default 1 preserva o
           // comportamento de sempre (opaco) para todo rótulo que não declara
@@ -445,10 +529,13 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // COMPACT_CHIP_FILL_ALPHA acima) — padding menor que live/
           // critical, só o suficiente pro texto não tocar a borda.
           const textPaddingX = isBigTier ? LABEL_PADDING_X : COMPACT_PADDING_X;
-          const edgePaddingX = isBigTier ? RIGHT_MARGIN_PX : COMPACT_EDGE_PADDING_PX;
           const edgePaddingXLeft = isBigTier ? LEFT_MARGIN_PX : COMPACT_EDGE_PADDING_PX;
-          const boxWidth = textWidth + textPaddingX * 2;
-          const boxX = side === "right" ? cssWidth - edgePaddingX - boxWidth : edgePaddingXLeft;
+          // Lado DIREITO: a coluna manda (largura e borda compartilhadas —
+          // ver o bloco "A COLUNA DO EIXO" acima). Lado ESQUERDO: nao existe
+          // eixo ali, entao a caixa continua do tamanho do proprio texto,
+          // ancorada na margem — inalterado.
+          const boxWidth = side === "right" ? colunaLargura : textWidth + textPaddingX * 2;
+          const boxX = side === "right" ? colunaEsquerda : edgePaddingXLeft;
           const boxY = entry.resolvedY - boxHeight / 2;
           if (boxY + boxHeight < 0 || boxY > cssHeight) continue; // fora da área visível — Fail-Closed, nunca desenha fora do canvas
 

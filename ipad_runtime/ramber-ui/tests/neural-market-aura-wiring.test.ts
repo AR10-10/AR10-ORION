@@ -38,7 +38,14 @@ describe('chart/NeuralMarketAuraPlugin.tsx: mesma arquitetura de overlay das irm
   it('largura do corredor vem de corridorWidthFactor (convicção real), nunca uma largura fixa arbitrária', () => {
     const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
     expect(plugin).toContain('function corridorWidthPx(widthFactor: number | null): number {');
-    expect(plugin).toContain('const bandWidth = Math.min(cssWidth, corridorWidthPx(corridorWidthFactor));');
+    // O teto do corredor passou de cssWidth (borda do CONTAINER) para a
+    // fronteira medida do eixo — o corredor corria por baixo dos numeros do
+    // preco. A afirmacao real deste teste (a largura vem de
+    // corridorWidthFactor, nunca de um numero fixo) segue intacta, e ganhou
+    // a asserção negativa que trava o retorno.
+    expect(plugin).toContain('const bandWidth = Math.min(plotRight, corridorWidthPx(corridorWidthFactor));');
+    expect(plugin).toContain('measurePlotArea');
+    expect(plugin).not.toMatch(/bandWidth = Math\.min\(cssWidth,/);
   });
 
   it('resolução (TARGET_HIT/PARTIAL_HIT/STOP_HIT) usa cor de RESULTADO real, não de direção — um SHORT que bate o alvo é sucesso (verde), não "vermelho porque é short"', () => {

@@ -1195,7 +1195,7 @@ cálculo novo (`z.type` já é a direção real do motor). Verificado com
 harness Playwright: a zona vermelha lê `OB ↓`/`FVG ↓` sem ambiguidade.
 
 **Pesquisa/revisão (entregável principal)**: documento honesto em
-`docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` — inventário completo das 22
+`docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` — inventário completo das 22
 camadas visuais reais, comparação com terminais profissionais (ATAS/
 Bookmap/GetChart/LuxAlgo, pesquisa real com fontes), e lista priorizada
 com veredito. Conclusão honesta: no núcleo order flow + SMC o AR10 já
@@ -1998,7 +1998,7 @@ duplicação real VOLATILIDADE/ATR% encontrada e eliminada
 Auditoria completa nas 7 seções pedidas pelo Operador (Certificação/Trade
 Plan/Auditoria de Dados/Auditoria Matemática/Auditoria Visual/Demanda e
 Oferta/Relatório Final) — relatório completo em
-`docs/RELATORIO_AUDITORIA_FINAL.md`. Achado real (§3/§4): a row
+`docs/historico/RELATORIO_AUDITORIA_FINAL.md`. Achado real (§3/§4): a row
 "VOLATILIDADE" do painel Market Regime recomputava seu próprio proxy
 (média ingênua de `(high-low)/close`, sem gaps) na mesma hora em que
 `regime-engine.js` já calcula o ATR% real (true range com gaps, Wilder) e
@@ -3992,7 +3992,7 @@ eficiência de rede (requisição obsoleta continua em voo até resolver,
 mesmo descartada), baixa prioridade, documentada no backlog.
 
 **Entregável único** (§8 da diretiva):
-`docs/AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` — inventário, mapa de
+`docs/historico/AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` — inventário, mapa de
 arquitetura/dependências/sincronização/elementos visuais, pesquisa,
 lacunas, conflitos, registro de melhorias com justificativa técnica,
 backlog priorizado, riscos/benefícios. Cita `ELITE_TRADING_RESEARCH_MAP.md`
@@ -4458,7 +4458,7 @@ encaixar apressado no fim de uma rodada já longa).
 iniciada: diferenciação real Liquidity Sweep × pico do Liquidation Heatmap
 
 **Task #101** ("LAPIDAÇÃO PROFISSIONAL DO GRÁFICO") foi entregue como nova
-§9 de `docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` (não um documento novo —
+§9 de `docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` (não um documento novo —
 mesma disciplina de fonte única já usada em §6.27/§6.50): inventário
 completo de ~28 elementos reais do gráfico com módulo/cor/dependência,
 framework de prioridade de 4 níveis (Máxima/Alta/Média/Baixa, critério
@@ -5252,7 +5252,7 @@ diretiva) — cobre §6.35 a §6.41 em conjunto
 
 ### 6.67 EPC OMEGA FINAL — diretiva de 4 partes (Meta Engine, gráfico
 World Class, performance/autoaprendizado, homologação final); relatório
-completo em `docs/RELATORIO_EPC_OMEGA_FINAL.md`
+completo em `docs/historico/RELATORIO_EPC_OMEGA_FINAL.md`
 
 Diretiva do Operador em 4 partes sequenciais ("ler tudo antes de
 implementar" — seguido à risca: as 4 partes foram lidas por completo antes
@@ -5322,7 +5322,7 @@ fora do bundle real).
 
 ### 6.68 Diretriz Final de Integração Total — fechar o que já existe:
 GMIL → store, MACD graduado, estágio NEXUS_DECISION; relatório completo
-em `docs/RELATORIO_MESTRE_HOMOLOGACAO.md`
+em `docs/historico/RELATORIO_MESTRE_HOMOLOGACAO.md`
 
 Diretiva de consolidação pura (Operador foi explícito: "não" a motores
 novos, "sim" a concluir ligações já existentes). Varredura de todo
@@ -5381,7 +5381,7 @@ presente no DOM renderizado.
 ### 6.69 "DIRETRIZ FINAL — LAPIDAÇÃO VISUAL E ACABAMENTO PROFISSIONAL":
 último passo antes da homologação — 2 achados reais corrigidos, 5 seções
 reconfirmadas; relatório atualizado em
-`docs/RELATORIO_MESTRE_HOMOLOGACAO.md` §9
+`docs/historico/RELATORIO_MESTRE_HOMOLOGACAO.md` §9
 
 Diretiva explicitamente restrita a qualidade visual/acabamento — zero
 funcionalidade nova. Auditoria das 8 seções pedidas contra o código real
@@ -5548,7 +5548,7 @@ valor real observado no sandbox, não fabricado).
 CONSOLIDAÇÃO, EVOLUÇÃO E AUTONOMIA TÉCNICA": `traceStages()` ganha
 consumidor real; 2 recomendações da própria sessão corrigidas após
 investigação mais profunda; relatório completo em
-`docs/RELATORIO_ORDEM_01_CONSOLIDACAO.md`
+`docs/historico/RELATORIO_ORDEM_01_CONSOLIDACAO.md`
 
 Ordem de escopo total ("todo o ecossistema... nada deve permanecer
 isolado"), mas o próprio texto da Ordem encerra dizendo que a
@@ -5608,7 +5608,7 @@ AUTODIAGNÓSTICO" produzindo o achado "Pipeline causal" ao vivo na UI.
 ### 6.73 "DIRETRIZ Nº 02 — CAMADA DE INTELIGÊNCIA VISUAL": dois conflitos
 com regras inegociáveis resolvidos + `nexus/visual-budget.ts` (isolado,
 testado); relatório completo em
-`docs/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md`
+`docs/historico/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md`
 
 Diretriz descreve o pipeline final desejado (`... → Knowledge Graph →
 Evidence Fusion Engine → Quality Governor → Meta Engine → Core Engine →
@@ -5662,7 +5662,7 @@ OPERACIONAL E INTEGRAÇÃO TOTAL": primeira graduação real de
 `nexus/visual-budget.ts` (competição INSTITUTIONAL_ZONE × TRADE_PLAN no
 gráfico ao vivo) + auditoria de isolamento completa do ecossistema;
 relatório completo em
-`docs/RELATORIO_ORDEM_03_IMPLEMENTACAO_OPERACIONAL.md`
+`docs/historico/RELATORIO_ORDEM_03_IMPLEMENTACAO_OPERACIONAL.md`
 
 Ordem muda o critério de "pronto": um motor com testes aprovados mas
 zero consumidor real fica classificado "EM IMPLEMENTAÇÃO" até cumprir o
@@ -5729,7 +5729,7 @@ da fiação real.
 INTELIGENTE ADAPTATIVO": Market Regime real como "contexto operacional"
 em `layer-relevance.ts` + reorganização (não exclusão) da administração
 de modos no painel "Camadas do Gráfico"; relatório completo em
-`docs/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md`
+`docs/historico/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md`
 
 Diretriz descreve 6 dimensões adaptativas (prioridade visual/intensidade/
 quantidade de informação/frequência de atualização/relevância dos
@@ -5774,7 +5774,7 @@ reorganizado.
 
 ### 6.76 Evolução Visual (pedido informal): STRUCTURE como 3ª categoria
 real de `visual-budget.ts` + poda mecânica de 8 declarações mortas;
-relatório completo em `docs/RELATORIO_EVOLUCAO_VISUAL_STRUCTURE_PODA.md`
+relatório completo em `docs/historico/RELATORIO_EVOLUCAO_VISUAL_STRUCTURE_PODA.md`
 
 Pedido do Operador em português informal/ditado ("foca na parte visual
 pra ficar mais automático, menos etiqueta... o que você acha que tem de
@@ -5820,7 +5820,7 @@ estrutural (zero erro de React).
 ### 6.77 "ORDEM Nº 04 — CONSOLIDAÇÃO DO ORGANISMO INTELIGENTE
 ADAPTATIVO": auditoria real dos 7 componentes nomeados + 2 entregas
 proporcionais; relatório completo em
-`docs/RELATORIO_ORDEM_04_CONSOLIDACAO.md`
+`docs/historico/RELATORIO_ORDEM_04_CONSOLIDACAO.md`
 
 Ordem formal pedindo integração/coordenação (não novos módulos
 isolados) sobre 7 camadas nomeadas: `layer-relevance`, `visual-budget`,
@@ -5888,7 +5888,7 @@ depender de candles).
 ### 6.78 Evolução Total Autônoma (pedido informal, "autonomia total...
 não deixa nada pendente... sem pedir permissão"): pendência mais antiga
 executada + "um objeto, um peso" + rastreamento reconciliado; relatório
-completo em `docs/RELATORIO_EVOLUCAO_TOTAL_AUTONOMA.md`
+completo em `docs/historico/RELATORIO_EVOLUCAO_TOTAL_AUTONOMA.md`
 
 **Market Structure em `analysis-frame.js` — EXECUTADO** (o fix
 documentado na Ordem Nº 03 §3, adiado 3 rodadas por Regra de Ouro 6,
@@ -6010,7 +6010,7 @@ que esperavam o texto exato sem o qualificador.
 ### 6.81 "Carta Branca" — otimização do motor matemático, reconhecimento
 de padrões (Triângulo + Ombro-Cabeça-Ombro), Evidence Fusion Engine
 finalizado, precisão das etiquetas laterais; relatório completo em
-`docs/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`
+`docs/historico/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`
 
 Mega-diretriz em português informal/ditado pedindo, em bloco único:
 organizar a arquitetura do motor matemático e eliminar redundância real;
@@ -6127,7 +6127,7 @@ foi necessária — inventar uma só para "fazer algo" violaria a disciplina
 de não adicionar mudança sem justificativa real já seguida em toda esta
 sessão.
 
-**Relatório completo**: `docs/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`.
+**Relatório completo**: `docs/historico/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`.
 
 **Testes executados**: `tsc --noEmit` limpo · **134 arquivos / 2269
 testes** (100%, +48 novos: 9 Triângulo + 7 Ombro-Cabeça-Ombro + 9
@@ -6146,7 +6146,7 @@ bloqueia WebSocket real da Binance, gráfico fica honestamente em
 
 ### 6.82 "Ordem Oficial de Execução — Consolidação Final do AR10 Cyborg"
 (fase: transição de motores para um organismo único); relatório completo
-em `docs/RELATORIO_CONSOLIDACAO_FINAL_ORGANISMO_UNICO.md`
+em `docs/historico/RELATORIO_CONSOLIDACAO_FINAL_ORGANISMO_UNICO.md`
 
 Diretriz formal, prioridade máxima, 11 prioridades numeradas: o foco muda
 de criar módulos novos para consolidar tudo já construído num organismo
@@ -6208,7 +6208,7 @@ console novo, zero regressão de layout.
 
 ### 6.83 "Ordem Oficial: Fechamento da Arquitetura" (última fase de
 consolidação) — relatório completo em
-`docs/RELATORIO_FECHAMENTO_ARQUITETURA.md`
+`docs/historico/RELATORIO_FECHAMENTO_ARQUITETURA.md`
 
 Diretriz formal encerrando a fase de expansão do sistema. Diretriz
 Principal: não criar novos motores/contratos/camadas/módulos — só fazê-los
@@ -6281,7 +6281,7 @@ relatório; zero erro de console novo, zero regressão de layout.
 
 ### 6.84 "Ordem Final: Validação Integral do Ecossistema AR10 Cyborg"
 (homologação, zero código novo) — relatório completo em
-`docs/RELATORIO_HOMOLOGACAO_FINAL_ORGANISMO.md`
+`docs/historico/RELATORIO_HOMOLOGACAO_FINAL_ORGANISMO.md`
 
 Ordem de homologação pura: comprovar com evidência real que o
 ecossistema funciona como um único organismo — sem criar/alterar nada.
@@ -6350,7 +6350,7 @@ medição e o relatório, conforme a própria Ordem pediu.
 
 ### 6.85 "Ordem Oficial: Consolidação Final do AR10 Cyborg" (Fase Final —
 "transformar todos os motores em um único organismo inteligente") —
-relatório completo em `docs/RELATORIO_ORGANISMO_UNICO_FASE_FINAL.md`
+relatório completo em `docs/historico/RELATORIO_ORGANISMO_UNICO_FASE_FINAL.md`
 
 Segunda Ordem de consolidação pura em sequência (a Entrega 22 já tinha
 homologado o ecossistema): 10 diretrizes obrigatórias + uma Regra de
@@ -6405,7 +6405,7 @@ reaberta.
 
 ### 6.86 "Ordem Oficial de Execução: Consolidação Final" (rodada 3,
 endereçada a "Agente 4") — relatório completo em
-`docs/RELATORIO_ORGANISMO_UNICO_RODADA_3.md`
+`docs/historico/RELATORIO_ORGANISMO_UNICO_RODADA_3.md`
 
 Terceira Ordem de consolidação em sequência, mesmo conteúdo substantivo
 das duas anteriores. **Evento de segurança tratado antes de agir**: a
@@ -6440,7 +6440,7 @@ na Entrega 23 minutos antes).
 
 ### 6.87 "Ordem Oficial: Fase de Lapidação, Sincronia e Experiência do
 Operador" (endereçada a "Agente 4", 3ª vez) — relatório completo em
-`docs/RELATORIO_LAPIDACAO_SINCRONIA_EXPERIENCIA.md`
+`docs/historico/RELATORIO_LAPIDACAO_SINCRONIA_EXPERIENCIA.md`
 
 Diferente das 3 Ordens de consolidação anteriores (zero código novo):
 esta pede execução visual/UX real. Mesma Regra de Ouro aplicada a cada
@@ -6503,7 +6503,7 @@ overflow nos 6 breakpoints.
 
 ### 6.88 "Ordem Entrega 26: Lapidação Visual Final + Experiência
 Operacional" — relatório completo em
-`docs/RELATORIO_ENTREGA_26_LAPIDACAO_FINAL.md`
+`docs/historico/RELATORIO_ENTREGA_26_LAPIDACAO_FINAL.md`
 
 10 Prioridades; 6 delas (1, 2, 5, 7, 9, 10) repetem frentes que a
 Entrega 25 auditou horas antes com evidência fresca e concluiu já
@@ -6570,7 +6570,7 @@ delas).
 ---
 
 ### 6.89 "Ordem Oficial: Etapa de Lapidação Matemática e Visual" —
-relatório completo em `docs/RELATORIO_LAPIDACAO_MATEMATICA.md`
+relatório completo em `docs/historico/RELATORIO_LAPIDACAO_MATEMATICA.md`
 
 Ordem legítima (sem endereçamento a persona fictícia) fechando
 explicitamente a fase de criação de motores novos: só upgrades de
@@ -6638,7 +6638,7 @@ pretendidos tocados.
 ---
 
 ### 6.90 "Ordem Oficial: Fase de Lapidação de Elite" (EPC-05) — relatório
-completo em `docs/RELATORIO_EPC05_LAPIDACAO_ELITE.md`
+completo em `docs/historico/RELATORIO_EPC05_LAPIDACAO_ELITE.md`
 
 Quinta mensagem "Agente 4", sem elementos novos de suspeita — conteúdo
 autorizado, persona nunca adotada. A lista de plataformas de referência
@@ -6693,7 +6693,7 @@ arquivos de `src/orderflow/` + 1 teste novo tocados.
 
 ---
 
-### 6.91 "Ordem Mestra — AR-10 CYBORG" (47 seções) — relatório completo em `docs/RELATORIO_ORDEM_MESTRA.md`
+### 6.91 "Ordem Mestra — AR-10 CYBORG" (47 seções) — relatório completo em `docs/historico/RELATORIO_ORDEM_MESTRA.md`
 
 Texto original não sobreviveu literalmente à compactação de contexto
 desta sessão — relatório é síntese honesta por tema (não pontuação
@@ -6909,6 +6909,542 @@ em nenhuma verificação desta sessão — todo veredito `SYNCED`/`OK` dos 2
 motores novos ficou coberto só por teste de execução real (unitário),
 nunca visto ao vivo com dado de mercado de verdade; os 2 gaps PARCIAIS
 documentados no item 6 continuam reais.
+
+---
+
+### 6.93 Memo de 20 seções ("CALCULAR MUITO. MOSTRAR POUCO. EXPLICAR SOB
+DEMANDA.") — mapeamento honesto contra o código real, sem escrever
+código ainda (a própria ordem do memo: "MAPEAR. Depois: POC. Depois:
+BENCHMARK. Somente então integrar." / "EXECUTAR EM ETAPAS. NÃO FAZER
+BIG-BANG.")
+
+Pedido do Operador: memo de 20 seções (Lightweight Charts como engine
+único, Visual Intelligence Layer entre Decision Engine e o gráfico, modo
+padrão enxuto, progressive disclosure, Evidence Graph, Five Pillars,
+semântica de RISK como WARNING não-gate, Web Workers/WASM, Data Fabric,
+DuckDB-WASM para histórico/replay, IA auxiliar via ONNX/Transformers.js,
+WebGPU opcional, disciplina iPad-first, orçamento visual, anti-colisão,
+zero look-ahead, suíte de testes com benchmark de candles, regra de
+não-regressão, processo MAPEAR→POC→BENCHMARK→integrar). Zero código
+alterado nesta rodada — só auditoria, conforme o próprio processo que o
+memo pede.
+
+**Precedente direto, não redescoberto do zero**: a Diretriz Nº 02
+(`docs/historico/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md`) já pediu
+quase o mesmo pipeline (`Motores → Knowledge Graph → Evidence Fusion
+Engine → Quality Governor → Meta Engine → Core Engine → Visual
+Intelligence Layer → Gráfico`) e decidiu, com razão documentada, **não**
+tentar a inversão completa numa rodada (alto blast-radius: tocaria os
+12+ plugins de canvas + `EnhancedChart_110_Percent.tsx` inteiro de uma
+vez, baixíssima reversibilidade) — construiu só a peça concreta e segura
+(`nexus/visual-budget.ts`, isolado, **nunca ligado a nenhum componente
+vivo até hoje**: confirmado de novo nesta auditoria, zero import fora do
+próprio teste). Esse relatório continua a referência viva sobre por que
+a inversão completa não foi tentada — nada neste memo novo invalida esse
+raciocínio; pelo contrário, o próprio memo pede a mesma cautela
+("não fazer big-bang").
+
+**O que mudou desde a Diretriz Nº 02**: `nexus/evidence-fusion.ts` foi
+construído (Carta Branca, §6.7x-6.8x) — consumidor real de
+`engine-signal-contract.ts` (Conselho + Zonas Institucionais), mas
+**estritamente não-direcional**: mede cobertura/consenso/dispersão sobre
+a evidência agregada, nunca combina em score ou direção (LEI 24 intacta
+por construção, não por convenção). Ainda não é o "Evidence Graph" com
+dependências `source → engine → signal → pillar → decision` que este
+memo novo pede — é o degrau anterior (agregação plana, sem grafo de
+dependência nem pilares nomeados).
+
+**Correção sobre a própria auditoria acima, feita minutos depois de
+escrita (erro meu, não do código)**: a frase logo acima ("`visual-
+budget.ts`... nunca ligado a nenhum componente vivo até hoje: confirmado
+de novo nesta auditoria, zero import fora do próprio teste") estava
+**errada** — baseada só no que o relatório da Diretriz Nº 02 dizia na
+época, sem grep fresco contra `EnhancedChart_110_Percent.tsx` antes de
+afirmar "confirmado de novo". `resolveVisualBudget` está, de fato,
+importado e ativo lá (linha ~2275), com `docs/historico/
+RELATORIO_ORDEM_03_IMPLEMENTACAO_OPERACIONAL.md` e `RELATORIO_ORDEM_04_
+CONSOLIDACAO.md` documentando a graduação real: 4 das 7 categorias
+declaradas em `VISUAL_BUDGET_PRIORITY_ORDER` já têm candidato real e
+competem por orçamento visual ao vivo — `INSTITUTIONAL_ZONE` (Zonas
+Institucionais), `TRADE_PLAN` (zona do plano), `STRUCTURE` (BOS/CHOCH,
+S1/R1, Fibonacci) e `MAIN_LIQUIDITY` (FVG/Order Block não-obstáculo). As
+3 restantes (`TARGET`, `INVALIDATION`, `RADAR`) ficaram deliberadamente
+de fora, com razão técnica real documentada no §4 do Ordem Nº 04 (não
+esquecimento): `TARGET`/`INVALIDATION` não têm hoje uma fonte de peso
+PRÓPRIA e isolada por objeto individual (TP1/TP2/TP3, linha de STOP) —
+`TradePlanZonePlugin.tsx` trata o plano inteiro como uma zona única, já
+graduada; inventar peso por alvo individual sem uma fonte real seria a
+fabricação que a Regra de Ouro 2 proíbe. `RADAR` não tem hoje um objeto
+visual próprio desenhado no canvas do gráfico (vive em painel separado)
+— graduar exigiria construir um objeto novo só para a categoria, não
+uma consolidação do que já existe. As linhas 2 e 14 da tabela abaixo
+foram corrigidas para refletir este estado real — nenhuma outra linha
+desta tabela foi re-verificada por este mesmo erro, mas cada uma cita
+sua própria evidência (arquivo/grep), não memória.
+
+**Mapeamento por seção, evidência real (não memória):**
+
+| # | Seção do memo | Estado real |
+|---|---|---|
+| 1 | Gráfico (Lightweight Charts, Primitives) | Mantido, sem substituição cogitada. Uso de Primitives modernas (Series/Pane Primitives) não auditado plugin-a-plugin nesta rodada — a maioria dos ~14 plugins de canvas usa a API de `addSeries`/canvas overlay clássica, não as Primitives novas da lib; migração seria uma auditoria própria. |
+| 2 | Visual Intelligence Layer | **Parcial, disperso, não consolidado — mas mais real do que a auditoria inicial (corrigida acima) reconheceu.** `layer-relevance.ts` (mostra/esconde camada) + `visual-budget.ts` (**ativo ao vivo, 4/7 categorias**, ver correção acima) + `chart-layer-depth.ts` (profundidade) já fazem, cada um separadamente, uma fatia real do que o memo pede como camada única — nenhuma delas é código morto. Falta só o NOME/módulo consolidado, não a função. |
+| 3 | Modo padrão do gráfico | **Já é a direção que a sessão vem tomando** (§29/§30 desta PR: declutter da navegação, correção de sobreposição) mas o memo pede uma lista literal fixa (candles/volume/estrutura/traço roxo/FVG-OB relevantes/Trade Plan/invalidação/decisão/1 seta) que hoje **não é o padrão real** — `layer-relevance.ts` decide dinamicamente por relevância, não por uma lista fixa deste tamanho. Divergência real a resolver com decisão explícita (é isto que o memo pede, ou é a relevância dinâmica que já existe?). |
+| 4 | Progressive disclosure (LABORATORY) | Existe em espírito (`ChartLayersPanelContent`, "Estado Inteligente Adaptativo", resumo por padrão + controle completo 1 clique abaixo) mas sem o vocabulário "LABORATORY" nem o ciclo explícito ativação→visualização→fechamento→retorno. |
+| 5 | Evidence Graph | **Gap real.** `engine-signal-contract.ts` + `evidence-fusion.ts` existem mas são agregação PLANA (contagens/cobertura), não um grafo com dependências nomeadas nem pilares. `fractal-swings.js` (a atenção especial que o memo pede) já é módulo único compartilhado por 17+ consumidores reais (`research/engines/*`, `nexus/*`, `engine-bridge.ts`) — a preocupação do memo ("não duplicar") já está satisfeita na prática, mesmo sem um Evidence Graph formal por cima. |
+| 6 | Five Pillars | **Nome não existe no código.** O que existe é `council.ts` — 7 agentes (Liquidity/Structure/Orderflow/Risk/Manipulation/Fibonacci/Momentum), categorização diferente dos 5 pilares nomeados pelo memo (STRUCTURE/LIQUIDITY/MOMENTUM/CONTEXT/RISK). `docs/SYSTEM_HANDBOOK.md §7` já tem uma tabela A-E (DIREÇÃO/ESTRUTURA/TIMING/RISCO/CONTEXTO) que é a peça mais próxima — também não os mesmos 5 nomes. Formalizar os Five Pillars exigiria decidir explicitamente se substituem, resumem ou coexistem com essas duas classificações já reais — decisão de arquitetura, não implementação mecânica. |
+| 7 | Risk (WARNING ≠ gate) | **Já correto hoje.** `RR_QUALITY_FLOOR = 2` (`nexus/rr-quality.ts`) é usado como sufixo textual de aviso (`rrFloorSuffix`), nunca bloqueia a leitura do Núcleo — confirmado por grep, nenhum consumidor usa o piso como gate de decisão. |
+| 8 | Performance (Workers/WASM) | **Já real.** 4 Workers dedicados (`llm-worker.ts`, `backtest-worker.ts`, `orderflow-heatmap-worker.ts`, `conviction-cyclone-worker.ts`) + `quant-worker.js` (estático, servido em produção) + WASM real (`cyborg_quant_core.wasm`/variante SIMD) para Volume Profile/TrustScore (Regra de Ouro 6 do CLAUDE.md, já não-negociável). Benchmark formal de FPS/latência/CPU por contagem de candles (item 17 do memo) não existe como suíte própria. |
+| 9 | Data Fabric | **Já é a arquitetura real** — `market-data-bus/` como fonte canônica por `symbol:timeframe`, WS como caminho principal (§20 desta mesma PR: migração Spot→Futures), REST reservado a bootstrap/histórico/reconciliação. Já documentado em `docs/MARKET_DATA_FABRIC.md`. |
+| 10 | DuckDB-WASM | **Ausente, e o memo já concorda que deve ficar assim até POC.** Zero presença no repositório. Nenhuma ação requerida agora — é exatamente o que o memo pede ("não introduzir ainda sem benchmark"). |
+| 11 | IA (ONNX/Transformers.js) | **Ausente.** O único caminho de IA hoje é `llm-bridge.ts`/`llm-worker.ts` via `@mlc-ai/web-llm` (Llama 3 local, WebGPU) para síntese tática em linguagem natural — opt-in, isolado, nunca gera LONG/SHORT (mesma linha vermelha que o memo pede). ONNX Runtime Web/Transformers.js seriam um caminho PARALELO para classificação/resumo, não construído. |
+| 12 | WebGPU | **Parcial.** Já usado, mas só dentro do caminho do LLM (`llm-worker.ts`, `voice-dispatcher.ts`, `synthetic-reading.ts`) — não existe hoje uma arquitetura "GPU-ready" genérica para o motor quantitativo, com WASM como fallback formal. |
+| 13 | iPad-first | **Disciplina permanente já real** — Regra de Ouro 7 do CLAUDE.md (60 FPS, zero scroll de página), testado em Chromium com viewport iPad Pro 11" em múltiplas rodadas desta sessão (§4, §27, §29 desta PR). Nunca testado em dispositivo físico. |
+| 14 | Visual Budget | **Já existe, já com o nome certo, e já ativo ao vivo** — `nexus/visual-budget.ts`, graduado (Ordem Nº 03/04) para 4 das 7 categorias declaradas; as 3 restantes ficaram de fora por falta real de fonte de peso individual (`TARGET`/`INVALIDATION`) ou de objeto visual próprio (`RADAR`), não por esquecimento. |
+| 15 | Anti-colisão | **Já real e maduro** — `price-label-stack.ts`, usado por 10+ famílias de rótulo (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/CHOCH e mais), extensivamente testado ao longo desta sessão inteira (§10-§13, §25-§27 desta PR). |
+| 16 | Zero look-ahead | **Já é princípio testado** — `structural-backtest.js` (walk-forward, 521 janelas), `structural-swings-trace.test.ts` (zero-look-ahead explícito), replay sem look-ahead documentado em §6 deste handbook. |
+| 17 | Testes (benchmark de candles) | **Fechado nesta mesma rodada (Stage 1, carta branca) — `tools/benchmark-chart-render.mjs`.** Mede o `createChart`+`addSeries(CandlestickSeries)` REAL (mesma chamada de `EnhancedChart_110_Percent.tsx`) em 500/1k/5k/10k candles sintéticos: setData(ms), FPS real por amostragem de `requestAnimationFrame`, p95 de frame, heap JS. Rodado de verdade neste sandbox (Chromium via Playwright, já disponível no ambiente): 58-60 FPS em todas as contagens, p95 de frame ~16.7-16.8ms (teto real de 60Hz), heap subindo linearmente 4,3MB→21,5MB. Limitação honesta, documentada no próprio script: Chromium headless aqui, não Safari/iPad real; só a série de candles, sem os ~14 plugins de overlay; execução única, sem repetição estatística. |
+| 18 | Não-regressão (Core/Decision/Risk/Evidence Graph semantics) | Já é a disciplina de fato desta sessão inteira (LEI 24, "execute somente esta alteração", citado literalmente em §23/§28 desta PR) — nunca formalizado como checklist único. |
+| 19 | Processo (MAPEAR→POC→BENCHMARK→integrar) | **Esta entrada é exatamente isso** — o mapeamento, sem código. |
+| 20 | Princípio final | Já é o vocabulário real desta sessão (Regra de Ouro 2/3, LEI 24, "declaração ≠ realidade") só sem o slogan "CALCULAR MUITO. MOSTRAR POUCO." |
+
+**Stage 1 escolhido e executado nesta mesma rodada, sob carta branca do
+Operador**: entre as candidatas (graduar `visual-budget.ts` — já feita,
+ver correção acima; consolidar a Visual Intelligence Layer nomeada; POC
+de DuckDB-WASM; benchmark formal de candles/FPS), escolhi o benchmark
+(item 17) — menor risco real (zero código de produção tocado, ferramenta
+de bancada isolada fora de `npm run verify`/CI) e o único que produz dado
+que as outras decisões (consolidar a camada, avaliar DuckDB-WASM/WebGPU)
+vão precisar depois. Ver linha 17 da tabela acima e `tools/benchmark-
+chart-render.mjs` (+ `tests/benchmark-chart-render.test.ts`, 6 testes de
+execução real para o gerador de candles sintéticos). Próximo passo real
+ainda em aberto: consolidar a Visual Intelligence Layer nomeada, ou POC
+isolado de DuckDB-WASM — nenhum dos dois tentado nesta rodada.
+
+---
+
+### 6.94 "ORDEM 2 — FUTURE MAP / TRADE PLAN / REVERSAL ENGINE" (29 seções)
+— mapeamento honesto + `trade-plan-view.ts` (compositor puro, zero motor
+novo)
+
+Pedido do Operador: memo de 29 seções pedindo a camada de análise
+OPERACIONAL do AR10 (companheira do memo de 20 seções da §6.93, que era
+sobre a camada visual) — Trade Plan unificado (DIRECTION/ENTRY/
+INVALIDATION/T1-T3/REVERSAL ZONES/CONFIDENCE STATE/SCENARIO/STATUS),
+Future Path Engine, Reversal Engine (3 tiers), Liquidity Map ranqueado,
+Trade Semantics (`DIRECTION != ENTRY`, `ENTRY != CURRENT PRICE`
+automático), P1 Five Pillars, P3 Evidence Graph, cenários BASE/
+ALTERNATIVE/INVALIDATION, zero look-ahead, hierarquia visual, testes
+obrigatórios. Regra explícita: *"O objetivo NÃO é criar um indicador
+novo... reutilizar os componentes existentes"* (§2) — a mesma disciplina
+de auditar antes de construir que já rege este projeto inteiro.
+
+**Achado central: a maior parte já existe, sob vocabulário diferente —
+auditoria seção-a-seção, arquivo por arquivo, nunca por memória:**
+
+| Seção da Ordem 2 | Estado real |
+|---|---|
+| §17 Purple Structural Trace | **JÁ CONSTRUÍDO, exatamente como pedido** — `StructureTracePlugin.tsx` (§23 da PR #16 desta mesma sessão, "MD-7 Visual Confidence Trace"): linha fina, cor `projection`, pivôs fractais CONFIRMADOS (`fractal-swings.js`), nunca um 2º ZigZag. |
+| §18 Direction Arrow | **JÁ CONSTRUÍDO, exatamente como pedido** — `ConfidenceDirectionArrowPlugin.tsx` (mesma §23): LONG↑/SHORT↓/WAIT=nada, deliberadamente na posição OPOSTA de `plan-markers.ts` para nunca ser confundida com ENTRY — "DIRECTION ≠ ENTRY" já é comentário literal no código. |
+| §3/§8 Trade Semantics (`NOT_DEFINED`/`MARKET`/`LIMIT`/`TRIGGER`) | **Já resolvido, com vocabulário diferente — construir um 2º classificador duplicaria.** `deriveEntryState()` (`operational-readability.ts`) já responde exatamente "existe confirmação de timing AGORA?" a partir de preço-dentro-da-zona-real-ou-não: `ENTRY_CONFIRMED`≈MARKET, `WAITING_FOR_RETEST`≈LIMIT, `NO_ENTRY`/`ENTRY_INVALIDATED`≈NOT_DEFINED. `TRIGGER` não tem análogo real: `trade-plan.ts` só constrói entradas do lado de PULLBACK (suporte para LONG/resistência para SHORT), nunca do lado de rompimento — não fabricado. |
+| §4 Trade Plan (forma única) | **Ingredientes reais existem em 5 sistemas separados, nunca compostos numa view única** — `trade-plan.ts` (direction/entry/stop/targets/R:R reais), `signal-track-record.ts` (status de ciclo de vida), `scenario-engine.ts` (pathA/pathB com invalidation embutida), `reversal-detector.ts` (leitura de reversão), `institutional-score.ts` (confiança qualitativa). Fechado nesta rodada — ver abaixo. |
+| §11 Cenários BASE/ALTERNATIVE/INVALIDATION | **Já existe, nome diferente** — `scenario-engine.ts`'s `pathA`/`pathB`, cada `ScenarioPath` já carrega `invalidation` (nível real) embutido — nunca um 3º objeto separado. |
+| §12 Probabilidade qualitativa | **Já correto hoje** — `institutionalConfidenceZone()` banda o score real 0-100 em 5 tiers (MUITO_FORTE/FORTE/MODERADA/FRACA/INVALIDA), nunca uma % fabricada (Regra de Ouro 2 já em vigor). |
+| §15 Zero look-ahead | **Já é princípio testado** — mesma cobertura já citada na §6.93 (walk-forward real, `structural-swings-trace.test.ts`). |
+| §25 Não alterar o homologado | **Já é a disciplina real desta sessão inteira** (LEI 24, "execute somente esta alteração" — citado literalmente §23/§28 da PR #16). Nada em `trade-plan-view.ts` toca Core Engine/Decision Engine/Risk architecture. |
+| §6 Reversal Engine (3 tiers: REACTION ZONE/REVERSAL WATCH/CONFIRMED REVERSAL) | **Parcial — só o tier mais forte existe.** `reversal-detector.ts` já produz uma leitura real de reversão CONFIRMADA (CHoCH real ou flip real do SuperTrend, nunca BOS — que é continuação, não reversão) e já está graduado (`App.tsx`, linha ~2351). REACTION ZONE (antes de qualquer rompimento) e REVERSAL WATCH (alerta antecipado) exigiriam lógica de proximidade NOVA — que nível? que limiar de distância? — gap real, não inventado nesta rodada para não fabricar um piso sem justificativa (Regra de Ouro 2). |
+| §7 Liquidity Map (ranking BUY/SELL-SIDE, EQH/EQL, stop clusters) | **Parcial.** `selectSharedZoneHighlights()` (`liquidity-significance.ts`) já ranqueia por significância real (`SHARED_ZONE_HIGHLIGHT_SLOTS=3`) — mas para zonas Order Block/FVG, não especificamente EQH/EQL/liquidity pools que a Ordem pede. Gap real, não fechado. |
+| §13 P1 Five Pillars (nomes exatos STRUCTURE/LIQUIDITY/MOMENTUM/CONTEXT/RISK) | **Nome formal ainda não existe** (mesmo achado da §6.93) — `council.ts` tem 7 agentes com categorização diferente; `SYSTEM_HANDBOOK.md §7` tem uma tabela A-E também diferente. Decisão de arquitetura (substituir? resumir? coexistir?), não mecânica. |
+| §14 P3 Evidence Graph (genealogia, "quantas fontes realmente independentes") | **Parcial, mais alinhado do que a §6.93 tinha percebido.** `evidence-fusion.ts` já EXCLUI deliberadamente o Scenario Engine como fonte própria porque `ScenarioPath.opinionWeight` já é a MESMA massa de opinião do Conselho — exatamente o "não contar a mesma fonte duas vezes" que a Ordem 2 §2/§14 pede. Ainda não é um grafo com dependência NOMEADA (`source → engine → signal → pillar → decision`) — continua agregação/contagem, não uma estrutura de grafo navegável. |
+
+**Solução aplicada — Stage 1, escolhido por ser o de menor risco real
+entre os candidatos (mesma disciplina de "carta branca, nunca big-bang"
+já estabelecida na §6.93):** `nexus/trade-plan-view.ts` (novo, puro,
+Laboratório de Evolução — isolado, zero import por nenhum componente
+vivo, confirmado pelo build idêntico: mesmos 1937 módulos, mesmos bytes
+de bundle antes/depois). `composeTradePlanView()` é PURAMENTE um
+compositor — nenhum campo é calculado, cada um é passthrough real ou
+mapeamento de enum já existente: `entry`/`invalidation`/`targets`/`R:R`
+vêm direto de `TradePlan`; `status` resolve entre `TrackedPlanStatus`
+(plano já aberto) e `NexusSetupState`/`NexusEntryState` (antes de existir
+plano) — nunca os dois ao mesmo tempo; `confidenceState` é o tier
+qualitativo real de `institutionalConfidenceZone()`; `reversal` é
+passthrough integral de `ReversalReading`, nunca reinterpretado num tier
+mais fraco; `scenario.base`/`scenario.alternative` escolhem entre
+`pathA`/`pathB` pela direção real do plano (ou a convenção real de
+`scenario-engine.ts` quando não há plano ainda).
+
+22 testes de execução real (`tests/trade-plan-view.test.ts`): os 6
+valores de `status` cobertos por transição real (incluindo "plano real
+existe mas 1º ciclo ainda sem tracked status → ACTIVE, nunca WAIT");
+passthrough real de entry/invalidation/targets; os 5 tiers de confiança
++ `DADOS_INSUFICIENTES` honesto; passthrough por identidade de
+`ReversalReading`; resolução de BASE/ALTERNATIVE para LONG e para SHORT
++ a convenção real sem plano; pureza (mesma entrada → mesma saída, nunca
+muta o `TradePlan` recebido); contrato versionado.
+
+**O que este round honestamente NÃO fez, do memo maior:** graduar
+`trade-plan-view.ts` a um painel/canvas visível (fica Laboratório de
+Evolução, mesma disciplina de `visual-budget.ts` antes de sua própria
+graduação, §6.93) — próxima rodada, com sua própria verificação visual;
+Future Path Engine (§5, projeção visual discreta do caminho — maior,
+toca desenho no gráfico); Reversal Engine com os 3 tiers completos (§6,
+gap real registrado acima); Liquidity Map EQH/EQL ranqueado (§7, gap
+real registrado acima); Five Pillars/Evidence Graph formais (§13/§14,
+decisão de arquitetura, não mecânica).
+
+`npm run verify`: **256 arquivos / 4385 testes**, tsc limpo, build
+idêntico em módulos/bytes ao commit anterior — confirmando isolamento
+real, não só declarado.
+
+> **Graduação (03/09/2026, pedido direto do Operador: "gradue os dois"):**
+> `trade-plan-view.ts` deixou de ser Laboratório de Evolução.
+> `composeTradePlanView()` está ligado ao ciclo real dentro de
+> `SecondaryModuleView` (aba ANALYSIS) — cada input já é uma leitura já
+> exibida em outro painel desta mesma view (`tradePlan`/`trackRecord.active`/
+> `scenario`/`institutionalScore.score`/`reversalAlert`), e o único campo
+> genuinamente novo na tela é `status` (`ModuleStat label="Status"`, painel
+> "Trade Plan"), que resume ACTIVE/TARGET_REACHED/INVALIDATED/etc. num só
+> lugar em vez de o Operador combinar 3 painéis mentalmente. Verificado ao
+> vivo via Playwright (dev server real): a aba ANALYSIS renderiza sem
+> crash e sem erro novo de console — mas o campo `Status` em si nunca foi
+> visto renderizado com um `TradePlan` real neste sandbox (zero egress,
+> então nunca há plano real aqui); a lógica está coberta por 22 testes de
+> `composeTradePlanView()` + 5 testes novos de fiação
+> (`trade-plan-view-graduation-wiring.test.ts`). Ainda NÃO fez: Future
+> Path Engine, Reversal Engine com os 3 tiers, Liquidity Map EQH/EQL,
+> Five Pillars/Evidence Graph — os mesmos gaps de antes, inalterados por
+> esta graduação.
+
+---
+
+### 6.95 "ORDEM 3 — PROFESSIONAL MARKET TERMINAL" (37 seções) —
+mapeamento honesto + `terminal-event-log.ts`, compositor puro sem motor
+novo
+
+Terceira ordem da mesma família (memo de 20 seções §6.93; Ordem 2 de 29
+seções §6.94) — desta vez sobre o TERMINAL em si: multi-asset,
+multi-timeframe, context-aware, um único `MARKET SNAPSHOT`/`ANALYSIS
+SNAPSHOT` por symbol:timeframe:timestamp, isolamento arquitetural entre
+ativos/timeframes, Terminal Header/Chart Header com status real, Terminal
+Event Log, Layer Trace, state machine formal, audit trail, testes
+extensivos (troca de ativo/timeframe, race condition, cache
+contamination), responsividade iPad, performance.
+
+**Achado central, auditoria arquivo-a-arquivo (nunca por memória):** a
+maior parte da visão desta Ordem já existe — e mais madura do que a
+suposição inicial de "terminal cripto simples" sugeriria.
+
+| Seção da Ordem 3 | Estado real |
+|---|---|
+| §2/§27 Symbol Selector / Universal Asset Contract | **Já existe, multi-asset-class de verdade.** `src/market-data-bus/instrument-registry.js` (392 linhas) — catálogo real de futuros CME (EQUITY_INDEX/EQUITY/METALS/ENERGY/RATES/FX, tick size/value pesquisados via WebSearch, nunca inventados) + `marketMode: "CRYPTO" \| "TRADFI"` já real em `App.tsx`, com seletor, sessão persistida, e `tradfi-delayed-connector.js`. Cripto não é a única classe de ativo suportada. |
+| §6-8 Market Snapshot / Data Synchronization | **Já é a arquitetura real** — `market-data-bus/bus.js`, fonte canônica por `symbol:timeframe` (já documentado em `CLAUDE.md`). `unified-snapshot-store.ts` (5 domínios: Mercado/Séries/Motores Quant/Cérebro/Organismo) é o "Analysis Snapshot" real, só sem esse nome. |
+| §19/§22/§24 Timestamp Integrity / Real Data Status / Latency | **Já existe, vocabulário diferente.** `market-data-bus/quality-engine.js`+`quality-monitor.js`: Data Quality Layer real POR `symbol:timeframe`, 4 dimensões (latência/disponibilidade/consistência/estabilidade) → `QUALITY_CLASSIFICATION` (EXCELENTE/SAUDAVEL/DEGRADADA/QUARENTENA/DADOS_INSUFICIENTES) — não é literalmente LIVE/DELAYED/STALE/OFFLINE/ERROR, mas cobre a mesma função com mais rigor (score contínuo + circuito de quarentena por sequência de falhas). |
+| §20/§21 Multi-Asset/Multi-Timeframe Isolation | **Já corrigido numa rodada anterior, achado real registrado no próprio código.** `App.tsx` (`seriesMatchesTimeframe`, `fetchSymbolData`): comentário explícito ("Diretriz de Evolução Geral do Organismo — auditoria de sincronização") documenta que o guard `cancelled` só cobria troca de ATIVO — trocar de timeframe durante um fetch em voo podia misturar duas grades na mesma série. Já corrigido com captura de `tfNoInicio` antes do await + verificação dupla (ativo OU timeframe mudou) depois — path de rede E path de hidratação do IndexedDB, ambos comparados linha a linha nesta auditoria. `fetchDerivatives` (funding/OI) usa só o guard de ativo, corretamente — funding/OI não dependem de timeframe. |
+| §25 Performance Monitor | **Já existe, painel dedicado, já fora da UI operacional** — Widget "SYSTEM HEALTH" (`App.tsx`): saúde do organismo, qualidade do Bus, suficiência de dados, qualidade GMIL, integridade do gráfico, variante WASM, latência do ciclo (rotulada com o timeframe!), FPS real, memória JS — exatamente §25, já separado do painel operacional principal. |
+| §29 Terminal + Graph Link | **Já é regra estrutural testada** — `NexusDecision` (`decision-layer.ts`) é a ÚNICA fonte que qualquer consumidor visual lê; "nenhum consumidor visual recalcula direção/entrada/stop/alvo — todos leem o mesmo `NexusDecision`" já é frase literal deste handbook (§2), provada por teste. Chart e terminal divergirem no mesmo snapshot já é estruturalmente impossível, não uma disciplina visual. |
+| §18 Layer Trace | **Parcial — infraestrutura real, granularidade menor que a pedida.** `nexus/stage-runner.ts` já expõe `STAGE_ORDER = ["DATA","CORE_ENGINE","COUNCIL","TRADE_PLAN","NEXUS_DECISION"]` (5 estágios, não os 9 da Ordem) com `traceStages()` real; `nexus/self-diagnostics.ts` já consome isso + Health Monitor + Data Quality Layer num relatório sob demanda (`buildDiagnosticReport`/`formatDiagnosticReportMarkdown`, ligado em `App.tsx`). Gap real: não é uma UI expansível camada-por-camada, é markdown gerado sob pedido. |
+| §17 Terminal Event Log | **Gap real, fechado nesta rodada (Stage 1) — ver abaixo.** |
+| §3 Timeframe Selector (disponibilidade real por ativo) | **Gap real.** Nenhum `availableTimeframes` por instrumento — o seletor assume o mesmo conjunto fixo para todo ativo, nunca consulta a fonte real. |
+| §30 Professional State Machine (11 estados nomeados) | **Gap parcial — estados reais existem, espalhados, vocabulário diferente.** `NexusSetupState`/`NexusEntryState` (operational-readability.ts), `TrackedPlanStatus` (signal-track-record.ts), `QUALITY_CLASSIFICATION` (quality-engine.js), `engineStatus: 'ok'\|'error'\|'pending'` — nenhum se chama `INITIALIZING`/`SYNCING`/`SIGNAL_DEVELOPING` etc., e unificar sob um único enum arrisca duplicar o que já existe (mesmo risco já registrado na §6.94 para Five Pillars) — não tentado nesta rodada. |
+| §31 Audit Trail | **Parcial.** `TrackedPlan.contextAtOpen` (signal-track-record.ts) já congela score/regime/VWAP/Nexus Line no instante da abertura — reconstrução parcial real. Não existe uma trilha completa ligando evidência→motor→decisão por decisão individual (isso é o mesmo Evidence Graph com genealogia já registrado como gap na §6.94). |
+
+**Solução aplicada — Stage 1:** `nexus/terminal-event-log.ts` (novo, puro,
+Laboratório de Evolução — isolado, build idêntico ao commit anterior).
+Fecha o gap mais concreto e explicitamente exemplificado da Ordem (§17,
+com formato literal no próprio texto: `"12:43:21 [MARKET] BTCUSDT 5m
+snapshot updated"`). Descoberta que tornou isto possível sem inventar
+nada: `nexus/event-bus.ts` já é um `TypedEventBus` real com 22 tipos de
+evento REAIS, publicados hoje por `OrganismOrchestrator`/Health
+Monitor/CrossExchangeService (o próprio arquivo documenta, por auditoria
+anterior, que só os 3 eventos `DATA.*` não têm publicador vivo ainda,
+porque `cross-exchange-service.ts` não é iniciado nesta fase — decisão
+deliberada, não esquecimento). `formatTerminalLogEntry()` não fabrica
+nenhuma mensagem: cada linha é um `switch` sobre o tipo real do evento,
+lendo só campos que o payload real já carrega — payload nulo vira
+"cleared"/"unavailable" honesto, nunca um valor inventado.
+`appendTerminalLogEntry()` é o ring buffer real (piso de 200 entradas,
+convenção declarada, mesma natureza de outros pisos deste repositório).
+
+15 testes de execução real (`tests/terminal-event-log.test.ts`): o
+exemplo literal da própria Ordem (`DATA.CANDLES_UPDATED` → "BTCUSDT 5m
+snapshot updated"); cada categoria mapeada a partir do NOME real do
+evento (nunca uma reclassificação por conteúdo); payload nulo → mensagem
+honesta em 3 famílias diferentes de evento; array real contado, nunca
+redigitado; `HEALTH.CHANGED` com campo `null` virando "n/d"; ring buffer
+com descarte real das entradas mais antigas, imutabilidade, e fail-closed
+em `max` inválido (0/negativo/NaN cai no default, nunca trunca pra
+buffer vazio).
+
+**O que este round honestamente NÃO fez:** graduar `terminal-event-log.ts`
+a um painel visível (fica Laboratório de Evolução, mesma disciplina de
+`visual-budget.ts`/`trade-plan-view.ts` antes de suas próprias
+graduações — a próxima rodada assina o `core.bus` de verdade e monta o
+painel); `availableTimeframes` por instrumento (§3); state machine
+unificada (§30, risco real de duplicar o que já existe sob nomes
+diferentes); Layer Trace com a granularidade de 9 estágios pedida (§18,
+hoje 5 reais); Audit Trail completo com genealogia por decisão (§31,
+mesmo gap do Evidence Graph já registrado na §6.94).
+
+`npm run verify`: **257 arquivos / 4400 testes**, tsc limpo, build
+idêntico em módulos/bytes ao commit anterior.
+
+> **Graduação (03/09/2026, pedido direto do Operador: "gradue os dois"):**
+> `terminal-event-log.ts` deixou de ser Laboratório de Evolução.
+> `TypedEventBus` ganhou `onAny()` (canal aditivo — nunca muda
+> `on()`/`emit()`/`clear()` existentes, 7 testes novos em
+> `nexus-core.test.ts`) para entregar o `NexusEvent` completo a um único
+> assinante. Achado real na hora de graduar: já existia um painel "EVENT
+> TELEMETRY" (`EventsWidget`) ligado a `gmilBus`, cobrindo só 2 eventos de
+> proveniência GMIL — a graduação certa era ESTENDER esse painel (2ª fonte
+> real via `core.bus.onAny()`, formato `[CATEGORIA] mensagem` idêntico ao
+> exemplo literal da Ordem), nunca criar um painel/ícone novo (§29 tinha
+> acabado de decluttar a régua de navegação). Tom das linhas do Nexus Core
+> é sempre "info" (nunca ok/warn/error fabricado — isso é território do
+> `alert-center.ts`). Verificado AO VIVO via Playwright (dev server real,
+> hash de acesso temporário): linhas reais `[SYSTEM]`/`[DECISION]`/
+> `[QUANT]`/`[BRAIN]`/`[ORGANISM]`/`[RISK]` — 7 tipos de evento distintos
+> — atualizando em tempo real numa janela de 6 segundos, zero erro de
+> página. 9 testes novos de fiação
+> (`terminal-event-log-graduation-wiring.test.ts`). Ainda NÃO fez:
+> `availableTimeframes`, state machine unificada, Layer Trace de 9
+> estágios, Audit Trail completo — os mesmos gaps de antes, inalterados
+> por esta graduação. O painel continua oculto por padrão
+> (`widgets.events.visible: false`) — precisa do Workspace Manager pra
+> ligar, comportamento pré-existente não alterado por esta rodada.
+
+> **Correção honesta do título desta seção + §38-45 mapeadas (03/09/2026):**
+> o título acima diz "37 seções" — estava errado. O Operador colou as
+> seções §38-45 (RESPONSIVE SIZING/DENSITY CONTROL, iPad Mini, TERMINAL
+> DENSITY, CHART-FIRST LAYOUT, ANTI-OVERFLOW, VISUAL ACCEPTANCE,
+> DIMENSIONAMENTO FINAL, ACEITAÇÃO VISUAL), provando que a Ordem 3 tem
+> pelo menos 45 seções, não 37 — a mesma classe de erro já registrada
+> nesta sessão para "32 módulos" (§14 da PR) e "visual-budget.ts nunca
+> ligado" (§6.93): uma alegação minha sem remedição contra o dado real.
+> Não corrijo o número no título acima (Regra de Ouro 4 — nunca reescrever
+> silenciosamente o registro original) — só documento aqui que ele está
+> desatualizado.
+>
+> Mapeamento honesto de §38-45 (auditoria de arquivo, não memória):
+>
+> | Seção | Estado real |
+> |---|---|
+> | §38 Responsive sizing (tipografia/spacing) | **Parcial.** `index.css` já tem uma escala `clamp()` de 4 degraus pra TIPOGRAFIA (`--ar10-t-micro/label/body/read`) e `env(safe-area-inset-top/bottom)`. **Gap real:** nenhuma escala `clamp()` equivalente pra ESPAÇAMENTO/padding/gap — são classes Tailwind estáticas, com 52 ocorrências de `h-[Npx]`/`w-[Npx]` hardcoded só em `App.tsx`. Zero `container-type`/`@container` (CSS container queries) em todo o `src/`. |
+> | §39 iPad Mini — regra de ouro | **Ausente como caso codificado.** `nexus/chart-viewport.ts` cita "iPad Mini retrato (~700px)" só em comentário — nenhum arquivo trata 768px (a largura CSS real do iPad Mini portrait) como breakpoint/caso distinto em CSS ou TS. A prioridade pedida (gráfico > preço > decisão > trade plan > terminal > detalhes) não existe como regra codificada em lugar nenhum. |
+> | §40 Terminal density (COMPACT/STANDARD/EXPANDED) | **Gap real, Stage 1 fechado nesta rodada — ver abaixo.** Antes desta rodada: zero conceito de densidade no código — só um interruptor binário não-nomeado (`min-[1120px]:`, 4+ ocorrências em `App.tsx`). |
+> | §41 Chart-first layout | **Parcial.** O mecanismo já É chart-first: `App.tsx:4111` usa `h-[100dvh]` (unidade de viewport dinâmica) com `pt-safe`/`pb-safe`, e o container do gráfico é `flex-1 min-h-0` (cresce pra preencher o espaço restante via flexbox, não um valor fixo). **Gap real:** isso é distribuição IMPLÍCITA do flexbox, não uma fórmula explícita "altura do gráfico = viewport − header − terminal − controles" como a Ordem pede — não há um cálculo nomeado que alguém possa auditar ou testar isoladamente. |
+> | §42 Anti-overflow | **Parcial.** `overflow-x`/`overflow-hidden`/`truncate`/`whitespace-nowrap` aparecem 85+ vezes em `App.tsx` e mais 6 arquivos, incluindo `.ar10-scroll-x` documentado em `index.css` como correção real de uma regressão de overflow horizontal anterior. **Gap real:** aplicado ad-hoc por bug encontrado, nunca como disciplina/utilitário sistemático — sem uma varredura dedicada por viewport (iPad Mini/iPad/iPad Pro/desktop, portrait/landscape) que prove ausência de overflow em TODOS os componentes listados pela Ordem. |
+> | §43 Visual acceptance / §45 Aceitação visual | **Não verificado.** Nenhum teste (Playwright ou outro) commitado captura screenshots multi-viewport — `package.json` não tem `playwright` como dependência; os harnesses Playwright usados nesta sessão pra outras rodadas (§17/§21/§23/§25/§26/§27/§28/§29/§30/§34/§35) foram sempre ad-hoc, nunca commitados. Critério de aceitação da Ordem (zero sobreposição, zero corte de texto/botão, zero label sobre preço) nunca foi medido sistematicamente. |
+> | §44 Dimensionamento final (MIN/PREFERRED/MAX) | **Ausente como método.** Nenhum componente declara MIN/PREFERRED/MAX explicitamente — os 52 `h-[Npx]`/`min-h-[Npx]` de `App.tsx` são valores únicos hardcoded, não uma faixa com 3 pontos nomeados. |
+>
+> **Solução aplicada — Stage 1, mesma disciplina "carta branca, nunca
+> big-bang":** `nexus/density-tier.ts` (novo, puro, Laboratório de
+> Evolução — não ligado a nenhum componente ainda). `resolveDensityTier()`
+> resolve exatamente o pedido do §40 (COMPACT/STANDARD/EXPANDED, STANDARD
+> como padrão/fail-closed) reusando os DOIS limiares que já são reais e
+> testados em produção — `1120px` (o interruptor não-nomeado já em
+> `App.tsx`) e `1440px` (o piso de `resolveChartUltraWideScale`,
+> chart/chart-ultrawide-scale.ts) — zero número novo inventado. 6 testes
+> de execução real (`tests/density-tier.test.ts`): fronteiras exatas nos
+> dois limiares, larguras de dispositivo reais (iPad Mini 768/1024, iPad
+> Pro 834/1194, laptop 1366, desktop 1920, ultrawide 3440), fail-closed
+> pra STANDARD em largura inválida (nunca um extremo), monotonicidade
+> (aumentar a largura nunca reduz a densidade).
+>
+> **O que este round honestamente NÃO fez:** o overhaul responsivo em si
+> — nenhum componente (HEADER/SYMBOL SELECTOR/TIMEFRAME SELECTOR/CHART/
+> PRICE AXIS/TERMINAL/EVENT LOG/ANALYSIS PANEL/TRADE PLAN/LABELS/BUTTONS)
+> foi tocado; `resolveDensityTier()` ainda não decide NADA visível. Escala
+> `clamp()` pra espaçamento (§38); iPad Mini como caso codificado com
+> prioridade de conteúdo (§39); fórmula explícita de altura do gráfico
+> (§41); auditoria sistemática de anti-overflow multi-viewport (§42);
+> captura de screenshot multi-viewport commitada (§43/§45); MIN/PREFERRED/
+> MAX por componente (§44) — todos gaps reais, nenhum fechado nesta
+> rodada. Escopo genuinamente maior que um Stage 1 — cada item acima é
+> candidato a sua própria sessão.
+
+> **"TERMINAL — VISUAL + INFORMATIONAL INTEGRITY" mapeada + `terminal-field-priority.ts`
+> (03/09/2026):** continuação direta da mesma trilha — o Operador colou mais
+> uma seção sem numeração explícita, fechando (pelo tom de síntese —
+> "CHART-FIRST + TERMINAL-INTEGRITY + RESPONSIVE-SIZING + ADAPTIVE-DENSITY +
+> PROGRESSIVE-DISCLOSURE") o mesmo documento que trouxe §38-45. Define a
+> hierarquia real de que campo do Terminal sobrevive quando o espaço aperta:
+> DECISION > PRICE > TRADE PLAN > INVALIDATION > TARGETS > ESSENTIAL
+> EVIDENCE > SECONDARY INFORMATION, com uma regra "NUNCA" explícita (não
+> esconder Entry/Invalidation/Targets, não fabricar placeholder no lugar de
+> dado real, não sobrepor informação, não encolher texto crítico até
+> ilegível). Achado real antes de construir: "Progressive Disclosure" já é
+> um termo usado neste repositório (`App.tsx`, Workspace Manager §2) — mas
+> pra um mecanismo DIFERENTE (módulos secundários ocultos por escolha do
+> Operador, independente do tamanho da tela, trabalho da §29). O uso desta
+> seção é disclosure dirigido pelo VIEWPORT — mesma família de padrão de
+> UX, nunca o mesmo mecanismo; documentado explicitamente para não
+> confundir as duas leituras.
+>
+> `nexus/terminal-field-priority.ts` (novo, puro, Laboratório de Evolução —
+> não ligado a nenhum componente ainda) codifica os 7 tiers na ordem
+> literal do texto e consome `resolveDensityTier()` (`density-tier.ts`,
+> §36) em vez de reimplementar densidade — `resolveVisibleTerminalFieldTiers()`
+> só ativa disclosure em COMPACT, escondendo exclusivamente
+> `ESSENTIAL_EVIDENCE`/`SECONDARY_INFORMATION`; os 5 tiers centrais nunca
+> saem da lista, em nenhuma densidade. A divisão exata "5 nunca escondem, 2
+> compactáveis" é uma LEITURA minha do texto — a regra "NUNCA" nomeia
+> Entry/Invalidation/Targets explicitamente (partes concretas de 3 dos 5
+> tiers centrais) e DECISION/PRICE são os dois primeiros da própria
+> hierarquia — nunca um número dado literalmente no texto, registrado aqui
+> como interpretação, não fato. 13 testes de execução real
+> (`tests/terminal-field-priority.test.ts`): ordem exata dos 7 tiers,
+> visibilidade de cada tier individual, COMPACT vs STANDARD/EXPANDED,
+> pureza (nunca muta a lista canônica), preservação de ordem no
+> subconjunto visível.
+>
+> **O que este round honestamente NÃO fez:** nenhum componente real do
+> Terminal foi tocado — `resolveVisibleTerminalFieldTiers()` ainda não
+> decide nada visível na tela; a divisão 5-vs-2 nunca foi confirmada com o
+> Operador, é minha melhor leitura do texto; compactação de espaçamento,
+> reorganização de regiões, e a prevenção mecânica de sobreposição/texto
+> ilegível (itens do "MAS NUNCA" que são sobre RENDERIZAÇÃO, não sobre
+> QUAIS campos aparecem) seguem inteiramente não tentados.
+
+> **"ORDEM — MEXC ASSET DISCOVERY + NATIVE MARKET DATA" +
+> "ORDEM — UNIVERSAL ASSET DISCOVERY" (04/09/2026):** duas ordens do mesmo
+> pedido — a 2ª chegou logo depois da 1ª e generaliza a mesma exigência
+> ("BINANCE CONTINUA, MEXC É ADICIONADA... nunca esconder um ativo só
+> porque não existe na Binance") sob o vocabulário de `Universal Asset
+> Catalog`/`ExchangeAdapter`. O Operador reforçou o núcleo do pedido em
+> mensagem direta, informal: dado público real da MEXC, "mesmo processo"
+> já usado pra Binance, "o que precisar" pra analisar — não uma listagem
+> cosmética.
+>
+> **Auditoria antes de construir (CLAUDE.md item 1) — achado real, notícia
+> boa:** a maior parte da infraestrutura que as duas Ordens pedem já
+> existia, só não estava ligada à seleção do usuário:
+> `market-data-adapter.ts` (ADITIVO V-MAX Etapa 1) já é um
+> `MarketDataProviderId = 'BINANCE' | 'MEXC' | 'TRADFI_DELAYED'` com
+> provider como parâmetro explícito por chamada (nunca um toggle global);
+> `mexc-futures-candle-connector.js`/`mexc-futures-public.js` já buscam
+> candle real da MEXC (`toMexcSymbol('BTC') → 'BTC_USDT'`); o sufixo de
+> cache-key `-MEXC` (vs. `-PERP` da Binance) já existia e já está em uso
+> real por `requestRadarCandleSnapshot`/`scanRadarCandidate` (scanner de
+> fundo do Radar) há sessões — provando que o par provider+sufixo
+> funciona sem colidir Binance/MEXC na mesma chave do Bus;
+> `omnibox/mexc-symbols.ts` já busca a lista real de símbolos USDT-M
+> Futures da MEXC (`contract.mexc.com/api/v1/contract/detail`) para o
+> universo de fundo do Radar. O ÚNICO ponto realmente faltando: nenhum
+> desse caminho era alcançável a partir da seleção do Operador
+> (`SmartOmnibox`'s `onSelectCrypto: (baseAsset: string) => void` não
+> carregava identidade de exchange nenhuma).
+>
+> **Solução aplicada — Stage 1, "conectar peças já reais, nunca duplicar"
+> (Ordem MEXC §15/Ordem Universal §10, mandato explícito de ambas):**
+> - `omnibox/universal-symbol.ts` (novo, puro): normaliza
+>   `BinanceUsdtSymbol`/`MexcUsdtSymbol` num único
+>   `UniversalCryptoSymbol{baseAsset, exchange, market, nativeSymbol}` —
+>   `nativeSymbol` preserva o formato real de cada exchange
+>   (`"BTCUSDT"` vs. `"BTC_USDT"`, Ordem Universal §7), nunca reconstruído.
+>   Escopo honesto: só BINANCE/MEXC (os 2 providers de candle reais hoje —
+>   `CryptoExchangeId` é um recorte de `Exchange`, nunca uma união
+>   paralela) e só mercado `perp` (mexc-symbols.ts não descobre Spot).
+> - `SmartOmnibox.tsx`: novo fetch paralelo e independente
+>   (`fetchMexcUsdtSymbols()`, falha isolada — nunca bloqueia/derruba a
+>   seção Binance), nova seção "Cripto · MEXC (Tempo Real)", cada item
+>   rotulado `"EXCHANGE • MERCADO"` sempre visível (Ordem MEXC §7/§12,
+>   Ordem Universal §12 e §5 — mock literal do texto). `onSelectCrypto`
+>   mudou de `(baseAsset: string)` para `(selection: UniversalCryptoSymbol)`
+>   — única mudança de assinatura, único call site (App.tsx), sem shim de
+>   compatibilidade (CLAUDE.md: "mudar o código, não criar atalho").
+> - `engine-bridge.ts`: `getMexcChartCandles(symbol, limit, timeframe)` —
+>   mesmo contrato exato de `getChartCandles`/`getTradFiChartCandles`,
+>   reaproveita `getMarketDataProvider('MEXC')` + sufixo `-MEXC` já real
+>   (mesmo par que `requestRadarCandleSnapshot` já prova funcionar).
+> - `omnibox/MexcRealChart.tsx` (novo componente, espelha
+>   `TradFiRealChart.tsx` byte a byte na disciplina): candlestick real MEXC
+>   + badge "MEXC · FUTURES (Tempo Real)" sempre visível, 4 estados
+>   honestos (`LOADING`/`OK`/`HISTORICO_INSUFICIENTE`/`DADOS_INSUFICIENTES`
+>   — o 3º novo, Ordem MEXC §9/§13/Ordem Universal §9: ativo recém-listado
+>   nunca fabrica candle/estrutura, só declara amostra insuficiente).
+>   **ZERO import de nexus-core/Council/orderflow** — LEI 24 preservada
+>   por construção, mesmo raciocínio exato do precedente TradFi (o
+>   Operador pediu para VER/ANALISAR o ativo real, nunca para o Core
+>   Engine emitir uma segunda decisão sobre uma fonte nova).
+> - `App.tsx`: `marketMode` ganhou um 3º valor (`"MEXC"`, runtime-only —
+>   nunca entra em `RestoredSession`/`persistSessionState`: recarregar a
+>   página volta pro default CRYPTO/BTC, mesmo fallback já real para
+>   qualquer `marketMode` desconhecido) e `selectedMexcAsset` é estado
+>   PRÓPRIO, nunca reaproveita `selectedAsset`/`selectedTradFiAsset`
+>   (misturar identidade seria o "misturar dado de exchanges diferentes"
+>   que as duas Ordens proíbem, §8/§6). **Achado real de auditoria durante
+>   a fiação:** ~10 painéis do Terminal (Order Book/Order Flow/Liquidity
+>   Map/Council/Siriform/Regime/Score/Expectancy/preço do header/ícone do
+>   ativo) liam `selectedAsset`/`data`/`priceData` — todos ainda o ÚLTIMO
+>   símbolo Binance real, intocado, quando o modo vira MEXC. Sem gate,
+>   esses painéis mostrariam dado Binance estale sob o rótulo de um ativo
+>   MEXC diferente — exatamente o "misturar candle de uma exchange com
+>   preço de outra como se fosse o mesmo mercado" que a Ordem MEXC §8
+>   proíbe explicitamente. Corrigido generalizando o gate que já existia
+>   pra TRADFI (`marketMode === "TRADFI" ? <TradFiEmptyState/> : <Real/>`)
+>   para `isFullCryptoMode = marketMode === "CRYPTO"` — MEXC e TRADFI
+>   ficam do mesmo lado do gate em todo painel Binance-only, com um texto
+>   honesto PRÓPRIO (`reason` novo em `TradFiEmptyState`, nunca o texto
+>   fixo "Aguardando... Macro API" — seria falso pra MEXC, que está
+>   conectada de verdade, só esses painéis específicos não foram
+>   estendidos a ela nesta Etapa 1).
+>
+> **Testes (execução real + padrão):** `universal-symbol.test.ts` (9,
+> merge puro), `engine-bridge-mexc.test.ts` (5, mocka só a fronteira
+> `market-data-bus/index.js`, mesma convenção de
+> `engine-bridge-tradfi.test.ts`), `mexc-real-chart-wiring.test.ts` (12,
+> fiação App.tsx↔MexcRealChart↔universal-symbol, inclui a prova de que
+> nenhum painel Binance-only escapa do gate) + atualização de 3 testes de
+> padrão que quebraram honestamente por causa da mudança real de fonte
+> (`header-asset-cluster.test.ts`, `institutional-decision-layer-wiring.test.ts`,
+> `refinamento-final-wiring.test.ts`) e 1 de contagem de call site real
+> (`diretriz3-fixes.test.ts`: `getMarketDataBus().requestSnapshot()` 3→4
+> pontos reais, o 4º é `getMexcChartCandles`, mesmo raciocínio do 3º
+> `getTradFiChartCandles`) e 1 de contagem de `<TradFiEmptyState>`
+> (`tradfi-real-chart-wiring.test.ts`: 10→11, o 11º é o branch MEXC sem
+> ativo selecionado). `npm run verify`: **264 arquivos / 4466 testes**,
+> tsc limpo, build ok (1941 módulos, +2 sobre a baseline —
+> `universal-symbol.ts`/`MexcRealChart.tsx` agora graduados/ligados).
+>
+> **O que este round honestamente NÃO fez:**
+> - **Verificação ao vivo contra a MEXC real**: nenhuma chamada de rede
+>   real foi feita nesta sessão (mesmo bloqueio de política de rede do
+>   sandbox de implementação já documentado em
+>   `docs/MARKET_DATA_FABRIC.md`) — a Ordem MEXC §19 pede confirmação com
+>   ≥3 ativos reais end-to-end; isso só é possível num ambiente com saída
+>   de rede liberada (dispositivo real do Operador).
+> - **MEXC Spot**: não descoberto (`mexc-symbols.ts` só cobre Futures) nem
+>   analisável — Ordem MEXC §6/Ordem Universal §6 pedem Spot e Futures
+>   distintos por exchange; hoje só Futures existe dos dois lados
+>   (Binance também só oferece Futures como primário, Spot é fallback).
+> - **Core Engine/Council/Order Flow/Liquidations/Order Book real**: NUNCA
+>   estendidos à MEXC — permanecem 100% Binance, LEI 24 intacta por
+>   construção (MexcRealChart nunca importa essas camadas). Isto é
+>   deliberado, não esquecido: estender o ciclo de decisão real para uma
+>   segunda fonte é uma mudança arquitetural maior que este Stage 1, e o
+>   precedente do Footprint recusado (commit `5454194`, tick MEXC Spot
+>   rejeitado para Footprint por atribuição cross-exchange incorreta) já
+>   estabeleceu que misturar fontes no caminho de decisão real exige muito
+>   mais cuidado do que uma tela de leitura.
+> - **Persistência IndexedDB (`nexus/persistence.ts`)**: `candleKey` não
+>   ganhou sufixo de exchange — `selectedMexcAsset` é runtime-only nesta
+>   Etapa 1 (mesmo escopo que `TradFiRealChart` já tinha: não persiste),
+>   então o risco de colisão Binance/MEXC no cache do IndexedDB
+>   identificado na auditoria fica latente e sem exercício real ainda,
+>   documentado aqui para quem estender a Etapa 2.
+> - **Auto-detecção de novas listagens MEXC (Ordem MEXC §10/Ordem
+>   Universal §4/§11, "atualização automática do catálogo")**: nenhum
+>   polling/cadência nova foi criada — o Omnibox busca a lista real uma
+>   vez por abertura (mesmo padrão já real da seção Binance), nunca em
+>   segundo plano. Um ativo recém-listado na MEXC aparece assim que a
+>   MEXC o retornar no `contract/detail` e o Operador abrir/reabrir o
+>   Omnibox — não instantaneamente via push/poll de fundo.
+> - **`ExchangeAdapter` formal (Ordem Universal §10)**: não construída
+>   como abstração nomeada — `MarketDataProviderId`/`getMarketDataProvider()`
+>   já cumpre o papel real (provider por parâmetro explícito, zero
+>   `if exchange === MEXC` espalhado), só nunca foi batizado com esse nome
+>   exato; renomear/formalizar fica para quando um 4º provider real
+>   (Bybit/OKX/Hyperliquid) precisar do mesmo padrão.
 
 ---
 

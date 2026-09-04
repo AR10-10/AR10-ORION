@@ -264,7 +264,7 @@ memória baixa, e a arquitetura de Web Workers para cálculo pesado
 A classificação definitiva (IMPLEMENTAR AGORA / MANTER ISOLADO COM
 JUSTIFICATIVA TÉCNICA DEFINITIVA / DESCARTAR) de toda pendência
 recorrente já foi feita na rodada anterior
-(`docs/RELATORIO_FECHAMENTO_ARQUITETURA.md` §1) — reconfirmada nesta
+(`docs/historico/RELATORIO_FECHAMENTO_ARQUITETURA.md` §1) — reconfirmada nesta
 auditoria, sem mudança: `cross-exchange-service.ts`/`connection-
 manager.ts` (cutover WS/REST ao vivo, maior risco técnico do projeto),
 MACD como 8º voto (pesquisa própria de calibração), backlog V-MAX

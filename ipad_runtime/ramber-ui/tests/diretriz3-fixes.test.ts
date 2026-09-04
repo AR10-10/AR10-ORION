@@ -151,18 +151,23 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     expect(helper).not.toContain('collectBinanceKlines');
   });
 
-  it('as 4 chamadas reais ao ciclo Binance-only (HTF, ciclo principal, getChartCandles, Fase Ω Multi-Timeframe) passam por requestFuturesCandleSnapshot — nenhuma chama requestSnapshot() direto', () => {
+  it('as 5 chamadas reais ao ciclo Binance-only (HTF, ciclo principal, getChartCandles, Fase Ω Multi-Timeframe, Pivot Points) passam por requestFuturesCandleSnapshot — nenhuma chama requestSnapshot() direto', () => {
     const bridge = read('../src/engine-bridge.ts');
     const helperCallSites = bridge.match(/await requestFuturesCandleSnapshot\(\{/g) ?? [];
     // Fase Ω Priority 1: buildMultiTimeframeContext somou um 4º call site
-    // real (mesmo helper, 6 prazos em paralelo) — nenhuma perna de spot,
+    // real (mesmo helper, os prazos de MULTI_TIMEFRAME_LIST em paralelo) —
+    // nenhuma perna de spot,
     // nenhum bypass do helper. ADITIVO V-MAX Etapa 9: scanRadarCandidate
     // migrou seus 2 call sites (o candidato em si + o loop de 3 prazos de
     // referência) para requestRadarCandleSnapshot (provider-aware, ver
     // teste abaixo) — o ciclo real do Core Engine/gráfico permanece 100%
     // Binance, intocado, sempre por este helper.
-    expect(helperCallSites).toHaveLength(4);
-    // requestSnapshot() aparece DENTRO de 3 pontos reais: os dois helpers
+    // Auditoria do ecossistema de indicadores (2026-09-01): 5º call site,
+    // refreshPivotPointsInBackground (getPivotPoints) — mesmo helper, candle
+    // diário (1d), mesmo contrato não-bloqueante de
+    // refreshHtfMarketStructureInBackground logo acima dele no arquivo real.
+    expect(helperCallSites).toHaveLength(5);
+    // requestSnapshot() aparece DENTRO de 4 pontos reais: os dois helpers
     // cripto (requestFuturesCandleSnapshot Binance-only;
     // requestRadarCandleSnapshot provider-aware, só Radar) MAIS
     // getTradFiChartCandles (Ordem Market Data Fabric, Fase 1) — este
@@ -173,10 +178,15 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     // sufixo -PERP/-MEXC se aplica — reusar requestRadarCandleSnapshot
     // aqui na verdade ADICIONARIA um sufixo -PERP incorreto ao instrumentId
     // TradFi (a ternária daquele helper só conhece 'MEXC' vs. tudo mais).
+    // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY": 4º ponto,
+    // getMexcChartCandles — mesmo raciocínio de getTradFiChartCandles
+    // (symbol já carrega o sufixo -MEXC explicitamente montado pela
+    // própria função, nunca pelos helpers acima), só que para o gráfico
+    // MEXC em vez do TradFi.
     // Se este número mudar, um NOVO call site apareceu — confirme que é
     // igualmente legítimo antes de soltar o teste.
     const directBusCalls = bridge.match(/getMarketDataBus\(\)\.requestSnapshot\(\{/g) ?? [];
-    expect(directBusCalls).toHaveLength(3);
+    expect(directBusCalls).toHaveLength(4);
   });
 
   it('ADITIVO V-MAX Etapa 9: os 2 call sites de scanRadarCandidate passam por requestRadarCandleSnapshot (provider-aware), nunca pelo helper Binance-only', () => {
@@ -219,7 +229,10 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     expect(app).toContain('realCycle?.instrumentType === "crypto_futures"');
     expect(app).toContain('"Futures/Perp"');
     // o badge de modo cripto usa a variável derivada, não um literal "Spot"
-    expect(app).toContain('marketMode === "TRADFI" ? "Macro" : cryptoMarketLabel');
+    // — Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY" somou um
+    // 3º ramo (MEXC) antes do fallback cryptoMarketLabel, que continua
+    // sendo o valor real usado para o modo cripto puro.
+    expect(app).toContain('marketMode === "TRADFI" ? "Macro" : marketMode === "MEXC" ? "MEXC · Futures" : cryptoMarketLabel');
     expect(app).not.toMatch(/\{marketMode === "TRADFI" \? "Macro" : "Spot"\}/);
   });
 });

@@ -127,6 +127,9 @@ describe('paper-trading: closePaperPosition — SEMPRE ação explícita do Oper
 
   it('histórico é ring-capped em PAPER_TRADING_HISTORY_CAP — fechamento mais antigo cai primeiro', () => {
     const filler: SimulatedPosition = {
+      // Campos do contrato v2 (symbol/entries/leverage) — 1x e um aporte só
+      // reproduzem exatamente o comportamento que este teste sempre mediu.
+      symbol: null, entries: [{ price: 100, sizeUsdt: 1, at: 0 }], leverage: 1,
       plan: LONG_PLAN, direction: 'LONG', entryPrice: 100, sizeUsdt: 1,
       openedAt: 0, closedAt: 0, closedPrice: 100, closeReason: 'MANUAL', realizedPnl: 0,
     };

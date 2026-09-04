@@ -1,4 +1,4 @@
-// conflict-detector.ts — Auditoria MarketBrain (docs/AUDITORIA_MARKETBRAIN.md
+// conflict-detector.ts — Auditoria MarketBrain (docs/historico/AUDITORIA_MARKETBRAIN.md
 // §3, Fase 1 real e pequena): generaliza nexusConfluenceVerdict
 // (nexus-line.ts:131) para os outros pares de conflito nomeados no
 // documento "Arquitetura Central de Inteligência" do Operador (§3.1) —

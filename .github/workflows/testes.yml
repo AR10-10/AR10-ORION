@@ -1,0 +1,83 @@
+name: Testes (CI)
+
+# ═══════════════════════════════════════════════════════════════════════
+# POR QUE ESTE WORKFLOW EXISTE
+#
+# O portão de testes do projeto morava DENTRO do workflow de deploy
+# (deploy-ipad-pwa.yml, passo "Run test suite (Vitest)"), descrito lá como
+# "um portão real — se um teste quebra, o job para aqui e nem build nem
+# deploy rodam".
+#
+# Quando a publicação foi desligada por privacidade (o Operador pediu para
+# rodar local e tirar o painel do ar), o portão foi junto sem que ninguém
+# pedisse: com os dois deploys em `workflow_dispatch`, nenhum workflow
+# disparava mais em `push` ou `pull_request`. Resultado medido: PRs com
+# ZERO check runs e uma suíte de ~4.000 testes que só rodava se alguém
+# lembrasse de executar à mão.
+#
+# Privacidade e verificação são objetivos INDEPENDENTES. Este workflow
+# separa os dois: verifica sempre, publica nunca.
+#
+# O QUE ESTE WORKFLOW NÃO FAZ, POR CONSTRUÇÃO:
+#   - não publica nada (sem actions/deploy-pages, sem Cloudflare)
+#   - não sobe artefato de Pages
+#   - não lê NENHUM segredo (o build aqui é só verificação de compilação;
+#     o portão de acesso é assunto do deploy, não do teste)
+#   - `permissions: contents: read` — não consegue escrever no repositório
+#
+# Ou seja: religar a verificação automática não reabre o painel para
+# ninguém. As duas coisas continuam separadas de propósito.
+# ═══════════════════════════════════════════════════════════════════════
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Um push novo no mesmo ref cancela a verificação anterior — sem fila de
+# runs obsoletos consumindo minutos.
+concurrency:
+  group: testes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Typecheck + Suíte + Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ipad_runtime/ramber-ui/package-lock.json
+
+      # `npm ci --include=dev` e não `npm ci`: defeito real já visto neste
+      # repositório — sem --include=dev o instalador pula as devDependencies
+      # e o vitest/tsc simplesmente não existe no runner.
+      - name: Instalar dependências
+        working-directory: ipad_runtime/ramber-ui
+        run: npm ci --include=dev
+
+      # Os três passos abaixo são exatamente o que `npm run verify` roda na
+      # máquina do Operador. Mesma sequência, mesmo resultado — o CI não
+      # verifica nada diferente do que dá para reproduzir local.
+      - name: Typecheck (tsc --noEmit)
+        working-directory: ipad_runtime/ramber-ui
+        run: npm run typecheck
+
+      - name: Suíte de testes (Vitest)
+        working-directory: ipad_runtime/ramber-ui
+        run: npm run test
+
+      # Build só como verificação de compilação/bundling: o dist/ gerado é
+      # descartado com o runner e nunca vira site.
+      - name: Build (verificação, nunca publicado)
+        working-directory: ipad_runtime/ramber-ui
+        run: npm run build

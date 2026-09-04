@@ -144,7 +144,7 @@ nenhuma informação foi perdida.
 
 ## §4. Prioridades 1, 2, 5, 7, 9, 10 — já auditadas, referenciadas
 
-Detalhe completo em `docs/RELATORIO_LAPIDACAO_SINCRONIA_EXPERIENCIA.md`
+Detalhe completo em `docs/historico/RELATORIO_LAPIDACAO_SINCRONIA_EXPERIENCIA.md`
 (Entrega 25), sobre o mesmo código que segue no `HEAD`:
 
 | Prioridade desta Ordem | Onde já foi auditada | Resultado |

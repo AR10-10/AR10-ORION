@@ -110,7 +110,7 @@ futuro via Action funciona sem nenhum passo manual adicional.
 4. Reexecutar o workflow: **Actions → "Deploy iPad Runtime (GitHub
    Pages)" → Run workflow** (ou apenas dar push de novo em
    `claude/eloquent-cannon-qyt86y`/`main` tocando `ipad_runtime/**`).
-5. URL resultante: `https://ar10-10.github.io/ar10-orion/`.
+5. URL resultante: `https://ar10-10.github.io/AR10-ORION/`.
 
 Nenhuma ferramenta disponível nesta sessão (incluindo todas as ferramentas
 MCP do GitHub carregadas) consegue executar esse passo de forma

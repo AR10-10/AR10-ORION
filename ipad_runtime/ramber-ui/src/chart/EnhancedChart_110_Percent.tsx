@@ -53,7 +53,7 @@ import { LiquidityZonesPlugin, ZONE_DECAY, type FillableZone, type EqualLevelMar
 // a MESMA config de decaimento do plugin (zero segunda curva).
 import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";
 import { CandlePatternMarkersPlugin } from "./CandlePatternMarkersPlugin";
-import { ageAlpha, type DecayConfig } from "./annotation-decay";
+import { ageAlpha } from "./annotation-decay";
 // Achado real de captura de tela do Operador (dezenas de rótulos "SWEEP"
 // empilhados — swept é uma flag permanente em LiquidityZone, sem
 // decaimento por idade nenhum evento nunca "sumia"). Diretiva formal
@@ -65,8 +65,10 @@ import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // baixo o bastante pra ficar quase invisível pouco antes de sumir de
 // vez. Horizonte maior que BREAK_DECAY (100) de propósito — Sweep é
 // referência de S/R que continua útil por mais tempo que uma anotação
-// de estrutura recém-rompida.
-const SWEEP_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, minAlpha: 0.12 };
+// de estrutura recém-rompida. Constante canônica migrou pra
+// LiquiditySweepLinesPlugin.tsx (pendência #6) — importada aqui porque as
+// etiquetas do eixo (priceAxisLabels, abaixo) precisam da MESMA idade/
+// alpha que a linha do canvas usa, nunca uma segunda cópia divergente.
 
 // Arrays vazios ESTÁVEIS. Achado real ao ligar EQH/EQL neste mesmo plugin:
 // o call site fazia `(fairValueGaps ?? [])`, que cria um array NOVO a cada
@@ -137,7 +139,12 @@ import { DepthChartPlugin } from "./DepthChartPlugin";
 import { TpoProfilePlugin } from "./TpoProfilePlugin";
 import { computeTpoProfile } from "../nexus/tpo-profile";
 import { resolveChartUltraWideScale } from "./chart-ultrawide-scale";
+import { CHART_NATIVE_CANVAS_Z_INDEX } from "./chart-layer-depth";
 import { ZigZagPlugin } from "./ZigZagPlugin";
+import { IchimokuPlugin } from "./IchimokuPlugin";
+import { DeltaDivergencePlugin } from "./DeltaDivergencePlugin";
+import { AndrewsPitchforkPlugin } from "./AndrewsPitchforkPlugin";
+import { chartPaletteRgba } from "./canvas-palette";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
@@ -170,11 +177,27 @@ import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import { describeScenarioConfidence, describeScenarioReaction } from "../nexus/scenario-engine";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
-import type { HarmonicPatternHit, HarmonicPoint } from "../nexus/harmonic-patterns";
+import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
+import type { SmcHarmonicFusionResult } from "../nexus/smc-harmonic-fusion";
+import { HarmonicConfluenceArrowPlugin } from "./HarmonicConfluenceArrowPlugin";
+// MD-7 (Visual Confidence Trace): traçado roxo estrutural (fractal-swings)
+// + seta única da decisão atual — ver cabeçalho de cada plugin.
+import { StructureTracePlugin } from "./StructureTracePlugin";
+import { ConfidenceDirectionArrowPlugin } from "./ConfidenceDirectionArrowPlugin";
+// Pendência #6 (migração nativo→canvas): fecha o resíduo de
+// liquidity_sweep documentado em chart-layer-depth.ts — ver cabeçalho do
+// plugin. SWEEP_DECAY é a fonte única do decaimento (também usada pelas
+// etiquetas do eixo abaixo).
+import { LiquiditySweepLinesPlugin, SWEEP_DECAY } from "./LiquiditySweepLinesPlugin";
+// Pendência #6, perna final: fecha o resíduo restante de `harmonics`
+// (zigue-zague XABCD/Wolfe/H&S, PRZ/EPA/NECKLINE/APEX, triângulo) — ver
+// cabeçalho do plugin, inclusive o achado real dos 4 rótulos que nunca
+// chegavam à tela.
+import { HarmonicGeometryPlugin } from "./HarmonicGeometryPlugin";
 import type { TrianglePatternHit } from "../nexus/triangle-pattern";
 import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
 import type { NexusDecision } from "../nexus/decision-layer";
-import { formatEtaRange, formatEtaDuration } from "../nexus/eta-engine";
+import { formatEtaRange } from "../nexus/eta-engine";
 // Research-driven precision order: VWAP, the institutional-standard
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
@@ -365,7 +388,41 @@ export const CHART_LAYER_IDS = [
   // tem que refletir os padrão das vela". O motor já existia e alimentava
   // as peças publicáveis — o GRÁFICO, que é onde ele pediu, era o gap.
   "candle_patterns",
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando" — pivot-points-engine.js, único gap
+  // real não-redundante encontrado). PP/R1-3/S1-3 clássicos do candle
+  // diário anterior fechado. Camada própria: fonte diferente (candle
+  // diário fixo, não swing fractal) de S1/R1.
+  "pivot_points",
+  // Ichimoku Kinko Hyo (Hosoda) — última ferramenta clássica ausente da
+  // auditoria do ecossistema que sobreviveu ao julgamento de redundância.
+  // Camada própria: nenhuma outra projeta nível PARA FRENTE no tempo nem
+  // mede equilíbrio por ponto médio de extremos.
+  "ichimoku",
+  // Divergência de Delta (preço × CVD). Camada própria e não um caso de
+  // structure_breaks: aquela lê a ESTRUTURA de preço (BOS/CHOCH); esta
+  // compara duas séries independentes (preço e fluxo líquido) e só existe
+  // enquanto o CVD retido cobrir velas reais suficientes.
+  "delta_divergence",
+  // Andrews Pitchfork (Median Line Analysis). Camada propria: nenhuma outra
+  // constroi um canal a partir de TRES pivos alternados com inclinacao
+  // definida por ponto medio — o trend_channel e regressao sobre a serie,
+  // conceito diferente.
+  "andrews_pitchfork",
 ] as const;
+// MD-7 (Visual Confidence Trace, pedido direto do Operador): traçado roxo
+// estrutural (StructureTracePlugin) + seta única da decisão atual
+// (ConfidenceDirectionArrowPlugin) NÃO entram em CHART_LAYER_IDS — o memo
+// do Operador pede "sempre disponível por padrão... não exigir ativação
+// manual", e todo id cadastrado aqui herda DEFAULT_CHART_LAYER_AUTO_MODE
+// = true (travado por teste — timeframe-layer-profile.test.ts exige "true"
+// literal para TODA camada canônica, sem exceção), o que deixaria as duas
+// sujeitas ao Relevance Engine escondê-las por disputa de espaço. Mesmo
+// precedente já real de PriceLabelStackPlugin logo abaixo (também montado
+// sem `visibility.x &&`, também fora desta lista): existem camadas
+// centrais/sempre-on neste gráfico que nunca foram pensadas como
+// "overlay opcional" — as duas são montadas incondicionalmente onde a
+// candlestick series já é real, exatamente como o preço/eixo nativos.
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
 export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
@@ -396,6 +453,10 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   supertrend: true,
   scenario_projection: true,
   candle_patterns: true,
+  pivot_points: true,
+  ichimoku: true,
+  delta_divergence: true,
+  andrews_pitchfork: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -430,6 +491,10 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   supertrend: true,
   scenario_projection: true,
   candle_patterns: true,
+  pivot_points: true,
+  ichimoku: true,
+  delta_divergence: true,
+  andrews_pitchfork: true,
 };
 
 interface EnhancedChartProps {
@@ -440,6 +505,17 @@ interface EnhancedChartProps {
   resistanceStrength?: LevelStrength | null;
   supportBreakouts?: number;
   resistanceBreakouts?: number;
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando"): Pivot Points clássicos (Floor
+  // Trader), PP/R1-3/S1-3 do candle diário anterior fechado — ver
+  // pivot-points-engine.js. Optional/fail-closed: null/ausente desenha
+  // nada, igual a todo outro overlay opcional deste componente.
+  pivotPoints?: {
+    status: "OK" | "DADOS_INSUFICIENTES";
+    pp: number | null;
+    r1: number | null; r2: number | null; r3: number | null;
+    s1: number | null; s2: number | null; s3: number | null;
+  } | null;
   fairValueGaps?: EnhancedChartZone[];
   orderBlocks?: EnhancedChartZone[];
   // Pedido do Operador ("ver o que está faltando... pra ele chegar na
@@ -541,6 +617,13 @@ interface EnhancedChartProps {
   // confluência real. Optional/fail-closed: absent/null => peso neutro
   // default (ver TradePlanZonePlugin).
   confidenceZone?: InstitutionalConfidenceZone | null;
+  // Pedido do Operador (evolução): a porcentagem real de confluência volta
+  // a aparecer nas etiquetas EN/ST/TP1/TP2 do canvas — mesmo score de
+  // `confidenceZone` acima, só que o NÚMERO (institutional-score.ts,
+  // `computeInstitutionalScore().score`), não só a banda. Optional/
+  // fail-closed: null/ausente nunca vira "?%" fabricado — a etiqueta
+  // simplesmente não ganha o sufixo.
+  institutionalScoreValue?: number | null;
   // Camadas do Gráfico (Finding M): per-plugin visibility toggle from the
   // new settings panel. Optional and fail-closed: absent/undefined means
   // every layer stays visible (DEFAULT_CHART_LAYER_VISIBILITY), the exact
@@ -559,6 +642,13 @@ interface EnhancedChartProps {
   // como buscar/mesclar a página nova; este componente só detecta a
   // intenção real do usuário.
   onRequestOlderCandles?: () => void;
+  // Auditoria do ecossistema de indicadores: ATR% real do tempo gráfico
+  // (regime-engine.js via engine.marketRegime), repassado ao ZigZagPlugin
+  // pra escalar o limiar de reversão pelo período — mesmo cálculo que a
+  // perna do Fibonacci já usa (engine-bridge.ts, atrScaledZigZagDeviationPct).
+  // Optional/fail-closed: null/ausente cai no default clássico do próprio
+  // motor (5%), nunca um número fabricado.
+  chartAtrPercent?: number | null;
   // §6 "Smart Projection Engine" (Diretriz Complementar): achado real de
   // auditoria — o Motor de Cenários (scenario-engine.ts) já existia,
   // já é 100% honesto (basis: "COUNCIL_OPINION_MASS_NOT_MARKET_PROBABILITY",
@@ -573,8 +663,21 @@ interface EnhancedChartProps {
   // (premium-discount.ts) — 3 linhas fio-de-seda discretas. Fail-closed.
   premiumDiscount?: PremiumDiscountReading | null;
   // Auditoria Final §3: harmônicos RENDERIZADOS — a linha do ponto D do
-  // melhor padrão real (fit desc) + EPA quando Wolfe. Fail-closed.
+  // melhor padrão real (fit desc) + EPA quando Wolfe. Fail-closed. SMC
+  // Harmonic Fusion (pedido do Operador): App.tsx já filtra este array
+  // para só os hits com confluência institucional CONFIRMADA — um
+  // harmônico geometricamente válido mas sem confluência real simplesmente
+  // não chega aqui, nunca "perde a disputa" pro Triângulo/H&S por engano.
   harmonicHits?: HarmonicPatternHit[] | null;
+  // Melhor fusão CONFIRMADA (mesmo hit que harmonicHits[0] quando presente)
+  // — usada só pela seta triangular de HarmonicConfluenceArrowPlugin.
+  // Fail-closed: null = sem confluência suficiente, zero seta.
+  harmonicConfluence?: SmcHarmonicFusionResult | null;
+  // MD-7 (Visual Confidence Trace): passthrough EXATO do effectiveDirection
+  // já computado por CoreSignalBadge (App.tsx) — nunca um segundo cálculo.
+  // Usado só por ConfidenceDirectionArrowPlugin. null/undefined = WAIT ou
+  // suprimido (LEI 24, Entrega 42): nenhuma seta.
+  confidenceDirection?: "LONG" | "SHORT" | null;
   // Carta Branca (Reconhecimento de Padrões): as 2 famílias novas que
   // competem com harmonicHits[0] pelo MESMO desenho de "único melhor
   // padrão" — ver o useEffect unificado abaixo. Cada motor já devolve o
@@ -859,6 +962,7 @@ function EnhancedChart_110_PercentImpl({
   resistanceStrength,
   supportBreakouts,
   resistanceBreakouts,
+  pivotPoints,
   fairValueGaps,
   orderBlocks,
   liquidityVoids,
@@ -880,9 +984,12 @@ function EnhancedChart_110_PercentImpl({
   aura,
   targetsHit,
   confidenceZone,
+  institutionalScoreValue,
   scenario,
   premiumDiscount,
   harmonicHits,
+  harmonicConfluence,
+  confidenceDirection,
   trianglePattern,
   headShouldersPattern,
   decision,
@@ -895,6 +1002,7 @@ function EnhancedChart_110_PercentImpl({
   emaPeriod,
   onRequestOlderCandles,
   onHoverCandleChange,
+  chartAtrPercent,
 }: EnhancedChartProps) {
   const visibility = layerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
   // Quais lanes de perfil estão REALMENTE na tela agora.
@@ -966,11 +1074,11 @@ function EnhancedChart_110_PercentImpl({
   const supportLineRef = useRef<IPriceLine | null>(null);
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
-  // EPC OMEGA FINAL, Etapa 10: price lines do sweep real (TrapSignal.
-  // sweptPrices) — ref PRÓPRIA, nunca reusa zoneLinesRef (ciclos de
-  // limpeza/redesenho independentes, mesma separação que support/
-  // resistance já têm entre si).
-  const sweepLinesRef = useRef<IPriceLine[]>([]);
+  // Auditoria do ecossistema de indicadores: 7 linhas reais (PP+R1-3+S1-3),
+  // ref PRÓPRIA em array — mesmo padrão de zoneLinesRef acima, ciclo de
+  // limpeza/redesenho independente de S1/R1 (fontes diferentes: candle
+  // diário fechado vs. swing fractal).
+  const pivotLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
   // EPC §5/§6 (continuação): linhas do fallback do Core Engine
@@ -983,30 +1091,13 @@ function EnhancedChart_110_PercentImpl({
   const engineFallbackLinesRef = useRef<IPriceLine[]>([]);
   const scenarioLinesRef = useRef<IPriceLine[]>([]);
   const premiumDiscountLinesRef = useRef<IPriceLine[]>([]);
-  const harmonicLinesRef = useRef<IPriceLine[]>([]);
-  // Continuidade (pendência honesta já documentada em 3 PRs anteriores:
-  // "polilinha XABCD/Wolfe no canvas — hoje só a linha do ponto D"): a
-  // FIGURA GEOMÉTRICA COMPLETA do melhor padrão real, não só a PRZ. Série
-  // NATIVA (mesmo padrão de EMA/Nexus Line/Trend Channel) — X/A/B/C/D já
-  // vêm em ordem temporal por construção do próprio motor (cada ponto é um
-  // swing fractal mais recente que o anterior), então uma LineSeries comum
-  // com esses pontos plotados em ordem de tempo desenha exatamente o
-  // zigue-zague clássico, zero overlay de canvas novo.
-  const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);
-  // Carta Branca (Reconhecimento de Padrões): mesmo padrão nativo acima,
-  // reaproveitado para as 2 famílias novas que competem pelo MESMO desenho
-  // de "único melhor padrão" (ver o useEffect unificado abaixo). O
-  // outline zigue-zague do Ombro-Cabeça-Ombro (LS→neckline1→Head→
-  // neckline2→RS) é geometricamente idêntico a um XABCD — reusa
-  // harmonicPolylineRef diretamente, zero série nova. O Triângulo NÃO é um
-  // zigue-zague (2 retas paralelas/convergentes avançando no MESMO
-  // intervalo de tempo, não pontos sequenciais) — precisa de 2 séries
-  // dedicadas; a extrapolação da neckline do H&S também é uma reta
-  // separada do outline (index do 1º ponto → índice do último candle),
-  // então ganha sua própria série.
-  const triangleResistanceLineRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const triangleSupportLineRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const necklineExtensionLineRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Pendência #6 (migração nativo→canvas), perna final: a figura
+  // geométrica inteira do harmônico/H&S/triângulo — antes 1 LineSeries
+  // (harmonicPolylineRef) + 2 séries do triângulo + 1 da neckline + 1
+  // array de createPriceLine (harmonicLinesRef, os rótulos PRZ/EPA/
+  // NECKLINE/APEX que descobrimos nunca chegar à tela) — migrou pra
+  // HarmonicGeometryPlugin.tsx (canvas próprio, ver cabeçalho do plugin).
+  // Zero refs nativas restantes aqui.
   // Named refs to the stop/target lines specifically (a subset of
   // tradePlanLinesRef above) — lets the hit-boost effect below update
   // color/title in place via applyOptions() instead of tearing down and
@@ -1490,45 +1581,9 @@ function EnhancedChart_110_PercentImpl({
     trendChannelMidRef.current = trendChannelMid;
     trendChannelUpperRef.current = trendChannelUpper;
     trendChannelLowerRef.current = trendChannelLower;
-    // Continuidade: figura XABCD/Wolfe completa — mesma cor roxa da PRZ já
-    // existente (acento do Conselho/opinião agregada), um pouco mais forte
-    // no TRAÇO em si (a PRZ continua a leitura de preço mais importante).
-    // Zero rótulo de eixo/último valor: a forma da polilinha já comunica o
-    // padrão, um rótulo repetiria a mesma informação do title da PRZ.
-    // Auditoria de pendências (achado real via harness Playwright): o
-    // title:"XABCD" acima presumia que lastValueVisible:false já bastava
-    // pra suprimir o rótulo — MESMO achado/MESMA correção do Trend
-    // Channel/VWAP/NL/EMA (a lib desenha `title` no eixo mesmo assim). O
-    // texto ficava flutuando na posição NATURAL da polilinha (sem nenhuma
-    // resolução de colisão), exatamente a poluição que o comentário
-    // original queria evitar. title:"" agora — zero informação perdida
-    // (o próprio comentário original já argumentava que o rótulo era
-    // redundante com o title da PRZ).
-    const harmonicPolyline = chart.addSeries(LineSeries, {
-      color: "rgba(167, 139, 250, 0.55)",
-      lineWidth: 1,
-      lineStyle: LineStyle.Solid,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      title: "",
-    });
-    harmonicPolylineRef.current = harmonicPolyline;
-    // Carta Branca: mesma cor de acento roxo do padrão geométrico (harmonic
-    // Polyline acima) — as 3 famílias são uma ÚNICA linguagem visual
-    // ("padrão gráfico detectado"), nunca 3 paletas competindo por atenção.
-    const triangleLineOptions = {
-      color: "rgba(167, 139, 250, 0.55)",
-      lineWidth: 1 as const,
-      lineStyle: LineStyle.Solid,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      title: "",
-    };
-    triangleResistanceLineRef.current = chart.addSeries(LineSeries, triangleLineOptions);
-    triangleSupportLineRef.current = chart.addSeries(LineSeries, triangleLineOptions);
-    necklineExtensionLineRef.current = chart.addSeries(LineSeries, triangleLineOptions);
+    // Pendência #6: a figura XABCD/Wolfe/H&S/triângulo inteira (antes 4
+    // séries nativas criadas aqui) migrou pra HarmonicGeometryPlugin.tsx —
+    // canvas próprio, ver cabeçalho do plugin.
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -1570,12 +1625,10 @@ function EnhancedChart_110_PercentImpl({
       supportLineRef.current = null;
       resistanceLineRef.current = null;
       zoneLinesRef.current = [];
-      sweepLinesRef.current = [];
       fibLinesRef.current = [];
       tradePlanLinesRef.current = [];
       scenarioLinesRef.current = [];
       premiumDiscountLinesRef.current = [];
-      harmonicLinesRef.current = [];
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
       vwapBandUpper1Ref.current = null;
@@ -1590,10 +1643,6 @@ function EnhancedChart_110_PercentImpl({
       trendChannelMidRef.current = null;
       trendChannelUpperRef.current = null;
       trendChannelLowerRef.current = null;
-      harmonicPolylineRef.current = null;
-      triangleResistanceLineRef.current = null;
-      triangleSupportLineRef.current = null;
-      necklineExtensionLineRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -1854,87 +1903,17 @@ function EnhancedChart_110_PercentImpl({
   }, [liquidityZones, visibility.equal_highs_lows]);
 
   // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep: captura/direção/
-  // absorção"): auditoria da Etapa 1 encontrou trap-detection.ts real e já
-  // corroborando sweeps (STOP_HUNT_TOPO/FUNDO), mas a zona EQH/EQL varrida
-  // simplesmente some do bloco acima (filtro !swept) sem deixar rastro do
-  // momento do sweep — mesmo mecanismo de price line, cor âmbar própria
-  // (nunca usada por EQH/EQL roxo nem OB/FVG verde/vermelho), preço real
-  // de TrapSignal.sweptLevels (zero recálculo, mesmo dado que a zona já
-  // tinha antes de sumir).
-  //
-  // v3 (achado real de captura de tela do Operador — dezenas de rótulos
-  // "SWEEP" empilhados cobrindo o gráfico inteiro): `swept` em
-  // LiquidityZone é uma flag PERMANENTE — sem decaimento por idade, todo
-  // sweep da história inteira carregada virava um rótulo pra sempre.
-  // Mesma disciplina JÁ REAL de BOS/CHOCH (annotation-decay.ts::ageAlpha
-  // + BREAK_DECAY, ver useMemo de priceAxisLabels abaixo) — zero segunda
-  // técnica de decaimento inventada, só um SWEEP_DECAY próprio porque o
-  // Operador pediu um horizonte maior pra Sweep (~200 candles) do que
-  // BOS/CHOCH já usa (100 candles — evento estrutural mais rápido de
-  // ficar obsoleto). `data.length` entra nas deps porque a IDADE muda a
-  // cada candle novo, não só quando `traps` muda.
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    const series = seriesRef.current;
-    sweepLinesRef.current.forEach((line) => series.removePriceLine(line));
-    sweepLinesRef.current = [];
-    if (!visibility.liquidity_sweep) return;
-
-    // Achado real do Operador (captura de tela: "SWEEP ZONE (2x)" com 2
-    // linhas separadas por trás dela): este efeito desenhava 1 price line
-    // POR NÍVEL BRUTO (t.sweptLevels.forEach), enquanto priceAxisLabels
-    // abaixo já deduplicava+clusterizava (seenSweepPrices + clusterSweptPrices)
-    // pra desenhar 1 rótulo por cluster real — um cluster "(2x)" tinha 1
-    // caixa de texto mas 2 linhas nativas quase idênticas empilhadas por
-    // baixo, o mismatch real que lia como poluição/duplicação. Mesma
-    // deduplicação (Set global de preço, mesmo espírito de dedup entre
-    // traps distintos) + MESMO clusterSweptPrices/LIQUIDITY_PROXIMITY_PCT
-    // do bloco de rótulos — zero segunda regra: 1 cluster real = 1 linha.
-    const seenSweepPrices = new Set<number>();
-    (traps ?? []).forEach((t) => {
-      if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") return;
-      const uniqueLevels = t.sweptLevels.filter((l) => Number.isFinite(l.price) && !seenSweepPrices.has(l.price));
-      uniqueLevels.forEach((l) => seenSweepPrices.add(l.price));
-      for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {
-        const age = data.length - 1 - cluster.latestIndex;
-        const alpha = ageAlpha(age, SWEEP_DECAY);
-        if (alpha <= 0) continue; // expirado (>200 candles) — some da TELA, dado real intacto em trap-detection.ts.
-        sweepLinesRef.current.push(
-          series.createPriceLine({
-            price: cluster.avgPrice,
-            // Lapidação institucional: H33 laranja — era H45 (255,191,0), a
-            // 2° do pico do Liquidation Heatmap (LiquidationHeatmapPlugin.tsx
-            // PEAK_LABEL_COLOR). Mesma luminosidade/saturação/alpha a 2° de
-            // matiz = mesma cor a olho nu. Sweep fica no lado mais laranja
-            // (evento pontual já ocorrido), heatmap no lado mais amarelo
-            // (pico ao vivo, recalculado a cada tick) — mesma dupla,
-            // diferenciação real (ver comentário completo lá). Alpha final
-            // multiplicado pelo decaimento real por idade (0.85 é o teto
-            // na freshest, nunca um valor fixo).
-            color: `rgba(255, 162, 0, ${(alpha * 0.85).toFixed(3)})`,
-            lineWidth: 1,
-            lineStyle: LineStyle.Solid,
-            axisLabelVisible: false,
-            // Achado real do Operador ("linha amarela que eu não sei o que
-            // significa") — causa raiz confirmada no código-fonte real da
-            // lib (custom-price-line-price-axis-view.ts,
-            // _updateRendererData): quando axisLabelVisible é false, o
-            // método retorna ANTES de setar visible=true pro título — ou
-            // seja, este `title` nunca foi desenhado em lugar NENHUM (nem
-            // eixo, nem painel), sempre foi metadado inerte. O problema
-            // real não era colisão de texto — era ausência TOTAL de rótulo
-            // legível pra esta linha âmbar. O texto real agora vive em
-            // priceAxisLabels (useMemo abaixo), mesmo preço/mesma cor,
-            // dentro do sistema anti-colisão real — mesma migração já
-            // aplicada a BOS/CHOCH, mas aqui fechando uma ausência, não uma
-            // sobreposição. title vazio aqui só documenta que este campo
-            // nunca teve efeito visual — remover não muda nada renderizado.
-            title: "",
-          }),
-        );
-      }
-    });
-  }, [traps, visibility.liquidity_sweep, data.length]);
+  // absorção") + migração pra canvas (pendência #6 da PR #16, "chegar na
+  // perfeição"): a price line nativa que vivia aqui (cor âmbar,
+  // SWEEP_DECAY, clusterSweptPrices) preso ao z=35 compartilhado das
+  // primitivas nativas, abaixo dos eventos reais de canvas (BOS/CHOCH,
+  // padrão de vela, harmônico) — exatamente o resíduo que
+  // chart-layer-depth.ts já documentava. `LiquiditySweepLinesPlugin.tsx`
+  // (novo) desenha a MESMA linha, MESMO dado (traps), MESMA clusterização/
+  // decaimento — só no z=50 real que "event" sempre devia ter tido. Ver
+  // cabeçalho do plugin novo para o resto do raciocínio (inclusive a
+  // correção da cor: era um rgba redigitado que já MEDIA a família
+  // canônica attention, nunca precisou de um tom próprio).
 
   // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
   // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
@@ -2404,6 +2383,50 @@ function EnhancedChart_110_PercentImpl({
     }
   }, [resistance, resistanceStrength, resistanceBreakouts, resistanceVisualWeight]);
 
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando" — Pivot Points era o único gap real
+  // não-redundante encontrado). Mesma técnica de S1/R1 acima (createPriceLine
+  // nativo, remove-then-create), mas em ref PRÓPRIA (pivotLinesRef): fonte de
+  // dado diferente (candle diário fechado, não swing fractal), ciclo de
+  // redesenho independente. Títulos "PVT " prefixados de propósito — sem o
+  // prefixo, "R1"/"S1" colidiria visualmente com o R1/S1 de swing já
+  // desenhado acima, dois níveis DIFERENTES soando como o mesmo rótulo.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    for (const line of pivotLinesRef.current) seriesRef.current.removePriceLine(line);
+    pivotLinesRef.current = [];
+    if (!visibility.pivot_points || pivotPoints?.status !== "OK") return;
+
+    // Família "attention" (canvas-palette.ts) — mesma cor de S1/R1: os dois
+    // são, conceitualmente, a MESMA categoria (nível de suporte/resistência
+    // a observar), só com fórmulas diferentes. PP ganha um pouco mais de
+    // peso (é a âncora); R2/R3/S2/S3 ficam mais discretos — mesmo princípio
+    // de hierarquia por opacidade já usado em todo o resto do canvas, nunca
+    // uma cor nova (travado por tests/canvas-palette.test.ts).
+    const levels: Array<[string, number | null, number]> = [
+      ["PVT R3", pivotPoints.r3, 0.22],
+      ["PVT R2", pivotPoints.r2, 0.26],
+      ["PVT R1", pivotPoints.r1, 0.32],
+      ["PVT PP", pivotPoints.pp, 0.4],
+      ["PVT S1", pivotPoints.s1, 0.32],
+      ["PVT S2", pivotPoints.s2, 0.26],
+      ["PVT S3", pivotPoints.s3, 0.22],
+    ];
+    for (const [title, price, alpha] of levels) {
+      if (!Number.isFinite(price)) continue;
+      pivotLinesRef.current.push(
+        seriesRef.current.createPriceLine({
+          price: price as number,
+          color: chartPaletteRgba("attention", alpha),
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title,
+        }),
+      );
+    }
+  }, [pivotPoints, visibility.pivot_points]);
+
   const mainLiquidityVisualWeights = useMemo(() => {
     const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));
     return {
@@ -2728,180 +2751,14 @@ function EnhancedChart_110_PercentImpl({
     mkPd(premiumDiscount.rangeLow.price, "rgba(8, 153, 129, 0.30)", "Discount · fundo do range");
   }, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);
 
-  // Auditoria Final §3 ("caso esteja calculado mas não desenhado, ativar
-  // renderização") + Carta Branca (Reconhecimento de Padrões): agora TRÊS
-  // famílias de padrão geométrico competem pelo mesmo desenho — harmônicos
-  // XABCD/Wolfe (harmonic-patterns.ts), Triângulo (triangle-pattern.ts) e
-  // Ombro-Cabeça-Ombro (head-shoulders-pattern.ts). Cada motor já entrega
-  // seu próprio melhor hit (harmonicHits vem pré-ordenado por fit desc;
-  // trianglePattern/headShouldersPattern já são o único melhor da janela);
-  // o vencedor ÚNICO entre as 3 famílias é o de maior fitScore — mesma
-  // disciplina de "só o melhor vai pro canvas, o resto fica no painel"
-  // já usada pelo harmônico sozinho antes desta rodada (visual budget:
-  // silk-thread, zero 3 geometrias competindo pela mesma área). Comparar
-  // fitScore entre motores DIFERENTES é uma heurística declarada (cada um
-  // mede aderência de um jeito distinto — razão Fibonacci/R² de trendline/
-  // simetria de ombros), nunca uma medição única calibrada; empate resolve
-  // pela ordem de checagem abaixo (harmônico > triângulo > H&S), arbitrária
-  // mas determinística. Púrpura (acento do Conselho/opinião agregada) em
-  // toda a família — uma ÚNICA linguagem visual, nunca 3 paletas
-  // competindo por atenção; fio de seda; título carrega o fit com o rótulo
-  // honesto — aderência, nunca probabilidade. Fail-closed: sem padrão
-  // algum, zero linhas. Ganha visibility.harmonics (rótulo do painel
-  // ampliado para "PADRÕES GRÁFICOS", App.tsx) — early-return antes de
-  // desenhar qualquer price line/polilinha nova.
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    const series = seriesRef.current;
-    harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));
-    harmonicLinesRef.current = [];
-    // Limpa TODAS as geometrias das 3 famílias ANTES de decidir o vencedor
-    // — sem padrão real agora (ou trocou de vencedor), zero figura antiga
-    // lingerindo na tela (mesmo fail-closed das price lines desta função).
-    harmonicPolylineRef.current?.setData([]);
-    triangleResistanceLineRef.current?.setData([]);
-    triangleSupportLineRef.current?.setData([]);
-    necklineExtensionLineRef.current?.setData([]);
-    if (!visibility.harmonics) return;
-
-    const harmonicTop = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;
-    const harmonicValid = harmonicTop && Number.isFinite(harmonicTop.points.D.price) ? harmonicTop : null;
-    const candidates: Array<{ family: "HARMONIC" | "TRIANGLE" | "HEAD_SHOULDERS"; fitScore: number }> = [];
-    if (harmonicValid) candidates.push({ family: "HARMONIC", fitScore: harmonicValid.fitScore });
-    if (trianglePattern) candidates.push({ family: "TRIANGLE", fitScore: trianglePattern.fitScore });
-    if (headShouldersPattern) candidates.push({ family: "HEAD_SHOULDERS", fitScore: headShouldersPattern.fitScore });
-    if (candidates.length === 0) return;
-    let winner = candidates[0];
-    for (const c of candidates.slice(1)) {
-      if (c.fitScore > winner.fitScore) winner = c;
-    }
-
-    const mkH = (price: number, title: string) => {
-      if (!Number.isFinite(price)) return;
-      harmonicLinesRef.current.push(
-        series.createPriceLine({
-          price,
-          color: "rgba(167, 139, 250, 0.40)",
-          lineWidth: 1,
-          lineStyle: LineStyle.Solid,
-          axisLabelVisible: false,
-          title,
-        }),
-      );
-    };
-    // Mesma técnica de zigue-zague em ordem de tempo para QUALQUER família
-    // cuja figura seja uma sequência de pivôs alternados (harmônico e H&S
-    // — o Triângulo NÃO é: são 2 retas avançando no MESMO intervalo de
-    // tempo, tratado à parte abaixo). Tempo estritamente crescente é
-    // exigência real da lib, nunca uma segunda regra de ordenação
-    // inventada; pontos undefined (AB=CD honestamente não tem X) são
-    // filtrados, nunca fabricados para "completar" a figura.
-    const drawZigzagOutline = (points: Array<HarmonicPoint | undefined>) => {
-      const polylinePoints = points
-        .filter((p): p is HarmonicPoint => p !== undefined)
-        .map((p) => {
-          const candle = data[p.index];
-          return candle && Number.isFinite(p.price) ? { time: candle.time as UTCTimestamp, value: p.price } : null;
-        })
-        .filter((p): p is { time: UTCTimestamp; value: number } => p !== null)
-        .sort((a, b) => a.time - b.time)
-        .filter((p, i, arr) => i === 0 || p.time !== arr[i - 1].time);
-      if (polylinePoints.length >= 2) harmonicPolylineRef.current?.setData(polylinePoints);
-    };
-
-    if (winner.family === "HARMONIC" && harmonicValid) {
-      const top = harmonicValid;
-      drawZigzagOutline([top.points.X, top.points.A, top.points.B, top.points.C, top.points.D]);
-      // Consolidação Final §6 (terminologia profissional): o ponto de
-      // reversão esperado é a PRZ — Potential Reversal Zone (D nos XABCD/
-      // AB=CD; ponto 5 na Wolfe). EPC §4 ("apenas as iniciais... menor
-      // poluição"): direção BULLISH/BEARISH vira glifo ↑/↓ (mesmo
-      // vocabulário de FVG/OB/VWAP/NL) e o disclaimer "(aderência, nunca
-      // probabilidade)" sai do rótulo flutuante — já vive, íntegro, no
-      // título do painel Chart Patterns ("geometric fit, never
-      // probability", App.tsx) — mesma disciplina de zero-repetição do
-      // "(Núcleo)".
-      const hDirGlyph = top.direction === "BULLISH" ? "↑" : "↓";
-      mkH(top.points.D.price, `${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`);
-      if (top.pattern === "WOLFE" && typeof top.epaPrice === "number" && Number.isFinite(top.epaPrice)) {
-        // §6: ETA canônica da Wolfe = ápice da cunha (cruzamento real
-        // 1→3 × 2→4, etaIndex do motor). Convertida em tempo pelo
-        // intervalo REAL entre as duas últimas barras carregadas — nunca
-        // um mapa de timeframe paralelo. Sem ápice à frente => só a EPA,
-        // sem ETA.
-        const barSec = data.length >= 2 ? data[data.length - 1].time - data[data.length - 2].time : null;
-        const remainingBars = typeof top.etaIndex === "number" ? top.etaIndex - (data.length - 1) : null;
-        const etaLabel =
-          barSec !== null && remainingBars !== null && remainingBars > 0
-            ? formatEtaDuration(remainingBars * barSec * 1000)
-            : null;
-        // EPC §4: EPA já é a sigla profissional (Estimated Price at
-        // Apex); "(linha 1→4 real)"/"(ápice da cunha)" eram descrições,
-        // não dado — removidas do rótulo flutuante (o significado da
-        // EPA/ETA da Wolfe continua documentado em harmonic-patterns.ts).
-        mkH(top.epaPrice, `WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
-      }
-    } else if (winner.family === "TRIANGLE" && trianglePattern) {
-      // Carta Branca: as 2 retas reais (mínimos quadrados) do triângulo —
-      // avaliadas na PRÓPRIA reta ajustada (nunca no preço bruto do toque,
-      // mesmo quando R²<1) do 1º toque real até o último candle carregado,
-      // exatamente o mesmo valor já exposto em resistanceAtLastCandle/
-      // supportAtLastCandle. Duas retas simultâneas no MESMO intervalo de
-      // tempo — geometria diferente do zigue-zague acima, por isso 2
-      // séries dedicadas em vez de reusar harmonicPolylineRef.
-      const lastIndex = data.length - 1;
-      const lastCandle = data[lastIndex];
-      const firstRes = trianglePattern.resistancePoints[0];
-      const firstSup = trianglePattern.supportPoints[0];
-      const resCandle = firstRes ? data[firstRes.index] : null;
-      const supCandle = firstSup ? data[firstSup.index] : null;
-      if (resCandle && lastCandle && Number.isFinite(trianglePattern.resistanceAtLastCandle) && resCandle.time < lastCandle.time) {
-        triangleResistanceLineRef.current?.setData([
-          { time: resCandle.time as UTCTimestamp, value: trianglePattern.resistanceSlope * firstRes.index + trianglePattern.resistanceIntercept },
-          { time: lastCandle.time as UTCTimestamp, value: trianglePattern.resistanceAtLastCandle },
-        ]);
-      }
-      if (supCandle && lastCandle && Number.isFinite(trianglePattern.supportAtLastCandle) && supCandle.time < lastCandle.time) {
-        triangleSupportLineRef.current?.setData([
-          { time: supCandle.time as UTCTimestamp, value: trianglePattern.supportSlope * firstSup.index + trianglePattern.supportIntercept },
-          { time: lastCandle.time as UTCTimestamp, value: trianglePattern.supportAtLastCandle },
-        ]);
-      }
-      // Ápice real: no cruzamento das 2 retas, resistência e suporte valem
-      // o MESMO preço por definição geométrica — número honesto mesmo sem
-      // um candle futuro pra plotar o ponto (mesma técnica de EPA/ETA da
-      // Wolfe: preço real conhecido agora, tempo mostrado via ETA em texto).
-      if (trianglePattern.apexIndex !== null) {
-        const apexPrice = trianglePattern.resistanceSlope * trianglePattern.apexIndex + trianglePattern.resistanceIntercept;
-        const barSec = data.length >= 2 ? data[data.length - 1].time - data[data.length - 2].time : null;
-        const remainingBars = trianglePattern.apexIndex - lastIndex;
-        const etaLabel = barSec !== null && remainingBars > 0 ? formatEtaDuration(remainingBars * barSec * 1000) : null;
-        const dirGlyph = trianglePattern.direction === "BULLISH" ? "↑" : trianglePattern.direction === "BEARISH" ? "↓" : "↔";
-        mkH(apexPrice, `${trianglePattern.kind} ${dirGlyph} APEX ${(trianglePattern.fitScore * 100).toFixed(0)}%${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
-      }
-    } else if (winner.family === "HEAD_SHOULDERS" && headShouldersPattern) {
-      const hs = headShouldersPattern;
-      // Outline real LS→neckline1→Cabeça→neckline2→RS — geometricamente o
-      // MESMO zigue-zague de um XABCD (5 pivôs em ordem de tempo crescente
-      // por construção do motor), reusa a função acima sem nenhuma segunda
-      // implementação.
-      drawZigzagOutline([hs.leftShoulder, hs.neckline1, hs.head, hs.neckline2, hs.rightShoulder]);
-      // Neckline real extrapolada — reta separada do outline (pode ter
-      // slope diferente do segmento RS→neckline2), do 1º ponto real até o
-      // último candle carregado, exatamente o valor já exposto em
-      // necklineAtLastCandle.
-      const necklineStartCandle = data[hs.neckline1.index];
-      const lastCandle = data[data.length - 1];
-      if (necklineStartCandle && lastCandle && Number.isFinite(hs.necklineAtLastCandle) && necklineStartCandle.time < lastCandle.time) {
-        necklineExtensionLineRef.current?.setData([
-          { time: necklineStartCandle.time as UTCTimestamp, value: hs.neckline1.price },
-          { time: lastCandle.time as UTCTimestamp, value: hs.necklineAtLastCandle },
-        ]);
-      }
-      const hsDirGlyph = hs.direction === "BULLISH" ? "↑" : "↓";
-      mkH(hs.necklineAtLastCandle, `${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`);
-    }
-  }, [harmonicHits, trianglePattern, headShouldersPattern, data, visibility.harmonics]);
+  // Pendência #6 (migração nativo→canvas), perna final: a disputa de
+  // vencedor entre harmônico/H&S/triângulo, o desenho do zigue-zague, das
+  // 2 retas do triângulo, da neckline e das etiquetas PRZ/EPA/NECKLINE/
+  // APEX — tudo isto migrou pra HarmonicGeometryPlugin.tsx (canvas
+  // próprio, montado condicionalmente por visibility.harmonics logo
+  // abaixo no JSX). Mesma lógica exata (zero segunda matemática), incluindo
+  // o achado real de que os 4 rótulos nunca chegavam à tela com
+  // axisLabelVisible:false — ver cabeçalho do plugin.
 
   // Evolução Final §5: mantém autoFitLevelsRef (lido pelo
   // autoscaleInfoProvider da série, efeito de montagem única acima)
@@ -3400,6 +3257,18 @@ function EnhancedChart_110_PercentImpl({
       const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
       const long = tradePlan.direction === "LONG";
       const entryColor = "rgba(240, 193, 111, 0.75)";
+      // Pedido do Operador (evolução, revertendo — com confirmação explícita
+      // — a decisão registrada abaixo): a % real de confluência volta ao
+      // canvas. Compacta de propósito: um só token, nunca a frase que
+      // motivou a remoção original ("TP1 3.14% FRACA 1:0.42" ocupava uma
+      // faixa inteira sobre as velas). MESMO score em EN/ST/TP1/TP2 — é o
+      // MESMO plano, uma única leitura real de confluência
+      // (institutional-score.ts), nunca um número inventado por alvo.
+      // Fail-open: score indisponível nunca vira "?%" fabricado.
+      const scoreToken = Number.isFinite(institutionalScoreValue as number)
+        ? `${Math.round(institutionalScoreValue as number)}%`
+        : null;
+      const withScore = (text?: string | null) => [text, scoreToken].filter(Boolean).join(" ") || undefined;
       // EPC FINAL §8 ("Objetos Inteligentes"): nomenclatura curta e
       // padronizada pedida explicitamente — EN/ST/TP1/TP2/TP3 nos OBJETOS
       // GRÁFICOS do canvas (aqui). A barra de comando (BarField "Entry
@@ -3418,14 +3287,14 @@ function EnhancedChart_110_PercentImpl({
       // Zero dado apagado: o basis continua sempre visível, em fonte menor.
       if (tradePlan.entry.low === tradePlan.entry.high) {
         if (Number.isFinite(tradePlan.entry.low)) {
-          out.push({ price: tradePlan.entry.low, text: `EN ${tradePlan.direction}`, secondaryText: tradePlan.entry.basis, color: entryColor, tier: "critical" });
+          out.push({ price: tradePlan.entry.low, text: `EN ${tradePlan.direction}`, secondaryText: withScore(tradePlan.entry.basis), color: entryColor, tier: "critical" });
         }
       } else {
         if (Number.isFinite(tradePlan.entry.high)) {
-          out.push({ price: tradePlan.entry.high, text: `EN ${tradePlan.direction}`, secondaryText: tradePlan.entry.basis, color: entryColor, tier: "critical" });
+          out.push({ price: tradePlan.entry.high, text: `EN ${tradePlan.direction}`, secondaryText: withScore(tradePlan.entry.basis), color: entryColor, tier: "critical" });
         }
         if (Number.isFinite(tradePlan.entry.low)) {
-          out.push({ price: tradePlan.entry.low, text: "EN", secondaryText: "ZONE LOW", color: entryColor, tier: "critical" });
+          out.push({ price: tradePlan.entry.low, text: "EN", secondaryText: withScore("ZONE LOW"), color: entryColor, tier: "critical" });
         }
       }
       // Stop no preço EFETIVO (ratchet real, MESMA função pura do efeito da
@@ -3446,7 +3315,7 @@ function EnhancedChart_110_PercentImpl({
         out.push({
           price: effectiveStopPrice,
           text: "ST",
-          secondaryText: stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary,
+          secondaryText: withScore(stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary),
           color: "rgba(242, 54, 69, 0.75)",
           tier: "critical",
         });
@@ -3483,17 +3352,19 @@ function EnhancedChart_110_PercentImpl({
         const secondaryParts = [
           // Pedido do Operador, repetido em duas rodadas com capturas reais:
           // "deixar só as iniciais, não precisa aquela numeração na frente
-          // NEM A PORCENTAGEM". A primeira tentativa só desceu a distância
-          // para o secundário — e ela continuou aparecendo na tela
-          // (TP1 3.14% FRACA 1:0.42 na captura de ZEC 4H). Agora sai do
-          // canvas de vez.
+          // NEM A PORCENTAGEM [de DISTÂNCIA até o alvo]". A primeira
+          // tentativa só desceu a distância para o secundário — e ela
+          // continuou aparecendo na tela (TP1 3.14% FRACA 1:0.42 na captura
+          // de ZEC 4H). Essa % de distância continua fora do canvas — ela
+          // segue no painel do Trade Plan (App.tsx). O `withScore` abaixo é
+          // outro número: a % de CONFLUÊNCIA do plano (institutional-score.ts),
+          // pedida de volta numa rodada posterior — compacta de propósito
+          // (um token, não a frase inteira que motivou a remoção original).
           //
           // Regra de Ouro 4 (nunca apagar dado real, só realocar) está
-          // satisfeita e já estava ANTES desta mudança: a distância
-          // percentual até cada alvo é renderizada no painel do Trade Plan
-          // (App.tsx, linha do target: preço, basis, PORCENTAGEM, R:R, ETA
-          // e obstáculos). O canvas deixa de repetir o que o painel já diz
-          // — o mesmo princípio que tirou o motivo de ausência daqui.
+          // satisfeita: a distância percentual até cada alvo continua
+          // renderizada no painel do Trade Plan (App.tsx, linha do target:
+          // preço, basis, PORCENTAGEM, R:R, ETA e obstáculos).
           compactLabels ? null : target.basis,
           compactLabels || rr === null ? null : `1:${rr.toFixed(2)}`,
           etaLabel ? `ETA ${etaLabel}` : null,
@@ -3503,7 +3374,7 @@ function EnhancedChart_110_PercentImpl({
         out.push({
           price: target.price,
           text: `TP${i + 1}`,
-          secondaryText: secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined,
+          secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined),
           color: "rgba(8, 153, 129, 0.75)",
           tier: "critical",
         });
@@ -3886,7 +3757,17 @@ function EnhancedChart_110_PercentImpl({
           activeLanes={activeProfileLanes}
         />
       )}
-      <div ref={containerRef} className="absolute inset-0" />
+      {/* z-index EXPLICITO (chart-layer-depth.ts): este container carrega as
+         velas e as 7 camadas desenhadas por primitiva nativa da lib. Sem
+         z-index ele era `auto`, e um overlay com z=10 pinta por cima de
+         `auto` mesmo vindo antes no DOM (provado em Chromium) — entao as
+         linhas nativas de 1px (CVD/SuperTrend/Pivot Points) ficavam embaixo
+         de TODA area pintada, violando a regra 4 do proprio modulo. */}
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+        style={{ zIndex: CHART_NATIVE_CANVAS_Z_INDEX }}
+      />
       {/* EPC §5/§6 ("Nunca simplesmente esconder essas informações"): sem
          Trade Plan ativo, o canto superior esquerdo (vazio desde que o
          Trend Channel migrou pro eixo, Diretriz de Refinamento Visual §5)
@@ -3976,6 +3857,7 @@ function EnhancedChart_110_PercentImpl({
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
@@ -3998,6 +3880,7 @@ function EnhancedChart_110_PercentImpl({
           equalLevels={visibility.equal_highs_lows ? equalLevelMarks : NO_EQUAL_LEVELS}
           breakerBlocks={visibility.liquidity_zones ? ((breakerBlocks ?? NO_FILLABLE_ZONES) as FillableZone[]) : NO_FILLABLE_ZONES}
           mitigationBlocks={visibility.liquidity_zones ? ((mitigationBlocks ?? NO_FILLABLE_ZONES) as FillableZone[]) : NO_FILLABLE_ZONES}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Ordem "Ciborgue Vivo" §1: BOS/CHOCH real, mesma anotação temporária
@@ -4010,6 +3893,7 @@ function EnhancedChart_110_PercentImpl({
           data={data}
           structureBreak={structureBreak ?? null}
           visualWeight={structureBreakVisualWeight}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Padrões de vela reais (candlestick-patterns.js) — marcador ancorado
@@ -4023,6 +3907,74 @@ function EnhancedChart_110_PercentImpl({
           patterns={candlePatterns ?? []}
         />
       )}
+      {/* Pendência #6: liquidity_sweep migrado de createPriceLine nativo
+         pra canvas — mesmo toggle de sempre, agora no z=50 real de
+         "event" (chart-layer-depth.ts) em vez do z=35 nativo compartilhado. */}
+      {visibility.liquidity_sweep && (
+        <LiquiditySweepLinesPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          traps={traps}
+          activeLanes={activeProfileLanes}
+        />
+      )}
+      {/* SMC Harmonic Fusion (pedido do Operador): seta triangular real no
+         ponto D só quando App.tsx já confirmou confluência institucional
+         suficiente (harmonicConfluence não-nulo) — mesmo toggle de
+         `harmonics` que já gateia o zigzag/PRZ do padrão, nunca uma
+         camada nova a mais no painel de visibilidade. */}
+      {visibility.harmonics && (
+        <HarmonicConfluenceArrowPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          fusion={harmonicConfluence ?? null}
+        />
+      )}
+      {/* Pendência #6, perna final: zigue-zague XABCD/Wolfe/H&S, PRZ/EPA/
+         NECKLINE/APEX e triângulo migrados de createPriceLine/addSeries
+         nativo pra canvas — mesmo toggle de sempre (visibility.harmonics),
+         agora no z=50 real de "event" em vez do z=35 nativo compartilhado.
+         Ver cabeçalho do plugin para o achado real dos 4 rótulos que nunca
+         chegavam à tela. */}
+      {visibility.harmonics && (
+        <HarmonicGeometryPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          harmonicHits={harmonicHits}
+          trianglePattern={trianglePattern}
+          headShouldersPattern={headShouldersPattern}
+          activeLanes={activeProfileLanes}
+        />
+      )}
+      {/* MD-7 (Visual Confidence Trace, pedido direto do Operador):
+         traçado roxo estrutural (pivôs fractais confirmados,
+         fractal-swings.js via computeStructuralSwings) — mesma `data` dos
+         overlays acima. Montado SEM `visibility.x &&` de propósito (ver
+         comentário completo em CHART_LAYER_IDS acima): o memo exige
+         "sempre disponível por padrão, nunca exigir ativação manual", e
+         todo id do painel de camadas herda o Relevance Engine automático
+         por padrão (travado por teste) — incompatível com essa garantia.
+         Mesmo precedente de PriceLabelStackPlugin logo abaixo. */}
+      <StructureTracePlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        data={data}
+      />
+      {/* MD-7: seta única da decisão atual — passthrough EXATO do
+         effectiveDirection que CoreSignalBadge já exibe (App.tsx), nunca
+         um segundo cálculo. Mesma razão acima para não ter `visibility.x
+         &&`: WAIT/decisão suprimida já resulta em "nada desenhado" dentro
+         do próprio plugin (fail-closed), então a garantia de "sempre
+         disponível" nunca vira "sempre visível mesmo sem decisão real". */}
+      <ConfidenceDirectionArrowPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        data={data}
+        direction={confidenceDirection ?? null}
+      />
       {/* V-MAX Fase 1 (superfície visual): Volume Profile real (Fase 1.3)
          como barras à direita + linha do POC — overlay por cima do chart
          (pointer-events-none), dado direto da store. */}
@@ -4063,6 +4015,7 @@ function EnhancedChart_110_PercentImpl({
           zones={institutionalZones}
           visualWeights={institutionalZoneVisualWeights}
           livePrice={typeof livePrice === "number" ? livePrice : null}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Entrega 40: livro de ofertas real como camada de gráfico — gap
@@ -4087,12 +4040,53 @@ function EnhancedChart_110_PercentImpl({
         />
       )}
       {/* Entrega 47: ZigZag graduado do Laboratório (pedido direto do
-         Operador) — mesma `data` real, zero fetch novo. */}
+         Operador) — mesma `data` real, zero fetch novo. Auditoria do
+         ecossistema de indicadores: atrPercent escala o limiar de reversão
+         pelo tempo gráfico selecionado (mesmo princípio real já aplicado à
+         perna do Fibonacci) — sem ele, cai no default clássico do motor. */}
       {visibility.zigzag && (
         <ZigZagPlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}
+          atrPercent={chartAtrPercent}
+        />
+      )}
+      {/* Auditoria do ecossistema de indicadores: Ichimoku Kinko Hyo, a
+         segunda (e ultima) ferramenta classica realmente ausente do
+         ecossistema. Montado ANTES das camadas de linha fina porque a
+         nuvem e preenchimento amplo — a profundidade real vem de
+         chart-layer-depth.ts ("zone"), esta ordem so acompanha. Mesma
+         `data` real dos demais overlays, zero fetch novo. */}
+      {visibility.ichimoku && (
+        <IchimokuPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+        />
+      )}
+      {/* Graduacao de delta-divergence-engine.js (quarentena levantada: a
+         retencao de CVD subiu de 120 para 900 amostras, ~1h). Le a serie de
+         CVD direto da store (useOrderflowHistory), como o
+         OrderFlowHeatmapPlugin ja faz — passar um ring que cresce a cada 4s
+         por prop re-renderizaria este componente inteiro por overlay. */}
+      {visibility.delta_divergence && (
+        <DeltaDivergencePlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+        />
+      )}
+      {/* Graduacao de andrews-pitchfork-engine.js. Projeta 60 barras alem do
+         ultimo candle (a razao de existir do garfo), pela mesma tecnica
+         `logicalToCoordinate` que o Ichimoku introduziu, e para na fronteira
+         medida do eixo. Mesma `data` real, zero fetch novo. */}
+      {visibility.andrews_pitchfork && (
+        <AndrewsPitchforkPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
@@ -4103,6 +4097,7 @@ function EnhancedChart_110_PercentImpl({
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           aura={aura ?? null}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Ordem Final Autonomia Evolução §1 ("caixas semi-transparentes"):
@@ -4117,6 +4112,7 @@ function EnhancedChart_110_PercentImpl({
           entryHigh={tradePlan?.entry.high ?? null}
           confidenceZone={confidenceZone ?? null}
           visualWeight={tradePlanVisualWeight}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Nível 0 (ver comentário acima do useMemo de priceAxisLabels):

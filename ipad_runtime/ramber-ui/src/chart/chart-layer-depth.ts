@@ -74,8 +74,8 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   // 2. ZONA — faixa de preço com contorno
   liquidity_zones: "zone",
   institutional_zones: "zone",
-  premium_discount: "zone",
-  scenario_projection: "zone",
+
+
 
   // 3. PERFIL — histograma de borda
   volume_profile: "profile",
@@ -95,18 +95,61 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   supertrend: "line",
   session_key_levels: "line",
   equal_highs_lows: "line",
+  // Auditoria do ecossistema de indicadores: até 7 createPriceLine de 1px
+  // (PP+R1-3+S1-3) — mesma natureza de session_key_levels/equal_highs_lows
+  // logo acima, nunca abaixo de preenchimento.
+  pivot_points: "line",
+  // CORRIGIDAS de "zone" para "line" (achado ao investigar a pendência de
+  // migrar as camadas nativas para canvas próprio). As duas estavam
+  // declaradas como ZONA, mas NENHUMA das duas tem plugin de canvas e o
+  // desenho inteiro delas é `series.createPriceLine(...)` — ou seja, LINHA
+  // horizontal de 1px, nunca uma faixa preenchida. Verificado lendo o
+  // código: zero `fillRect`, zero plugin que as referencie.
+  //
+  // Hoje isso era INERTE (as duas são nativas, então renderizam em
+  // CHART_NATIVE_CANVAS_Z_INDEX qualquer que seja o nível declarado) — mas
+  // era uma ARMADILHA: a própria recomendação de migrá-las para canvas
+  // próprio as colocaria em z=20, abaixo de toda área pintada, refazendo
+  // exatamente a violação da regra 4 que acabou de ser corrigida. Consertar
+  // a declaração agora é o que torna aquela migração segura de fazer.
+  premium_discount: "line",
+  scenario_projection: "line",
+  // Andrews Pitchfork: 3 retas de 1px. Nivel "line" pelo mesmo criterio que
+  // acabou de pegar as duas acima — o que ele desenha e linha, entao um
+  // preenchimento por cima o faria sumir.
+  andrews_pitchfork: "line",
+  // A nuvem (Kumo) é um PREENCHIMENTO amplo — se ficasse no nível "line"
+  // cobriria EMA/VWAP/Fibonacci, que são precisão de 1px. Fica em "zone"
+  // com as demais faixas de preço; as 3 linhas do Ichimoku descem junto,
+  // o que é correto: Ichimoku é contexto de fundo, não medição fina.
+  ichimoku: "zone",
   // CVD é fluxo, mas desenha como LINHA de 1px — e linha nunca pode ficar
   // abaixo de preenchimento. Esquecido na 1ª versão deste mapa; pego pelo
   // teste de cobertura 1:1 contra CHART_LAYER_IDS, não pela tela do Operador.
   cvd: "line",
+  // MD-7 (Visual Confidence Trace): traçado roxo conectando os pivôs
+  // fractais confirmados (fractal-swings.js via computeStructuralSwings) —
+  // mesma natureza de precisão de 1px que zigzag logo acima, nunca abaixo
+  // de preenchimento.
+  structure_trace: "line",
 
   // 5. EVENTO — "aconteceu aqui"
   structure_breaks: "event",
+  // Divergência de Delta: marca pontual entre DOIS swings confirmados —
+  // mesma natureza do BOS/CHOCH logo acima ("aconteceu AQUI"), nunca uma
+  // zona nem uma linha de referência contínua.
+  delta_divergence: "event",
   liquidity_sweep: "event",
   harmonics: "event",
   // Padrão de vela é um EVENTO pontual ("aconteceu nesta vela"), da mesma
   // classe do BOS/CHOCH e do sweep — nunca uma zona nem uma linha.
   candle_patterns: "event",
+  // MD-7 (Visual Confidence Trace): seta única da decisão atual do Núcleo
+  // — marca pontual ("a decisão é ESTA agora"), nunca podem ser encobertas
+  // por preenchimento/zona/perfil, mesma classe funcional dos eventos
+  // acima. Nunca "plan": não representa Entry/Stop/Target (item 7 do memo,
+  // "a seta não representa ENTRY").
+  confidence_direction: "event",
 
   // 6. PLANO — o acionável
   trade_plan_zone: "plan",
@@ -126,6 +169,124 @@ export function getChartLayerZIndex(layerId: string): number {
 export function getChartLayerTier(layerId: string): ChartDepthTier {
   return LAYER_TIER[layerId] ?? "zone";
 }
+
+/** z-index do CANVAS NATIVO da lightweight-charts (as velas + tudo que é
+ *  desenhado por primitiva da própria lib: `addSeries`, `createPriceLine`,
+ *  marcadores).
+ *
+ *  ── O SEGUNDO ACHADO DESTE MÓDULO, medido ────────────────────────────
+ *  Este arquivo declara profundidade para as 30 camadas, mas só as ~18 que
+ *  têm canvas PRÓPRIO obedeciam. As outras 7 são desenhadas por primitiva
+ *  nativa e vivem todas dentro do `<div ref={containerRef}>` — que era
+ *  `absolute inset-0` SEM z-index nenhum, ou seja `z-index: auto`.
+ *
+ *  Provado em Chromium (não deduzido): um overlay com `z-index: 10` pinta
+ *  POR CIMA de um container `z-index: auto` mesmo quando o container vem
+ *  DEPOIS no DOM. Ou seja, as 7 camadas nativas ficavam embaixo de TODOS os
+ *  overlays — inclusive do nível CAMPO (z=10), que é justamente o mais
+ *  difuso e o que cobre mais área.
+ *
+ *  As 7 nativas ORIGINAIS e o nível declarado de cada uma (já COM a
+ *  correção descrita logo abaixo, em CHART_LINE_ONLY_LAYER_IDS):
+ *    cvd .................. "line"    supertrend ......... "line"
+ *    pivot_points ......... "line"    premium_discount ... "line" *
+ *    scenario_projection .. "line" *  harmonics .......... "event"
+ *    liquidity_sweep ...... "event"
+ *    (*) as duas estavam declaradas "zone" e foram corrigidas — nenhuma
+ *        das duas pinta área nenhuma, as duas são só createPriceLine.
+ *
+ *  CINCO delas são LINHA de 1px — e a regra 4 no topo deste arquivo diz,
+ *  com todas as letras, que "nenhuma linha pode ficar abaixo de área
+ *  pintada". Era exatamente o sintoma que originou este módulo, resolvido
+ *  para metade das camadas e nunca para a outra metade.
+ *
+ *  ── POR QUE 35, E O QUE ELE NÃO RESOLVE ──────────────────────────────
+ *  35 fica entre PERFIL (30) e LINHA (40) — o uso exato do espaçamento de
+ *  10 que este arquivo reservou desde o início. Nele:
+ *    - as 5 linhas nativas sobem acima de TODA área pintada (campo/zona/
+ *      perfil). A regra 4 passa a valer para as 30 camadas, não 23.
+ *    - as VELAS sobem junto (compartilham o canvas) e passam a ficar acima
+ *      das faixas de fundo — que é o certo: contexto atrás do preço.
+ *    - as linhas de canvas (EMA/VWAP/Fibonacci/ZigZag) seguem em 40, acima
+ *      das velas; eventos em 50; plano em 60; etiquetas em 70.
+ *
+ *  harmonics MIGROU POR COMPLETO (pendência #6, duas rodadas): a seta de
+ *  confluência institucional (SMC Harmonic Fusion, HarmonicConfluenceArrow
+ *  Plugin) migrou primeiro; o zigue-zague XABCD/Wolfe/H&S, a PRZ/EPA/
+ *  NECKLINE/APEX e o triângulo (antes nativos, `createPriceLine`/
+ *  `addSeries` em EnhancedChart_110_Percent.tsx) fecharam o resíduo na
+ *  rodada seguinte — `HarmonicGeometryPlugin.tsx`, mesma lógica de
+ *  disputa/geometria, zero segunda matemática. Achado real dessa 2ª
+ *  rodada: os 4 rótulos de texto (PRZ/EPA/NECKLINE/APEX) nunca chegavam à
+ *  tela com `axisLabelVisible:false` (mesma classe de defeito já corrigida
+ *  para Fibonacci/scenario_projection/POC-VAH-VAL-IB/WALL) — corrigidos
+ *  junto, via `drawCanvasLabel`. `harmonics` inteira agora em
+ *  `getChartLayerZIndex("harmonics")` = 50 (event) real.
+ *
+ *  liquidity_sweep MIGROU POR COMPLETO (pendência #6, 1ª rodada):
+ *  `LiquiditySweepLinesPlugin.tsx` desenha a mesma linha de sweep real
+ *  (mesmo dado, mesma clusterização, mesmo decaimento) em canvas próprio,
+ *  `getChartLayerZIndex("liquidity_sweep")` = 50 (event).
+ *
+ *  RESÍDUO HONESTO, declarado em vez de escondido: as 5 nativas restantes
+ *  (CHART_NATIVE_LAYER_IDS abaixo) dividem UM canvas só, então só podem
+ *  ter UM z — cvd/supertrend/pivot_points/premium_discount/
+ *  scenario_projection. premium_discount e scenario_projection já tinham
+ *  a declaração corrigida (ver CHART_LINE_ONLY_LAYER_IDS abaixo); harmonics
+ *  e liquidity_sweep, as duas únicas camadas "event" que chegaram a ser
+ *  nativas, já saíram por completo. Migrar as 5 restantes para canvas
+ *  próprio continua sendo o passo seguinte real para fechar 35 de vez —
+ *  mudança maior, cada uma sua própria rodada.
+ */
+export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
+
+/** Camadas cujo desenho inteiro é LINHA de 1px — verificado lendo o código
+ *  de cada uma nesta sessão, nunca presumido pelo nome:
+ *
+ *    premium_discount ..... 3x createPriceLine (topo/equilíbrio/fundo)
+ *    scenario_projection .. createPriceLine por alvo projetado
+ *    cvd .................. série de linha própria no seu painel
+ *    supertrend ........... 2 séries de linha (up/down)
+ *    pivot_points ......... até 7 createPriceLine (PP + R1-3 + S1-3)
+ *
+ *  A REGRA que esta lista trava é a regra 4 no topo deste arquivo, dita como
+ *  predicado testável: nenhuma delas pode ficar num nível que PINTA ÁREA
+ *  (campo/zona/perfil), porque uma linha de 1px coberta por preenchimento
+ *  simplesmente some. Foi assim que `premium_discount` e
+ *  `scenario_projection` foram pegas declaradas como "zone".
+ *
+ *  `liquidity_sweep` SAIU desta lista (pendência #6): migrou pra canvas
+ *  próprio (`LiquiditySweepLinesPlugin.tsx`), então não compete mais pelo
+ *  z=35 nativo compartilhado — a regra 4 não se aplica mais a ela aqui,
+ *  ela já tem seu próprio z=50 real via `getChartLayerZIndex`.
+ *
+ *  A lista é o conjunto VERIFICADO, não um censo do arquivo inteiro: para
+ *  somar uma camada aqui, confirme antes que o desenho dela não tem
+ *  `fillRect`/faixa — e que ela não ganhou um plugin de canvas depois. */
+export const CHART_LINE_ONLY_LAYER_IDS: readonly string[] = [
+  "premium_discount",
+  "scenario_projection",
+  "cvd",
+  "supertrend",
+  "pivot_points",
+  "andrews_pitchfork",
+];
+
+/** Níveis que PINTAM ÁREA — o conjunto proibido para as camadas acima. */
+export const CHART_FILL_TIERS: readonly ChartDepthTier[] = ["field", "zone", "profile"];
+
+/** As camadas desenhadas por primitiva NATIVA da lib (sem canvas próprio),
+ *  e por isso presas todas ao mesmo z. Exportado para o teste provar que a
+ *  lista bate com a realidade — se alguém migrar uma delas para canvas
+ *  próprio, tem de sair daqui no mesmo commit (pendência #6: `liquidity_
+ *  sweep` foi a primeira a sair, 6→5 restantes). */
+export const CHART_NATIVE_LAYER_IDS: readonly string[] = [
+  "cvd",
+  "supertrend",
+  "pivot_points",
+  "premium_discount",
+  "scenario_projection",
+];
 
 /** z-index das etiquetas de preço. Constante própria porque o
  *  PriceLabelStackPlugin já tinha z=5 hardcoded ANTES deste módulo existir —

@@ -60,6 +60,15 @@ export const metadata = {
         'Divergencia altista (preco fundo mais baixo + CVD fundo mais alto = exaustao vendedora)',
     ],
     required_data: ['ohlcv_series', 'cvd_samples'],
+    // CORRIGIDO: declarava 'ACTIVE_READ_ONLY' sem NENHUM importador — o
+    // `engine-bridge.ts` nunca o consumiu, e o QUARANTINE.md sempre disse
+    // "EM QUARENTENA". Era a metadata que mentia, nao o registro.
+    //
+    // Continua nao graduado, MAS a razao mudou: o bloqueio original era de
+    // DADO (o CVD retido cobria ~8 min, menos de uma vela em 15m) e essa
+    // causa ja caiu — ORDERFLOW_HISTORY_CAPACITY foi de 120 para 900 (~1h).
+    // Hoje o que falta e' a decisao de graduar, nao um impedimento tecnico.
+    // Ver a secao deste motor no QUARANTINE.md.
     status: 'ACTIVE_READ_ONLY',
     limitations: [
         'Depende da janela real de CVD retida pelo poller — sem cobertura suficiente devolve DADOS_INSUFICIENTES, nunca extrapola.',

@@ -14,6 +14,8 @@
 // WAIT real continua sendo o Core Engine.
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import type { StructureBreak } from "../engine-bridge";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
@@ -43,21 +45,26 @@ interface StructureBreakMarkersPluginProps {
   // chamador; cai de volta em ageAlpha(age, BREAK_DECAY) (comportamento já
   // validado antes desta rodada, nunca um valor fabricado).
   visualWeight?: number | null;
+  // Achado real (auditoria "cada item no seu canto, nada cobrindo nada"):
+  // sem isto o marcador ia até plotRight puro — cruzando a lane do
+  // Volume Profile/TPO/Order Book Depth quando ativas. Opcional/
+  // fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function StructureBreakMarkersPlugin({ chart, series, data, structureBreak, visualWeight }: StructureBreakMarkersPluginProps) {
+export function StructureBreakMarkersPlugin({ chart, series, data, structureBreak, visualWeight, activeLanes }: StructureBreakMarkersPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef({ structureBreak, data, visualWeight });
+  const stateRef = useRef({ structureBreak, data, visualWeight, activeLanes });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente para o loop de desenho ler — mesmo padrão
   // do LiquidityZonesPlugin (nunca reabre a conexão com o chart a cada
   // atualização de dado).
-  stateRef.current = { structureBreak, data, visualWeight };
+  stateRef.current = { structureBreak, data, visualWeight, activeLanes };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [structureBreak, data, visualWeight]);
+  }, [structureBreak, data, visualWeight, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -79,6 +86,11 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+      // Fronteira medida do eixo (chart-plot-area.ts) + lanes de perfil
+      // ATIVAS (chart-profile-lanes.ts): o desenho para antes do eixo E
+      // antes da lane do Volume Profile/TPO/Order Book Depth.
+      const { plotRight } = measurePlotArea(chart, cssWidth, stateRef.current.activeLanes);
 
       const { structureBreak: brk, data: candles, visualWeight: resolvedWeight } = stateRef.current;
       if (!brk) return; // sem rompimento real na amostra — nada a desenhar, honesto.
@@ -141,7 +153,7 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, yLine);
-      ctx.lineTo(cssWidth, yLine);
+      ctx.lineTo(plotRight, yLine);
       ctx.stroke();
       ctx.globalAlpha = 1;
     };

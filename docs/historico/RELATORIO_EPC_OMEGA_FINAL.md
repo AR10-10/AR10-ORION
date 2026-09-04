@@ -429,7 +429,7 @@ tivesse.
 ## 9. Pesquisa World Class (Parte 4 §10)
 
 Não repetida nesta rodada — já real e documentada em
-`docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` (Bookmap/Sierra Chart/TradingView/
+`docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` (Bookmap/Sierra Chart/TradingView/
 etc., com uma lista julgada "vale adotar / não vale" por item). A
 decisão de cor do Volume Profile (§2.3 acima) é um exemplo direto dessa
 pesquisa sendo reafirmada, não uma pesquisa nova.

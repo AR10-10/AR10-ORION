@@ -493,3 +493,21 @@ body {
     animation: none;
   }
 }
+
+/* Acessibilidade real (achado de auditoria: grep por :focus/focus-visible
+   em todo src/ voltou ZERO ocorrência — nenhum indicador de foco de
+   teclado existia em lugar nenhum) — WCAG 2.4.7 (Focus Visible). Rede de
+   segurança GLOBAL: vence qualquer `outline-none` já escrito em componente
+   (App.tsx/SmartOmnibox.tsx/access-gate.tsx usam a utilidade do Tailwind
+   pra tirar o outline padrão do navegador sem nunca repor um — nenhum dos
+   três é maldoso, só nenhum previa este caso). !important é deliberado
+   aqui: esta é a ÚLTIMA linha de defesa contra um controle interativo
+   ficar sem NENHUM indicador visível pra quem navega por teclado — nunca
+   pode ser silenciosamente vencida por uma classe utilitária mais
+   específica escrita depois. Cor reaproveita o ciano canônico já usado
+   como acento de foco em SmartOmnibox/access-gate (#00f0ff) — nenhuma cor
+   nova na paleta. */
+:focus-visible {
+  outline: 2px solid #00f0ff !important;
+  outline-offset: 2px;
+}

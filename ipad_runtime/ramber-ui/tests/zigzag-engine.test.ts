@@ -252,7 +252,13 @@ describe('ZigZag: graduação real ponta a ponta (QUARANTINE.md + bridge + App +
 
   it('engine-bridge: wrapper fino sobre o motor real (nunca uma segunda implementação), fail-closed em status != OK', () => {
     const bridge = read('../src/engine-bridge.ts');
-    expect(bridge).toContain("import { computeZigZag as computeZigZagPure } from '../../src/research/engines/zigzag-engine.js';");
+    // Independente de formatação: o import virou multilinha quando a perna do
+    // Fibonacci passou a consumir o mesmo motor (ZIGZAG_DEFAULT_* entraram
+    // junto). O que este teste guarda é o CONTRATO — o alias vem do motor
+    // real —, nunca o estilo de quebra de linha.
+    expect(bridge).toMatch(
+      /import\s*\{[^}]*computeZigZag as computeZigZagPure[^}]*\}\s*from\s*'\.\.\/\.\.\/src\/research\/engines\/zigzag-engine\.js'/s,
+    );
     expect(bridge).toContain('export function computeZigZag(');
     expect(bridge).toContain('const result = computeZigZagPure(candles, deviationPct, depth);');
     expect(bridge).toContain("if (result.status !== 'OK') return [];");
@@ -261,7 +267,15 @@ describe('ZigZag: graduação real ponta a ponta (QUARANTINE.md + bridge + App +
   it('App.tsx: relevância real (>=2 pivôs) sobre o MESMO chartData, e entrada no painel Camadas do Gráfico', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('computeZigZag,');
-    expect(app).toContain('const hasZigZagPivots = Array.isArray(chartData) && computeZigZag(chartData).length >= 2;');
+    // Independente de formatação: a checagem virou multilinha quando passou a
+    // usar o MESMO limiar adaptativo por ATR que o desenho real usa (achado
+    // da auditoria do ecossistema — antes, existência e desenho podiam
+    // divergir). O que este teste guarda é o CONTRATO — chartData real,
+    // limiar adaptativo real, teto real de 2 pivôs —, nunca o estilo de
+    // quebra de linha.
+    expect(app).toMatch(
+      /const hasZigZagPivots =\s*Array\.isArray\(chartData\)\s*&&\s*computeZigZag\(chartData,\s*atrScaledZigZagDeviationPct\(chartAtrPercent\)\)\.length >= 2;/,
+    );
     expect(app).toContain('{ id: "zigzag", label: "ZIGZAG" },');
   });
 

@@ -15,6 +15,7 @@ import { classifyMarketRegime } from '../../src/market-regime/index.js';
 import { computeRSI } from '../../src/research/engines/lorentzian-classifier.js';
 import { buildEnsembleConsensus, opinionFromLabel, opinionFromVote } from '../../src/consensus/index.js';
 import { momentumAgentVote } from '../src/nexus/council';
+import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 
 const T0 = 1_700_000_000;
 const STEP = 900; // 15m em segundos, mesma convenção canônica dos outros testes (market-regime.test.ts)
@@ -72,6 +73,14 @@ describe('analyzeTimeframe: fail-closed honesto sem dados reais', () => {
     expect(ctx.rsi).toBeNull();
     expect(ctx.confidence).toBeNull();
     expect(ctx.confidenceStance).toBeNull();
+    // O mínimo real do motor de liquidez (5 candles) é MAIS BAIXO que o dos
+    // outros — decisão deliberada (ver multi-timeframe-engine.ts): a
+    // liquidez nunca decide `anyRealReading` sozinha, então mesmo estando
+    // tecnicamente calculável aqui, o trio fica null honesto junto com o
+    // resto quando os motores principais não têm leitura real.
+    expect(ctx.unmitigatedOrderBlockCount).toBeNull();
+    expect(ctx.unmitigatedFvgCount).toBeNull();
+    expect(ctx.unsweptLiquidityZoneCount).toBeNull();
   });
 });
 
@@ -88,6 +97,14 @@ describe('analyzeTimeframe: degradação parcial honesta (estrutura/S-R/RSI reai
     expect(ctx.support1).not.toBeNull();
     expect(ctx.resistance1).not.toBeNull();
     expect(ctx.candlesUsed).toBe(40);
+    // Liquidez (mínimo real 5 candles) já calcula aqui mesmo com regime
+    // ainda indisponível — o trio é sempre real ou sempre null junto,
+    // reconstruído contra o MESMO motor chamado direto sobre a mesma amostra.
+    const liquidityResult = analyzeFvgOrderBlocks({ ohlcv_series: candles }) as any;
+    expect(liquidityResult.status).toBe('OK');
+    expect(ctx.unmitigatedOrderBlockCount).toBe(liquidityResult.unmitigated_order_block_count);
+    expect(ctx.unmitigatedFvgCount).toBe(liquidityResult.unmitigated_fvg_count);
+    expect(ctx.unsweptLiquidityZoneCount).toBe(liquidityResult.unswept_liquidity_zone_count);
   });
 });
 
@@ -113,6 +130,8 @@ describe('analyzeTimeframe: leitura completa (100 candles, os 4 motores reais) �
       expect(srResult.status).toBe('OK');
       expect(regimeResult.status).toBe('OK');
       expect(Number.isFinite(expectedRsi)).toBe(true);
+      const liquidityResult = analyzeFvgOrderBlocks({ ohlcv_series: candles }) as any;
+      expect(liquidityResult.status).toBe('OK');
 
       expect(ctx.status).toBe('OK');
       expect(ctx.reason).toBeNull();
@@ -123,6 +142,9 @@ describe('analyzeTimeframe: leitura completa (100 candles, os 4 motores reais) �
       expect(ctx.rsi).toBeCloseTo(expectedRsi, 10);
       expect(ctx.support1).toBe(srResult.support_1);
       expect(ctx.resistance1).toBe(srResult.resistance_1);
+      expect(ctx.unmitigatedOrderBlockCount).toBe(liquidityResult.unmitigated_order_block_count);
+      expect(ctx.unmitigatedFvgCount).toBe(liquidityResult.unmitigated_fvg_count);
+      expect(ctx.unsweptLiquidityZoneCount).toBe(liquidityResult.unswept_liquidity_zone_count);
       expect(ctx.candlesUsed).toBe(100);
       expect(ctx.timeframe).toBe('1h');
       expect(Date.now() - ctx.computedAt).toBeLessThan(5000);

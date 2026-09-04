@@ -72,12 +72,12 @@ export type NexusEvent =
   | { type: "QUANT.ORDERFLOW_SIGNALS.UPDATED"; payload: { signals: OrderflowSignal[] } }
   | { type: "QUANT.CONFLUENCE_CORRIDOR.UPDATED"; payload: { reading: ConfluenceCorridorReading | null } }
   // Achado da auditoria de evolução (Unificação da Inteligência,
-  // docs/AUDITORIA_UNIFICACAO_VOZ.md §4 item 1): computeInstitutionalZones
+  // docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4 item 1): computeInstitutionalZones
   // já tinha fatia real na store (Carta Branca) mas nunca ganhou evento —
   // nenhum assinante podia reagir a "uma zona nova se formou" sem antes
   // recomputar tudo sozinho. Mesmo padrão passthrough de QUANT.SMC acima.
   | { type: "QUANT.INSTITUTIONAL_ZONES.UPDATED"; payload: { zones: InstitutionalZone[] } }
-  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
   // item 2): riskSuggestion (risk-engine.js) já era computado real em
   // App.tsx mas não tinha fatia na store nem evento — nenhum consumidor
   // fora da árvore React do App podia lê-lo.
@@ -117,6 +117,14 @@ type Handler<T extends NexusEventType> = (payload: PayloadOf<T>) => void;
 
 export class TypedEventBus {
   private handlers: Map<NexusEventType, Set<Handler<any>>> = new Map();
+  // Achado da graduação do Terminal Event Log (Ordem 3 §17): on() só entrega
+  // o payload, nunca o `type` — suficiente pra todo assinante existente (cada
+  // um já sabe o tipo que pediu), mas insuficiente pra um consumidor que
+  // precisa da IDENTIDADE do evento pra rotulá-lo (um log/audit trail que
+  // mostra "o quê" além do conteúdo). onAny() é um segundo canal aditivo,
+  // nunca usado por motor nenhum (LEI: motor nunca fala com motor) — só por
+  // infraestrutura de observação.
+  private anyHandlers: Set<(event: NexusEvent) => void> = new Set();
 
   on<T extends NexusEventType>(type: T, handler: Handler<T>): () => void {
     let set = this.handlers.get(type);
@@ -128,15 +136,33 @@ export class TypedEventBus {
     return () => set!.delete(handler);
   }
 
+  /** Assina TODOS os tipos de evento de uma vez, recebendo o NexusEvent
+   *  completo (`{type, payload}`) — para consumidores como o Terminal Event
+   *  Log que precisam rotular cada linha pelo tipo real do evento, nunca só
+   *  ler o payload. Mesma disciplina fail-safe de on()/emit(): um assinante
+   *  com bug aqui nunca derruba os demais nem o publicador. */
+  onAny(handler: (event: NexusEvent) => void): () => void {
+    this.anyHandlers.add(handler);
+    return () => this.anyHandlers.delete(handler);
+  }
+
   emit<T extends NexusEventType>(event: Extract<NexusEvent, { type: T }>): void {
     const set = this.handlers.get(event.type);
-    if (!set) return;
-    for (const handler of set) {
+    if (set) {
+      for (const handler of set) {
+        try {
+          handler(event.payload);
+        } catch {
+          // um assinante ruim nunca derruba os demais nem o publicador —
+          // mesmo princípio de bus.js's subscribers.forEach.
+        }
+      }
+    }
+    for (const handler of this.anyHandlers) {
       try {
-        handler(event.payload);
+        handler(event);
       } catch {
-        // um assinante ruim nunca derruba os demais nem o publicador —
-        // mesmo princípio de bus.js's subscribers.forEach.
+        // mesmo princípio: onAny nunca derruba on() nem outro onAny.
       }
     }
   }
@@ -148,5 +174,6 @@ export class TypedEventBus {
 
   clear(): void {
     this.handlers.clear();
+    this.anyHandlers.clear();
   }
 }

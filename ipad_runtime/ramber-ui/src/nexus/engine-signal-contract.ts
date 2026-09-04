@@ -20,7 +20,7 @@
 // — nunca uma direção, nunca um score combinado — a mesma linha vermelha
 // desta regra, repetida no cabeçalho daquele arquivo de propósito.
 //
-// Honestidade de auditoria (ver docs/RELATORIO_EPC_OMEGA_FINAL.md, Parte
+// Honestidade de auditoria (ver docs/historico/RELATORIO_EPC_OMEGA_FINAL.md, Parte
 // 1, e SYSTEM_HANDBOOK §6.72/§6.74/§6.76): hoje só ~5 dos 10 campos são
 // rastreados de verdade pelos 2 montadores reais (peso, confidence,
 // validity, context, justification — rationale/evidence do Conselho +

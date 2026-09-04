@@ -16,6 +16,8 @@
 // annotation-decay.ts antes de chegar aqui — este módulo só recebe o
 // alpha já pronto, nunca reimplementa a curva de decaimento.)
 import { resolveTimeframePrecisionOrder, horizonFitReason } from "./timeframe-layer-profile";
+import { SHARED_ZONE_HIGHLIGHT_SLOTS } from "./liquidity-significance";
+import { FIB_RETRACEMENT_RATIOS } from "./fibonacci-confluence";
 import type { DirectionalLineState } from "./vwap-state";
 import type { PremiumDiscountZone } from "./premium-discount";
 
@@ -65,10 +67,12 @@ export const RELEVANCE_LAYER_IDS = [
   // nível real, nunca sempre-ligado).
   "session_key_levels",
   // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4 ("Consolidação de zonas"):
-  // mesmo papel de trade_plan_zone/neural_market_aura abaixo — ciclo de
-  // vida próprio (computeInstitutionalZones, nexus/institutional-zones.ts
-  // já devolve lista vazia sem confluência real cruzada), nunca sujeito a
-  // uma SEGUNDA regra de relevância aqui.
+  // existência real de confluência entre ≥2 fontes independentes
+  // (computeInstitutionalZones, nexus/institutional-zones.ts) — mesmo
+  // padrão de tpo_profile/zigzag abaixo. Era "nunca sujeito ao gate" até
+  // um achado medido mostrar que isso fazia a camada vencer vaga de topo
+  // do teto automático mesmo vazia (ver LayerRelevanceInput,
+  // institutionalZoneCount).
   "institutional_zones",
   // Entrega 40: mesma condição de order_flow_heatmap logo abaixo — o
   // livro de ofertas real é o MESMO dado para as duas camadas, nunca uma
@@ -90,6 +94,25 @@ export const RELEVANCE_LAYER_IDS = [
   // Path Map, scenario-engine.ts) — mesmo padrão de existência real de
   // tpo_profile/zigzag/fibonacci acima (hasScenario), nunca proximidade.
   "scenario_projection",
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando"): Pivot Points clássicos, mesmo
+  // padrão de existência real de tpo_profile/zigzag/scenario_projection
+  // acima (hasPivotPoints), nunca proximidade — um nível diário estático
+  // continua útil o dia inteiro.
+  "pivot_points",
+  // Ichimoku: existência real (aquecimento de 52 candles cumprido), nunca
+  // proximidade — a nuvem é contexto contínuo, informativa inclusive
+  // quando o preço está longe dela.
+  "ichimoku",
+  // Divergência de Delta: existência real da LEITURA (status OK com uma
+  // divergência), não do motor — diferente de todas as camadas acima. Uma
+  // divergência é um evento raro por definição; "o motor rodou" não é
+  // motivo para ocupar vaga no orçamento visual.
+  "delta_divergence",
+  // Andrews Pitchfork: existencia real (3 pivos alternados confirmados),
+  // nunca proximidade — um canal e informativo justamente quando o preco
+  // esta longe de uma das bordas.
+  "andrews_pitchfork",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -220,6 +243,46 @@ export interface LayerRelevanceInput {
   // acima, nunca proximidade ao preço vivo (as 2 rotas já cobrem LONG e
   // SHORT simultaneamente, então "perto do preço" não distinguiria nada).
   hasScenario: boolean;
+  // CORRIGIDO (achado medido, auditoria "sem utilidade... atrapalhando"):
+  // institutional_zones e neural_market_aura eram RELEVANT:TRUE
+  // incondicional. O raciocinio original nao estava errado sobre o
+  // DESENHO (computeInstitutionalZones devolve [] honesto, a Aura tem
+  // fadeAlpha 0) — estava incompleto sobre a DISPUTA: relevant:true
+  // incondicional faz a camada entrar SEMPRE na competicao do modo AUTO
+  // (resolveAutoLayerVisibility), consumindo 1 das AUTO_LAYER_MAX_
+  // SIMULTANEOUS vagas mesmo sem nada real pra mostrar.
+  //
+  // institutional_zones e' o caso grave: rank 3 em AUTO_LAYER_PRECISION_
+  // ORDER, atras so' de trade_plan_zone/structure_breaks. Uma zona vazia
+  // (comum — exige >=2 fontes reais em confluencia) ocupava um dos 3
+  // lugares mais precisos do teto, empurrando pra fora uma camada com
+  // CONTEUDO real de posicao mais baixa (liquidity_zones, volume_profile,
+  // equal_highs_lows...). Exatamente "atrapalhando... nao necessario".
+  //
+  // Mesmo padrao de todo outro campo deste contrato: existencia real,
+  // nunca fiacao nova (os dois valores ja sao computados em App.tsx).
+  institutionalZoneCount: number; // institutionalZones.length real
+  hasAuraSignal: boolean; // auraReading.status === 'OK' && auraReading.plan !== null
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador):
+  // Pivot Points clássicos — true quando getPivotPoints(symbol) devolve
+  // status:'OK' real (candle diário anterior fechado disponível). Existência
+  // real, nunca proximidade — mesmo padrão de hasZigZagPivots/hasTpoProfile
+  // acima: um nível estático é útil o dia inteiro, não só quando o preço
+  // está em cima dele agora.
+  hasPivotPoints: boolean;
+  /** Ichimoku produziu as 5 linhas reais (52 candles de aquecimento).
+   *  Existência real, nunca proximidade. */
+  hasIchimoku: boolean;
+  /** Uma divergência preço×CVD REAL está detectada agora (não apenas "o
+   *  motor tem dado"). Ver o comentário em RELEVANCE_LAYER_IDS: aqui a
+   *  régua é a leitura, não a disponibilidade. */
+  hasDeltaDivergence: boolean;
+  /** Quantas velas o CVD retido cobre de verdade. Usado só para o MOTIVO
+   *  quando não há leitura — para o painel poder dizer "cobre 4 velas, o
+   *  mínimo é 12" em vez de "sem dado", que não ensina nada. */
+  deltaDivergenceCoveredCandles: number;
+  /** O garfo tem os 3 pivos alternados confirmados. Existencia real. */
+  hasAndrewsPitchfork: boolean;
 }
 
 export interface LayerRelevanceResult {
@@ -385,15 +448,21 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       ? { relevant: true, emphasis: "normal", reason: `preço vivo a menos de ${fmtPct(VOLUME_PROFILE_PROXIMITY_PCT)} de um POC/HVN real` }
       : { relevant: false, emphasis: "normal", reason: "preço vivo longe de qualquer POC/HVN real" },
 
-    // Trade Plan Zone e Neural Market Aura são o núcleo do plano em si —
-    // a diretiva pede menos POLUIÇÃO, não menos PLANO: seguem sua própria
-    // lógica de ciclo de vida real (trade-plan.ts / aura-lifecycle.ts),
-    // nunca ficam sujeitas ao gate de relevância (ficariam sem sentido
-    // como "camada opcional" quando são o próprio resultado da decisão).
+    // Trade Plan Zone segue a mesma disciplina de existência real de toda
+    // outra camada — nunca "sem gate" por ser o núcleo do plano, só por
+    // não ter dado (mesmo padrão de tradePlanActive de sempre).
     trade_plan_zone: input.tradePlanActive
-      ? { relevant: true, emphasis: "normal", reason: "plano real ativo (Conselho ou fallback do Núcleo) — nunca sujeito ao gate de relevância" }
+      ? { relevant: true, emphasis: "normal", reason: "plano real ativo (Conselho ou fallback do Núcleo)" }
       : { relevant: false, emphasis: "normal", reason: "nenhum plano real ativo agora" },
-    neural_market_aura: { relevant: true, emphasis: "normal", reason: "ciclo de vida próprio (aura-lifecycle.ts) — nunca sujeito ao gate de relevância" },
+    // CORRIGIDO: era relevant:true incondicional ("ciclo de vida próprio,
+    // nunca sujeito ao gate"). Passou a exigir sinal real da Aura —
+    // status OK e um plano geometricamente presente — pela mesma razão de
+    // institutional_zones logo abaixo: sem isto, uma Aura "vazia"
+    // (DADOS_INSUFICIENTES ou sem plano) ainda vencia vaga no teto do modo
+    // automático em troca de nada visível.
+    neural_market_aura: input.hasAuraSignal
+      ? { relevant: true, emphasis: "normal", reason: "corredor real da Aura ativo (aura-lifecycle.ts)" }
+      : { relevant: false, emphasis: "normal", reason: "Aura sem plano real (DADOS_INSUFICIENTES) — nada pra desenhar" },
 
     ema: emaRelevant
       ? { relevant: true, emphasis: "normal", reason: "referência de tendência central — mantida junto de VWAP/Nexus Line quando alguma leitura é direcional (ou sem leitura real ainda)" }
@@ -467,10 +536,19 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       : { relevant: false, emphasis: "normal", reason: "nenhum Key Level de sessão real próximo do preço vivo" },
 
     // Mesmo princípio de neural_market_aura acima: ciclo de vida próprio
-    // (computeInstitutionalZones já devolve [] sem confluência real
-    // cruzada entre >=2 ferramentas independentes) — nunca sujeito a uma
-    // segunda regra de relevância aqui.
-    institutional_zones: { relevant: true, emphasis: "normal", reason: "ciclo de vida próprio (institutional-zones.ts) — sem confluência real cruzada, a lista de zonas vem vazia e nada é desenhado" },
+    // CORRIGIDO (achado medido): era relevant:true incondicional. A lógica
+    // original — "computeInstitutionalZones já devolve [] sem confluência
+    // real, então o gate aqui seria redundante" — está certa sobre o
+    // DESENHO (uma lista vazia não pinta nada) e errada sobre a DISPUTA:
+    // institutional_zones é rank 3 em AUTO_LAYER_PRECISION_ORDER, e
+    // relevant:true incondicional a fazia vencer um dos 3 lugares mais
+    // precisos do teto do modo automático MESMO VAZIA — empurrando pra
+    // fora uma camada de posição mais baixa que tinha conteúdo real. Agora
+    // segue o mesmo padrão de hasFibonacciLevels/hasZigZagPivots acima:
+    // existência real, nunca proximidade.
+    institutional_zones: input.institutionalZoneCount > 0
+      ? { relevant: true, emphasis: "normal", reason: `${input.institutionalZoneCount} zona(s) real(is) de confluência institucional` }
+      : { relevant: false, emphasis: "normal", reason: "sem confluência real cruzada entre ≥2 fontes ainda — lista de zonas vazia" },
 
     // Achado 2.5: mesmo papel de tpo_profile/zigzag acima — existência
     // real de pelo menos 1 alvo projetado em qualquer caminho, nunca
@@ -478,6 +556,38 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     scenario_projection: input.hasScenario
       ? { relevant: true, emphasis: "normal", reason: "Motor de Cenários real com pelo menos 1 alvo projetado (pathA ou pathB)" }
       : { relevant: false, emphasis: "normal", reason: "nenhum alvo real projetado em nenhum dos 2 caminhos do Motor de Cenários" },
+
+    // Auditoria do ecossistema de indicadores: mesmo papel de tpo_profile/
+    // zigzag/scenario_projection acima — existência real (candle diário
+    // anterior fechado disponível), nunca proximidade ao preço vivo.
+    pivot_points: input.hasPivotPoints
+      ? { relevant: true, emphasis: "normal", reason: "Pivot Points reais do candle diário anterior fechado" }
+      : { relevant: false, emphasis: "normal", reason: "sem candle diário fechado real ainda (dado ainda carregando ou símbolo sem histórico diário suficiente)" },
+
+    // Mesmo padrão de existência real das demais graduações.
+    ichimoku: input.hasIchimoku
+      ? { relevant: true, emphasis: "normal", reason: "Ichimoku real com aquecimento de 52 candles cumprido — nuvem e linhas de equilíbrio" }
+      : { relevant: false, emphasis: "normal", reason: "menos de 52 candles reais — sem nuvem honesta para desenhar" },
+
+    // ÚNICA camada cuja relevância é a LEITURA, não a existência do motor:
+    // uma divergência é rara por definição, e o overlay desenha NADA quando
+    // não há uma. Marcar relevante só porque o CVD cobre velas suficientes
+    // gastaria vaga do teto de 6 numa camada em branco.
+    delta_divergence: input.hasDeltaDivergence
+      ? { relevant: true, emphasis: "highlight", reason: "divergência real entre preço e CVD detectada — exaustão de um dos lados" }
+      : {
+          relevant: false,
+          emphasis: "normal",
+          reason:
+            input.deltaDivergenceCoveredCandles > 0
+              ? `sem divergência agora (CVD real cobre ${input.deltaDivergenceCoveredCandles} velas)`
+              : "sem CVD real retido ainda — o histórico enche a ~4s por amostra durante a sessão",
+        },
+
+    // Mesmo padrao de existencia real das demais graduacoes.
+    andrews_pitchfork: input.hasAndrewsPitchfork
+      ? { relevant: true, emphasis: "normal", reason: "garfo real sobre 3 pivos alternados confirmados — mediana e paralelas" }
+      : { relevant: false, emphasis: "normal", reason: "sem 3 pivos alternados confirmados ainda — nenhum garfo honesto para desenhar" },
   };
 }
 
@@ -526,6 +636,14 @@ export const AUTO_LAYER_PRECISION_ORDER: readonly string[] = [
   "volume_profile",       // POC canônico
   "equal_highs_lows",
   "liquidity_sweep",
+  // Mesma classe de evento do sweep logo acima ("aconteceu AQUI"), e
+  // cadastrada de propósito em vez de confiar no "entra por último": o
+  // ACHADO MEDIDO logo abaixo prova que, na prática, "por último" era
+  // "nunca". A regra de delta_divergence emite `highlight` quando há
+  // leitura real — o caminho que o mesmo achado identifica como o único
+  // resgate — mas depender só disso repetiria o erro de candle_patterns
+  // com um passo a mais de sorte.
+  "delta_divergence",
   // ACHADO MEDIDO (pedido do Operador: "nada que está pra trás"):
   // candle_patterns estava FORA desta lista. O comentário acima promete que
   // "camada fora desta lista entra por último — nunca some por omissão", mas
@@ -559,6 +677,22 @@ export const AUTO_LAYER_PRECISION_ORDER: readonly string[] = [
   "order_flow_heatmap",
   "liquidation_heatmap",
   "session_key_levels",
+  // Auditoria do ecossistema de indicadores: rank deliberadamente BAIXO,
+  // apesar de ser um nível estrutural real — o custo real é 7 objetos (mais
+  // da metade do orçamento de 12), então rankeá-lo alto faria uma única
+  // camada nova dominar o teto sempre que relevante, empurrando pra fora
+  // âncoras mais acionáveis (plano/BOS/zonas) que já estavam na tela antes
+  // dele existir. Mesmo raciocínio já aplicado a candle_patterns acima,
+  // na direção oposta (ordem por critério declarado, nunca por gosto).
+  "pivot_points",
+  // Ichimoku é contexto CONTÍNUO de fundo (como VWAP/EMA), não âncora
+  // acionável nem evento pontual — e custa 4. Rank baixo pelo mesmo
+  // critério declarado no topo desta lista: responde "como está o
+  // cenário", nunca "onde entro/saio agora".
+  "ichimoku",
+  // Mesmo criterio do ichimoku logo acima: canal de contexto continuo,
+  // responde "como esta o cenario", nunca "onde entro agora".
+  "andrews_pitchfork",
   "market_sessions",
   "kill_zones",
   "scenario_projection",
@@ -601,9 +735,27 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   vwap: 5,
   trend_channel: 3,
   candle_patterns: 4,
-  // Declarados — camadas que desenham um conjunto de níveis/zonas
-  liquidity_zones: 3,
-  fibonacci: 3,
+  // CORRIGIDO (achado medido): estava DECLARADO como 3 e o valor real
+  // chegava a 15 — cinco populações de banda (FVG, Order Block, Void,
+  // Breaker, Mitigation) com um teto próprio de 3 cada, nenhuma sabendo
+  // das outras. Uma subdeclaração de 5x justamente na camada que mais
+  // desenha, num orçamento total de 12: ela sozinha podia estourar o
+  // canvas inteiro. Agora as cinco disputam UM orçamento
+  // (selectSharedZoneHighlights, liquidity-significance.ts), então este
+  // número virou CONTADO — é literalmente o mesmo teto, importado da
+  // fonte, nunca uma segunda constante que pode divergir em silêncio.
+  liquidity_zones: SHARED_ZONE_HIGHLIGHT_SLOTS,
+  // CORRIGIDO na mesma cacada do liquidity_zones acima — o mesmo defeito
+  // aparecia em mais tres linhas desta tabela, e as tres agora sao CONTADAS
+  // em vez de estimadas:
+  //
+  //   fibonacci  — declarava 3, desenha 5. O grafico faz
+  //     `fibonacciLevels.forEach` SEM filtro, e o proprio comentario de la
+  //     diz "sem nenhuma linha desaparecer (piso real)": as 5 razoes sempre
+  //     entram, so' a opacidade varia. Agora vem da fonte
+  //     (FIB_RETRACEMENT_RATIOS.length), entao acrescentar uma razao nova
+  //     ajusta o custo sozinho — nao da' pra divergir de novo em silencio.
+  fibonacci: FIB_RETRACEMENT_RATIOS.length,
   trade_plan_zone: 3,
   equal_highs_lows: 2,
   structure_breaks: 2,
@@ -619,7 +771,17 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   volume_profile: 1,
   tpo_profile: 1,
   order_book_depth: 1,
-  harmonics: 1,
+  //   harmonics — declarava 1, e este eu PIOREI. A unidade desta tabela é o
+  //     objeto que o OLHO vê (ver a justificativa do supertrend logo
+  //     abaixo: 2 séries que a lib desenha como um traço só custam 1).
+  //     Antes, só UMA família de padrão desenhava por vez, então o pior
+  //     caso era o ziguezague + a neckline do OCO = 2 figuras. Ao tirar o
+  //     Triângulo da disputa — para ele parar de sumir do gráfico —, o pior
+  //     caso simultâneo virou ziguezague + neckline + o Triângulo (suas 2
+  //     retas convergentes são UMA figura, não duas) = 3.
+  //     Corrigir a etiqueta é parte da mesma mudança, não um extra: eu subi
+  //     o custo real e a declaração tinha de acompanhar.
+  harmonics: 3,
   zigzag: 1,
   // Duas LineSeries nativas (uma por sentido de tendência) — mas a lib
   // desenha um único traço contínuo na tela, então o custo de LEITURA é 1,
@@ -630,6 +792,25 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   market_sessions: 1,
   kill_zones: 1,
   neural_market_aura: 1,
+  // Auditoria do ecossistema de indicadores: CONTADO no código, não
+  // estimado (mesma disciplina desta tabela) — createPriceLine é chamado
+  // até 7 vezes (PP+R1-3+S1-3), cada linha um objeto que o olho vê
+  // separadamente (7 alturas de preço distintas, não um traço contínuo
+  // como supertrend). Honesto mesmo sendo um custo alto: mentir pra caber
+  // no orçamento seria repetir o defeito que este arquivo já corrigiu 3x.
+  pivot_points: 7,
+  // CONTADO: 3 linhas (Tenkan/Kijun/Chikou) + a nuvem, que o olho lê como
+  // UMA faixa só (mesma unidade "objeto percebido" que faz supertrend
+  // custar 1 com 2 séries). As 2 bordas Senkou fazem parte da faixa, não
+  // são leituras separadas.
+  ichimoku: 4,
+  // CONTADO: 1 linha + 2 pontos + 1 rótulo, e só quando existe leitura —
+  // na maior parte do tempo esta camada custa isso e desenha nada. Mesma
+  // unidade "objeto percebido" das demais.
+  delta_divergence: 2,
+  // CONTADO: 3 retas. Os 3 pontos de pivo sao marcas de 2,5px que o olho le
+  // como parte das retas, nao como objetos separados.
+  andrews_pitchfork: 3,
 };
 
 /** Custo real de uma camada. Fail-closed: desconhecida custa 1 — entra na

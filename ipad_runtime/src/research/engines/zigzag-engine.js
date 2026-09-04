@@ -32,6 +32,34 @@
 // Motor puro abaixo inalterado desde o isolamento original — ver
 // QUARANTINE.md para o histórico da graduação.
 
+// ACHADO REAL (auditoria "milímetro a milímetro" pedida pelo Operador,
+// 2026-09-01): este era o único motor GRADUADO do repositório sem
+// `export const metadata` — a auto-declaração que
+// `quarantine-registry.test.ts` cruza contra a árvore-resumo e as seções
+// detalhadas do QUARANTINE.md (a "terceira fonte de verdade"). Sem
+// metadata, `statusDe()` devolve `null` e o teste PULA este arquivo em
+// silêncio nas 3 checagens que dependem dela — não é uma mentira ativa
+// (o import em engine-bridge.ts é real, conferido por leitura direta),
+// mas era um ponto cego real na própria rede que este projeto construiu
+// para pegar exatamente esse tipo de coisa. hmm-regime-model.js tinha o
+// mesmo buraco — ver o cabeçalho dele.
+export const metadata = {
+    engine: 'zigzag-engine',
+    description: 'ZigZag classico (deviation % + profundidade minima de barras) sobre candles reais — pivos CONFIRMADOS apenas, nunca a perna em formacao.',
+    concepts: [
+        'ZigZag classico (deviation % + depth, StockCharts/CFI/Capital.com)',
+        'Rastreamento de dois lados simultaneo ate a primeira confirmacao (dir=0)',
+        'Fail-closed: dado insuficiente = DADOS_INSUFICIENTES; mercado parado = OK com points:[]',
+    ],
+    required_data: ['ohlcv_series com high/low reais'],
+    status: 'ACTIVE_READ_ONLY',
+    limitations: [
+        'Distinto do fractal de K barras fixas (fractal-swings.js): ZigZag usa limiar percentual + profundidade, os 2 parametros reais do indicador nomeado — nao e um sinonimo do fractal.',
+        'A perna mais recente, ainda sem reversao de deviation% confirmada, nunca aparece na saida — mostrar um pivo que pode mudar seria o oposto do fail-closed deste projeto.',
+        'Direcao (HIGH/LOW) e um FATO do pivo, nunca uma emissao de LONG/SHORT (LEI 24): o unico emissor de direcao continua sendo o Core Engine.',
+    ],
+};
+
 export const ZIGZAG_DEFAULT_DEVIATION_PCT = 5;
 export const ZIGZAG_DEFAULT_DEPTH = 3;
 

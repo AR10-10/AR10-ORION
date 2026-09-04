@@ -58,7 +58,11 @@ export const metadata = {
     description: 'SuperTrend (Olivier Seban) — banda ATR travada em catraca que trilha o preco como stop dinamico e inverte por fechamento real alem da banda oposta.',
     concepts: ['SuperTrend', 'ATR de Wilder (computeAtrPercent, lorentzian-classifier.js)', 'Trailing stop por catraca de banda final', 'Flip por fechamento (nunca por pavio)'],
     required_data: ['ohlcv_series com high/low/close reais por candle'],
-    status: 'LABORATORIO',
+    // CORRIGIDO: ficou 'LABORATORIO' por 8 dias depois da graduacao real
+    // (2026-08-23) — o engine-bridge.ts ja o importava, ele ja tinha camada
+    // propria no grafico e custo no orcamento visual. Mesmo defeito que a
+    // arvore-resumo do QUARANTINE.md tinha, na terceira fonte de verdade.
+    status: 'ACTIVE_READ_ONLY',
     limitations: [
         'period=10 / multiplier=3 sao os defaults REAIS de mercado (TradingView e a maioria das plataformas), nao uma calibracao deste repositorio — nenhum backtest local sustenta que sejam otimos para cripto/USDT-M.',
         'O primeiro ponto avaliavel e um SEED, nao um flip confirmado: a direcao inicial e decidida por close vs. o ponto medio do proprio candle (decisao declarada, ver SEED abaixo). Cada ponto carrega flipped:false ate o primeiro cruzamento real, e o consumidor nunca deve ler o seed como sinal.',

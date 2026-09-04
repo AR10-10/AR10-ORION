@@ -64,7 +64,7 @@ pura, mesmo padrão já usado por `formatScenarioPathLabel` no mesmo
 componente — LEI 24 intacta, nunca uma segunda pool).
 
 O campo `weight` do contrato (um dos ~4 já rastreados de verdade, ver
-`docs/RELATORIO_EPC_OMEGA_FINAL.md` Parte 1) é `null` exatamente quando um
+`docs/historico/RELATORIO_EPC_OMEGA_FINAL.md` Parte 1) é `null` exatamente quando um
 voto está estruturalmente fora do pool linear real do Conselho — RISK
 (portão fail-closed, nunca voto direcional) ou ABSTAIN (ausência real de
 opinião). Essa distinção já EXISTIA no cálculo (`aggregateCouncil`,

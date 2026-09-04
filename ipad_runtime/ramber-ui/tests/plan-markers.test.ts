@@ -16,6 +16,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildPlanMarkers, candleIndexAt, type PlanMarkerSource } from "../src/chart/plan-markers";
+import { DEFAULT_MIN_OPPORTUNITY_SCORE } from "../src/nexus/institutional-score";
 
 const read = (p: string) => readFileSync(resolve(__dirname, p), "utf-8");
 
@@ -112,6 +113,79 @@ describe("resultado real da saída, nunca uma cor otimista", () => {
   it("o texto diz o que aconteceu, sem eufemismo", () => {
     expect(buildPlanMarkers([plano({ status: "STOP_HIT" })], velas(20))[1].text).toBe("SAÍDA · STOP");
     expect(buildPlanMarkers([plano({ status: "PARTIAL_HIT" })], velas(20))[1].text).toBe("SAÍDA · PARCIAL");
+  });
+});
+
+describe("filtro de confiança — pedido do Operador: só a entrada com confluência real", () => {
+  it("score abaixo do piso omite o PAR inteiro, nunca só uma seta órfã", () => {
+    const c = velas(20);
+    const m = buildPlanMarkers([plano({ contextAtOpen: { score: DEFAULT_MIN_OPPORTUNITY_SCORE - 1 } })], c);
+    expect(m).toEqual([]);
+  });
+
+  it("score exatamente no piso ainda mostra — o corte é '< piso', não '<= piso'", () => {
+    const c = velas(20);
+    const m = buildPlanMarkers([plano({ contextAtOpen: { score: DEFAULT_MIN_OPPORTUNITY_SCORE } })], c);
+    expect(m).toHaveLength(2);
+  });
+
+  it("score real acima do piso mostra o par normalmente", () => {
+    const c = velas(20);
+    const m = buildPlanMarkers([plano({ contextAtOpen: { score: 95 } })], c);
+    expect(m).toHaveLength(2);
+    expect(m[0].text).toContain("ENTRADA");
+  });
+
+  it("plano ABERTO (sem saída ainda) com score fraco também some", () => {
+    const c = velas(20);
+    const m = buildPlanMarkers(
+      [plano({ status: "OPEN", resolvedAt: null, contextAtOpen: { score: 10 } })],
+      c,
+    );
+    expect(m).toEqual([]);
+  });
+
+  it("fail-open: contextAtOpen ausente (registro antigo) continua aparecendo", () => {
+    const c = velas(20);
+    const { contextAtOpen: _omit, ...semContexto } = plano();
+    const m = buildPlanMarkers([semContexto as PlanMarkerSource], c);
+    expect(m).toHaveLength(2);
+  });
+
+  it("fail-open: score null (indisponível na abertura) nunca é tratado como 'abaixo'", () => {
+    const c = velas(20);
+    const m = buildPlanMarkers([plano({ contextAtOpen: { score: null } })], c);
+    expect(m).toHaveLength(2);
+  });
+
+  it("lista mista: só o plano com confluência real passa, o outro some por inteiro", () => {
+    const c = velas(20);
+    const fraco = plano({ openedAt: noMeioDa(2), resolvedAt: noMeioDa(5), contextAtOpen: { score: 20 } });
+    const forte = plano({ openedAt: noMeioDa(10), resolvedAt: noMeioDa(15), contextAtOpen: { score: 80 } });
+    const m = buildPlanMarkers([fraco, forte], c);
+    expect(m).toHaveLength(2);
+    expect(m.every((marker) => marker.time === c[10].time || marker.time === c[15].time)).toBe(true);
+  });
+});
+
+describe("a etiqueta de ENTRADA mostra a % real de confluência (pedido do Operador)", () => {
+  it("score real aparece arredondado, na entrada", () => {
+    const c = velas(20);
+    const [entrada] = buildPlanMarkers([plano({ contextAtOpen: { score: 77.6 } })], c);
+    expect(entrada.text).toBe("ENTRADA LONG · 78%");
+  });
+
+  it("fail-open: sem score real, a etiqueta não ganha sufixo fabricado", () => {
+    const c = velas(20);
+    const { contextAtOpen: _omit, ...semContexto } = plano();
+    const [entrada] = buildPlanMarkers([semContexto as PlanMarkerSource], c);
+    expect(entrada.text).toBe("ENTRADA LONG");
+  });
+
+  it("a SAÍDA nunca ganha a % — não existe um score próprio no fechamento", () => {
+    const c = velas(20);
+    const [, saida] = buildPlanMarkers([plano({ contextAtOpen: { score: 90 } })], c);
+    expect(saida.text).not.toMatch(/%/);
   });
 });
 

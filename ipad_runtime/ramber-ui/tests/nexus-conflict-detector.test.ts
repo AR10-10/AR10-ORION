@@ -1,5 +1,5 @@
 // nexus-conflict-detector.test.ts — Auditoria MarketBrain (Fase 1 real e
-// pequena): execução real do módulo puro (docs/AUDITORIA_MARKETBRAIN.md
+// pequena): execução real do módulo puro (docs/historico/AUDITORIA_MARKETBRAIN.md
 // §3), mesmo padrão de nexus-line.test.ts (nexusConfluenceVerdict).
 import { describe, it, expect } from 'vitest';
 import { regimeStructureVerdict, riskConfluenceVerdict, collectConflicts } from '../src/nexus/conflict-detector';

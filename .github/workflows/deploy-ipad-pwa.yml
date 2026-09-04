@@ -15,14 +15,24 @@ name: Deploy iPad Runtime (GitHub Pages)
 # O deploy real agora é deploy-cloudflare-pages.yml, onde a autenticação
 # acontece no servidor (Cloudflare Access), antes da entrega.
 #
-# DESLIGADO DE NOVO — instrucao mais recente do Operador, que substitui a
-# anterior: "prepara o sistema todo pra rodar localmente na minha maquina...
-# todos os dados fica privado na minha, so eu ter acesso... tem como bloquear
-# esse que ta publicado la, ou remover, pra ele nao ficar publico".
+# RELIGADO (2026-08-31) — instrucao mais recente do Operador, que substitui
+# a anterior: "a gente vai desabilitar o servidor local por enquanto, focar
+# so na parte da nuvem" e depois "ligue correndo o oficial, certinho, pra me
+# usar".
 #
-# A escolha anterior ("GitHub Pages de novo") foi feita quando o objetivo era
-# manter o iPad atualizado. O objetivo mudou: rodar local. Publicar deixou de
-# ser desejado, entao o gatilho `push` sai de novo.
+# O historico completo desta gangorra fica registrado de proposito, porque
+# cada virada teve uma razao real: Pages -> desligado por privacidade ->
+# Cloudflare Access -> rodar local -> Pages de novo. O que mudou agora e' o
+# objetivo declarado: o Operador quer USAR o painel pela URL oficial
+# (https://ar10-10.github.io/AR10-ORION/).
+#
+# POR QUE O GATILHO APONTA PARA A BRANCH DE TRABALHO, E NAO SO' PARA main:
+# medido nesta data, `main` esta 208 commits ATRAS da branch de trabalho
+# (PR #15 e PR #16 ainda nao mergeadas). Publicar a partir de main colocaria
+# no ar algo AINDA MAIS VELHO que o build de 24/08 que ja esta la — inclusive
+# sem a correcao do defeito em que o grafico MENSAL era lido como de 1 MINUTO
+# (erro de fator 43.200). main segue na lista para o dia em que as PRs forem
+# mergeadas; ate' la, a branch de trabalho e' a unica fonte honesta.
 #
 # ATENCAO, e isto e o que realmente importa: desligar este workflow impede
 # NOVAS publicacoes, mas NAO tira do ar o site ja publicado. Isso so acontece
@@ -33,7 +43,29 @@ name: Deploy iPad Runtime (GitHub Pages)
 # abaixo. Sem VITE_ACCESS_HASH cadastrado, este workflow FALHA em vez de
 # publicar um build que trancaria o Operador para fora do proprio painel.
 # ═══════════════════════════════════════════════════════════════════════
+# MEDIDO EM EXECUCAO REAL (2026-08-31), corrigindo a tentativa anterior:
+# incluir a branch de trabalho aqui NAO funciona. O job morreu em 2 SEGUNDOS,
+# sem log de nenhum passo — ou seja, rejeitado ANTES do checkout, no nivel do
+# `environment: github-pages` declarado abaixo, nunca no codigo.
+#
+# A causa nao e' "Pages nao aceita branch que nao seja a padrao": os deploys
+# de 24/08 rodaram com SUCESSO a partir de `claude/eloquent-cannon-qyt86y`,
+# que tambem nao era a padrao. O ambiente tem uma LISTA de branches
+# autorizadas, e ela ficou com a branch antiga — nao com esta.
+#
+# Isso e' configuracao de repositorio (Settings > Environments >
+# github-pages > Deployment branches), fora do alcance de qualquer commit.
+# Entao o caminho honesto nao e' insistir aqui: e' `main`, que ja e' a
+# origem naturalmente autorizada. Para o site publicar a versao ATUAL, o
+# que falta e' mergear PR #15 e PR #16 — o mesmo passo que tira o `main` de
+# 208 commits de atraso. Um passo resolve os dois problemas.
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ipad_runtime/**'
+      - '.github/workflows/deploy-ipad-pwa.yml'
   workflow_dispatch:
 
 permissions:
@@ -53,7 +85,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # ramber-ui/ is the source tree for the RAMBER terminal (React/
       # Vite) — the ONLY app served at this repo's root. Its build output
@@ -62,7 +94,7 @@ jobs:
       # committed (generated fresh on every deploy), same reasoning as
       # node_modules/dist being gitignored — only source is versioned.
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'

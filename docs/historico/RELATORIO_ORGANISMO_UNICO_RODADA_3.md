@@ -68,7 +68,7 @@ mesmo documento. Mantido como está.
 ## §2-§10: reconfirmação por referência, não por repetição
 
 Cada um dos demais pontos já foi auditado com evidência fresca na
-Entrega 23 (`docs/RELATORIO_ORGANISMO_UNICO_FASE_FINAL.md`), sobre o
+Entrega 23 (`docs/historico/RELATORIO_ORGANISMO_UNICO_FASE_FINAL.md`), sobre o
 MESMO código que continua no `HEAD` agora:
 
 | Ponto desta Ordem | Já verificado em | Resultado |

@@ -61,7 +61,7 @@ describe('App.tsx → EnhancedChart_110_Percent: structureBreak passa ponta a po
     const app = read('../src/App.tsx');
     // liquidityVoids (liquidity-void-engine.js) viaja pelo MESMO contexto,
     // na mesma posição — zero segunda rota de dado até o gráfico.
-    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, institutionalBlocks, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
+    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, institutionalBlocks, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, institutionalScore, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
     expect(app).toContain('structureBreak={bosChoch?.break ?? null}');
   });
 
@@ -114,7 +114,15 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     // O kind passa por uma forma curta (BRK/MIT) antes de entrar no rótulo,
     // desde a graduação de institutional-blocks.js — mesma disciplina de "o
     // tamanho das etiquetas". Glifo de direção e contagem ×N inalterados.
-    expect(plugin).toContain('const label = `${kindLabel}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
+    // Achado real ("o gráfico não tá legal"): a montagem do label virou uma
+    // função própria (labelFor), reusada tanto por Void (fusão+desenho
+    // juntos, drawGroup) quanto pelo grupo compartilhado FVG/OB/Breaker/
+    // Mitigation (drawSharedFillGroup) — zero segunda implementação de
+    // rótulo, mesmo texto exato.
+    expect(plugin).toContain(
+      'const labelFor = (kind: ZoneKind, type: "BULLISH" | "BEARISH", group: { memberCount: number; isObstacle: boolean }) =>',
+    );
+    expect(plugin).toContain('`${kindLabelOf(kind)}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
   });
 
   it('Diretriz Consolidação/Auditoria/Evolução (achado real): zona-obstáculo de um plano ATIVO nunca esmaece por idade fixa — alpha=1 enquanto isObstacleZone, ageAlpha normal caso contrário', () => {
@@ -152,7 +160,13 @@ describe('StructureBreakMarkersPlugin.tsx: mesma arquitetura de overlay do Liqui
     // a linha real (moveTo/lineTo/stroke) continua real; só o ponto de
     // partida deslocou para depois da seta, nunca mais sobre ela.
     expect(plugin).toContain('ctx.moveTo(x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, yLine);');
-    expect(plugin).toContain('ctx.lineTo(cssWidth, yLine);');
+    // A linha para na FRONTEIRA MEDIDA do eixo (chart-plot-area.ts), nunca
+    // em cssWidth — que e a borda do CONTAINER e faria a linha correr por
+    // baixo dos numeros do preco. Invariante somado, nao afrouxado: a
+    // asserção negativa abaixo trava o retorno ao valor antigo.
+    expect(plugin).toContain('ctx.lineTo(plotRight, yLine);');
+    expect(plugin).toContain('measurePlotArea');
+    expect(plugin).not.toContain('ctx.lineTo(cssWidth, yLine);');
     expect(plugin).toContain('ctx.stroke();');
   });
 
@@ -208,7 +222,12 @@ describe('Achado real de captura de tela do Operador: rótulo BOS/CHOCH migrado 
   it('EnhancedChart_110_Percent importa BREAK_DECAY do plugin e ageAlpha de annotation-decay — mesma dupla real, zero segunda fonte', () => {
     const c = chart();
     expect(c).toContain('import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";');
-    expect(c).toContain('import { ageAlpha, type DecayConfig } from "./annotation-decay";');
+    // Pendência #6: `type DecayConfig` saiu deste import — deixou de ser
+    // usado no arquivo quando SWEEP_DECAY migrou para
+    // LiquiditySweepLinesPlugin.tsx (import próprio, ver
+    // liquidity-sweep-lines-plugin-wiring.test.ts). ageAlpha continua real
+    // aqui (etiquetas do eixo de BOS/CHOCH e de Sweep).
+    expect(c).toContain('import { ageAlpha } from "./annotation-decay";');
   });
 
   it('a entrada em priceAxisLabels usa o MESMO price/type/direction do structureBreak real — nunca uma segunda leitura', () => {

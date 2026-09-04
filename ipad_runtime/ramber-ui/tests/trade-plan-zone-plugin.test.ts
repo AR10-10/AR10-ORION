@@ -68,9 +68,13 @@ describe('TradePlanZonePlugin: §17 confidence-scaled opacity — the SAME real 
 
   it('confidenceZone is threaded through the same ref pattern as entryLow/entryHigh — always latest, never re-triggers the setup effect', () => {
     const s = plugin();
-    expect(s).toContain('const rangeRef = useRef({ entryLow, entryHigh, confidenceZone, visualWeight });');
-    expect(s).toContain('rangeRef.current = { entryLow, entryHigh, confidenceZone, visualWeight };');
-    expect(s).toContain('}, [entryLow, entryHigh, confidenceZone, visualWeight]);');
+    // Rodada de acessibilidade da navegação/gráfico (achado real: "cada
+    // item no seu canto, nada cobrindo nada") — activeLanes entra no
+    // MESMO ref/dirty-check, mesmo padrão já provado por
+    // entryLow/entryHigh/confidenceZone/visualWeight.
+    expect(s).toContain('const rangeRef = useRef({ entryLow, entryHigh, confidenceZone, visualWeight, activeLanes });');
+    expect(s).toContain('rangeRef.current = { entryLow, entryHigh, confidenceZone, visualWeight, activeLanes };');
+    expect(s).toContain('}, [entryLow, entryHigh, confidenceZone, visualWeight, activeLanes]);');
   });
 
   it('Ordem Nº 03: visualWeight (competição cruzada real via nexus/visual-budget.ts) vence quando fornecido; cai em opacityMultiplierFor(zone) — nunca um segundo esquema — quando ausente', () => {
@@ -140,7 +144,7 @@ describe('EnhancedChart_110_Percent: mounts TradePlanZonePlugin as the topmost o
 describe('App.tsx: threads the real confidenceZone (§16) from context into ChartWidget → EnhancedChart_110_Percent', () => {
   it('ChartWidget destructures confidenceZone from the shared WidgetContext', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
+    expect(app).toContain('setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, institutionalScore, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
   });
 
   it('passes it straight through to EnhancedChart_110_Percent — zero recomputation', () => {

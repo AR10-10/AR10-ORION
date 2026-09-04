@@ -199,12 +199,19 @@ describe('Fibonacci refaz o mapeamento a cada tempo gráfico', () => {
 
   it('o produtor da matriz depende de chartData — a série do timeframe ATUAL', () => {
     const src = app();
-    const i = src.indexOf('setFibonacciConfluence(\n      computeRealFibonacciConfluence(chartData, sources)');
+    const i = src.indexOf('computeRealFibonacciConfluence(chartData, sources,');
     expect(i, 'produtor da confluência Fibonacci não encontrado').toBeGreaterThan(-1);
     // O array de dependências do efeito tem de incluir chartData: é ele que
     // troca quando o Operador muda de tempo gráfico.
-    const deps = src.slice(i, i + 900);
+    const deps = src.slice(i, i + 1200);
     expect(deps).toContain('}, [chartData,');
+    // REFORÇO desta rodada: depender de chartData garante que a série é a do
+    // timeframe atual, mas NÃO garantia que o critério da perna mudasse com
+    // ele — com FRACTAL_K = 2 fixo, a perna era a menor ondulação possível
+    // em 1m e em 1W igualmente. O ATR% real do período agora entra como
+    // terceiro argumento e escala o limiar do ZigZag da perna.
+    expect(src).toContain('engine?.marketRegime?.atrPercent ?? null),');
+    expect(deps).toContain("engine?.marketRegime?.atrPercent");
   });
 
   it('a matriz é zerada quando não há série real — nunca reaproveita a do timeframe anterior', () => {
@@ -221,5 +228,138 @@ describe('Fibonacci refaz o mapeamento a cada tempo gráfico', () => {
     // O mapeamento para o formato do chart é passthrough puro (ratio/price/
     // score reais), sem recalcular nada.
     expect(src).toContain('fibonacciMatrix.levels.map((l) => ({ ratio: l.ratio, price: l.price, score: l.score }))');
+  });
+});
+
+// ═══ O CUSTO DECLARADO TEM DE BATER COM O QUE A TELA RECEBE ═══
+//
+// Esta suite existe por um padrao que se repetiu quatro vezes nesta trilha:
+// um comentario/constante AFIRMA uma coisa e o codigo faz outra. O caso mais
+// caro foi `liquidity_zones`, que declarava 3 objetos e desenhava ate 15 —
+// numa camada cujo orcamento total do canvas e' 12.
+//
+// A unidade da tabela e' o objeto que o OLHO ve, nao a contagem de artefatos
+// de codigo: `supertrend` cria 2 LineSeries que a lib desenha como um traco
+// unico, e por isso custa 1 com razao. Os testes abaixo travam so' os casos
+// em que ha uma FONTE verificavel para comparar.
+describe('LAYER_VISUAL_COST: declarado x real', () => {
+  const src = (p: string) => readFileSync(resolve(__dirname, p), 'utf-8');
+
+  it('fibonacci custa exatamente o numero de razoes que ele desenha', () => {
+    // Vem de FIB_RETRACEMENT_RATIOS.length por import, entao acrescentar uma
+    // razao ajusta o custo sozinho. Este teste guarda o ELO: se alguem trocar
+    // o import por um numero cravado, a igualdade quebra na primeira mudanca.
+    const fib = src('../src/nexus/fibonacci-confluence.ts');
+    const razoes = fib.match(/FIB_RETRACEMENT_RATIOS = \[([^\]]*)\]/)?.[1] ?? '';
+    const quantas = razoes.split(',').filter((s) => s.trim().length > 0).length;
+    expect(quantas).toBeGreaterThan(0);
+    expect(layerVisualCost('fibonacci')).toBe(quantas);
+  });
+
+  it('a premissa do custo do fibonacci: o grafico desenha TODAS as razoes, sem filtro', () => {
+    // Se alguem passar a filtrar niveis antes de desenhar, o custo deixa de
+    // ser o numero de razoes — e este teste avisa em vez de deixar a tabela
+    // mentir de novo. O forEach nao pode ganhar um filter/slice antes dele.
+    const chart = src('../src/chart/EnhancedChart_110_Percent.tsx');
+    // Ancora no efeito de DESENHO (o guard de visibilidade e' unico dele) —
+    // `fibLinesRef.current = []` sozinho tambem casa com o teardown.
+    const i = chart.indexOf('if (!visibility.fibonacci) return;');
+    expect(i).toBeGreaterThan(-1);
+    const bloco = chart.slice(i, i + 300);
+    expect(bloco).toContain('(fibonacciLevels ?? []).forEach((level, i) => {');
+    expect(bloco).not.toContain('.filter(');
+    expect(bloco).not.toContain('.slice(');
+  });
+
+  it('harmonics cobre as figuras que podem aparecer JUNTAS', () => {
+    // O Triangulo saiu da disputa (para parar de sumir), entao ziguezague,
+    // neckline e Triangulo podem coexistir — custo 3 porque as 2 retas
+    // convergentes do Triangulo sao UMA figura para quem olha. Pendência
+    // #6: a geometria inteira migrou de createPriceLine/addSeries nativo
+    // (4 séries dedicadas) pra HarmonicGeometryPlugin.tsx (canvas próprio,
+    // zero série nativa) — o NÚMERO de figuras visíveis simultâneas não
+    // mudou (mesma disputa/mesma coexistência), só o mecanismo de desenho;
+    // por isso o custo declarado continua 3, verificado agora contra o
+    // plugin em vez de contra séries nativas que não existem mais.
+    const plugin = src('../src/chart/HarmonicGeometryPlugin.tsx');
+    expect(plugin).toContain('const drawZigzagOutline = (points: Array<HarmonicPoint | undefined>) => {');
+    expect(plugin).toContain('const drawSegment = (startPrice: number, startTime: number, endPrice: number, endTime: number) => {');
+    // E o Triangulo desenha FORA do encadeamento do vencedor — e' isso que
+    // torna a coexistencia real, e portanto o custo 3 em vez de 2.
+    expect(plugin).toContain('if (triangle) {');
+    expect(layerVisualCost('harmonics')).toBe(3);
+  });
+
+  it('nenhuma camada sozinha estoura o orcamento inteiro do canvas', () => {
+    // O defeito estrutural do liquidity_zones em uma linha: uma camada
+    // custando mais que AUTO_LAYER_MAX_VISUAL_COST nunca caberia, e antes da
+    // correcao ela cabia mentindo. Se alguem declarar um custo assim, o
+    // orcamento vira ficcao — entao isto e' um piso permanente.
+    for (const id of AUTO_LAYER_PRECISION_ORDER) {
+      expect(layerVisualCost(id)).toBeLessThanOrEqual(AUTO_LAYER_MAX_VISUAL_COST);
+    }
+  });
+});
+
+// ═══ A PROVA DO MECANISMO: uma camada vazia não pode custar a vaga de uma ═══
+// ═══ camada com conteúdo real (achado desta rodada)                       ═══
+//
+// layer-relevance.test.ts já prova a regra ISOLADA (institutional_zones sem
+// zona real -> relevant:false). O que falta aqui é o EFEITO no teto do modo
+// automático — é o que o Operador via de verdade: "atrapalhando... só os
+// necessário". Antes desta correção, institutional_zones era relevant:true
+// SEMPRE, e por ser rank 3 (atrás só de trade_plan_zone/structure_breaks)
+// vencia vaga contra qualquer camada de posição mais baixa, mesmo desenhando
+// nada.
+describe('institutional_zones/neural_market_aura vazias não custam vaga de camada com conteúdo real', () => {
+  it('CENÁRIO DO DEFEITO (documentado, não mais reproduzível): 2 camadas de topo + 4 reais de posição baixa cabem todas quando as vazias saem da disputa', () => {
+    // Rank real (AUTO_LAYER_PRECISION_ORDER): trade_plan_zone(1),
+    // structure_breaks(2), institutional_zones(3) — todas ANTES das 4
+    // escolhidas abaixo. institutional_zones e neural_market_aura entram
+    // como IRRELEVANTES (o estado real de "vazias" depois da correção) —
+    // exatamente o que a regra corrigida devolve.
+    const relevance = {
+      trade_plan_zone: rel(true),
+      structure_breaks: rel(true),
+      institutional_zones: rel(false), // vazia — não compete mais
+      neural_market_aura: rel(false), // sem plano — não compete mais
+      liquidity_zones: rel(true),
+      order_book_depth: rel(true),
+      volume_profile: rel(true),
+      equal_highs_lows: rel(true),
+    };
+    const out = resolveAutoLayerVisibility(relevance, [], 6);
+    const visiveis = Object.entries(out)
+      .filter(([, d]) => d.show)
+      .map(([id]) => id);
+    // As 6 camadas com conteúdo real cabem TODAS no teto de 6 — nenhuma
+    // ficou de fora por causa de uma vaga gasta com nada.
+    expect(visiveis.sort()).toEqual(
+      [
+        'trade_plan_zone',
+        'structure_breaks',
+        'liquidity_zones',
+        'order_book_depth',
+        'volume_profile',
+        'equal_highs_lows',
+      ].sort(),
+    );
+    expect(out.institutional_zones.show).toBe(false);
+    expect(out.neural_market_aura.show).toBe(false);
+  });
+
+  it('institutional_zones vazia perdendo pra order_book_depth seria o defeito — aqui ela nem entra na disputa', () => {
+    // Se institutional_zones voltasse a ser relevant:true incondicional,
+    // ela venceria order_book_depth (rank mais baixo) só por estar vazia.
+    // Este teste falha se essa regressão voltar.
+    const relevance = {
+      trade_plan_zone: rel(false),
+      structure_breaks: rel(false),
+      institutional_zones: rel(false), // vazia
+      order_book_depth: rel(true), // conteúdo real
+    };
+    const out = resolveAutoLayerVisibility(relevance, [], 1);
+    expect(out.order_book_depth.show, 'camada com conteúdo real perdeu pra uma vazia').toBe(true);
+    expect(out.institutional_zones.show).toBe(false);
   });
 });

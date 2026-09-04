@@ -83,6 +83,8 @@ import {
 import {
   openPaperPosition,
   closePaperPosition,
+  addPaperEntry,
+  recordPaperEquity,
   EMPTY_PAPER_TRADING_STATE,
   type PaperTradingState,
   type PaperCloseReason,
@@ -291,7 +293,7 @@ export interface UnifiedSnapshotState {
   // LONG/SHORT/WAIT (LEI 24). null enquanto o Core Engine está em WAIT ou
   // nenhum componente real está disponível ainda.
   confluenceCorridor: ConfluenceCorridorReading | null;
-  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
   // item 2): buildRiskSuggestion (risk-engine.js) já era computado real em
   // App.tsx (useMemo) mas nunca ganhou fatia própria aqui — ao contrário de
   // QUALQUER outro motor real deste app, nenhum consumidor fora da árvore
@@ -499,8 +501,14 @@ interface UnifiedSnapshotActions {
   // real do Operador na UI — nunca por um efeito de tick de preço (ver
   // header de nexus/paper-trading.ts). hydratePaperTrading é só para o
   // boot (IndexedDB) e testes, mesmo padrão de hydrateTrackRecord.
-  openPaperPosition: (plan: TradePlan | null, sizeUsdt: number) => void;
+  openPaperPosition: (plan: TradePlan | null, sizeUsdt: number, symbol?: string | null, leverage?: number) => void;
   closePaperPosition: (currentPrice: number, reason: PaperCloseReason) => void;
+  /** DCA — aporte na posição aberta, sempre a partir de um clique real. */
+  addPaperEntry: (price: number, sizeUsdt: number) => void;
+  /** Amostra a curva de capital. OBSERVAÇÃO, nunca transição: não abre nem
+   *  fecha posição, então pode ser chamada de um tick de preço sem violar o
+   *  escopo "zero automação" do módulo (ver header de nexus/paper-trading.ts). */
+  recordPaperEquity: (currentPrice: number) => void;
   hydratePaperTrading: (state: PaperTradingState) => void;
 }
 
@@ -650,11 +658,17 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
       s.trackRecord = closed;
       s.trackRecordArchive[key] = closed;
     }),
-    openPaperPosition: (plan, sizeUsdt) => set((s) => {
-      s.paperTrading = openPaperPosition(s.paperTrading as PaperTradingState, plan, sizeUsdt, Date.now());
+    openPaperPosition: (plan, sizeUsdt, symbol, leverage) => set((s) => {
+      s.paperTrading = openPaperPosition(s.paperTrading as PaperTradingState, plan, sizeUsdt, Date.now(), symbol, leverage);
     }),
     closePaperPosition: (currentPrice, reason) => set((s) => {
       s.paperTrading = closePaperPosition(s.paperTrading as PaperTradingState, currentPrice, Date.now(), reason);
+    }),
+    addPaperEntry: (price, sizeUsdt) => set((s) => {
+      s.paperTrading = addPaperEntry(s.paperTrading as PaperTradingState, price, sizeUsdt, Date.now());
+    }),
+    recordPaperEquity: (currentPrice) => set((s) => {
+      s.paperTrading = recordPaperEquity(s.paperTrading as PaperTradingState, currentPrice, Date.now());
     }),
     hydratePaperTrading: (state) => set((s) => { s.paperTrading = state; }),
   })),
@@ -674,6 +688,23 @@ if (typeof window !== "undefined") {
 // re-renderiza o componente quando a fatia SELECIONADA muda (comparação
 // por referência do Zustand), nunca a cada atualização de qualquer parte
 // do snapshot — é isto que resolve o gargalo do Sprint 1.
+//
+// ═══ 13 DESTES SELETORES NÃO TÊM CONSUMIDOR HOJE, E ISSO É DE PROPÓSITO ═══
+//
+// Medido em 2026-08-31 (auditoria de código morto): `useCandles`,
+// `useSmcSnapshot`, `useNexusDecisionSnapshot`, `useSymbolSnapshot` e outros
+// nove não são importados por ninguém — nem por teste. Uma varredura
+// automática de "exports órfãos" os aponta como removíveis. NÃO SÃO.
+//
+// A regra da store (CLAUDE.md, seção Arquitetura) é que todo campo aparece
+// em EXATAMENTE 4 lugares: state → action → default → seletor. A auditoria
+// confirmou 48 campos com os 4 lugares completos, sem uma falha. O preço
+// dessa consistência é justamente este: alguns seletores nascem antes do
+// primeiro consumidor. Removê-los "para limpar" quebraria a regra e faria o
+// próximo campo novo parecer opcional.
+//
+// O custo real é zero: Rollup remove export não usado do bundle. O que fica
+// é fonte, e fonte consistente é o ponto.
 // ─────────────────────────────────────────────────────────────────────────
 
 // §1 MERCADO

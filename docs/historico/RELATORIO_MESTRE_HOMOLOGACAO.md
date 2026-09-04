@@ -1,7 +1,7 @@
 # RELATÓRIO MESTRE DE HOMOLOGAÇÃO — Diretriz Final de Integração Total
 
 **Status:** consolidação técnica final pedida pelo Operador após a entrega
-do EPC OMEGA FINAL (`docs/RELATORIO_EPC_OMEGA_FINAL.md`, leitura
+do EPC OMEGA FINAL (`docs/historico/RELATORIO_EPC_OMEGA_FINAL.md`, leitura
 recomendada para o histórico completo de auditoria/checklists/roadmap —
 este documento não duplica aquele, foca especificamente no que esta
 rodada de integração mudou e no estado final resultante).
@@ -185,7 +185,7 @@ real, exatamente como a diretiva pediu.
    como cruzamento/histograma mapeiam para stance+confiança honesta,
    antes de virar um 8º voto.
 4. Itens já listados no roadmap priorizado de
-   `docs/RELATORIO_EPC_OMEGA_FINAL.md §11` continuam válidos e não
+   `docs/historico/RELATORIO_EPC_OMEGA_FINAL.md §11` continuam válidos e não
    duplicados aqui.
 
 ---
@@ -193,7 +193,7 @@ real, exatamente como a diretiva pediu.
 ## 7. Arquivos modificados nesta rodada
 
 ```
- docs/RELATORIO_MESTRE_HOMOLOGACAO.md                    | novo
+ docs/historico/RELATORIO_MESTRE_HOMOLOGACAO.md                    | novo
  ipad_runtime/ramber-ui/src/App.tsx                       | modificado (GMIL mirror + MACD useMemo/Row)
  ipad_runtime/ramber-ui/src/nexus/event-bus.ts             | modificado (+BRAIN.GMIL.UPDATED)
  ipad_runtime/ramber-ui/src/nexus/organism-orchestrator.ts | modificado (+diff/emit GMIL)
@@ -307,7 +307,7 @@ poluição visual nova (só aparece ao passar o mouse).
 ### 9.5 Arquivos modificados nesta entrega
 
 ```
- docs/RELATORIO_MESTRE_HOMOLOGACAO.md                     | modificado (este adendo, §9)
+ docs/historico/RELATORIO_MESTRE_HOMOLOGACAO.md                     | modificado (este adendo, §9)
  ipad_runtime/ramber-ui/src/App.tsx                        | modificado (import + title tooltip no candidato do Radar)
  ipad_runtime/ramber-ui/src/chart/InstitutionalZonePlugin.tsx | modificado (rótulo sem prefixo redundante)
  ipad_runtime/ramber-ui/src/nexus/radar-qualification.ts   | modificado (+RADAR_QUALIFIES_REASON, +describeRadarQualificationReason)

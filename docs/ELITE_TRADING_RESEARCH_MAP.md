@@ -23,6 +23,21 @@ desatualizada, mais leitura direta do código-fonte real do AR10 (não
 suposição) para toda comparação "existe no AR10?" em todas as 9
 seções.
 
+**Atualização (01/09/2026, pedido direto do Operador — documento
+"Mapeamento de Tecnologias e Plataformas", mesmo espírito desta
+pesquisa, escopo explícito: cripto + ativos tradicionais dos EUA,
+nunca B3)**: §2 e §5 ganharam achados novos (renderização real do
+`lightweight-charts`, e o LLM local que já GRADUOU desde 27/07 — ver
+§5); nova §15 cobre território genuinamente não pesquisado antes
+(Inteligência On-Chain — Glassnode/Nansen/Dune/Chainalysis — e Dados
+Institucionais dos EUA — Bloomberg/FactSet); §13 ganhou 2 achados
+urgentes de auditoria (não pedidos, mas exigidos pela Disciplina de
+trabalho do CLAUDE.md — "toda limitação real encontrada... entra na
+resposta mesmo quando não é o foco"). Mesma barreira de rede já
+documentada nesta trilha: `WebFetch` para `developers.binance.com` e
+outros domínios de exchange é bloqueado neste sandbox — a pesquisa usa
+`WebSearch` e é honesta onde não pôde confirmar com a fonte primária.
+
 ---
 
 ## Índice
@@ -41,6 +56,7 @@ seções.
 12. [Roadmap de evolução](#12-roadmap-de-evolução)
 13. [Riscos identificados](#13-riscos-identificados)
 14. [Fontes e referências técnicas](#14-fontes-e-referências-técnicas)
+15. [Inteligência On-Chain e Dados Institucionais dos EUA](#15-inteligência-on-chain-e-dados-institucionais-dos-eua)
 
 ---
 
@@ -55,12 +71,12 @@ que já existe no código — nunca um "seria legal ter" sem essa base.
 **Reaproveitamento, não duplicação**: este projeto já tem 2 rodadas
 reais de pesquisa técnica anterior, com fontes citadas e verificadas:
 
-- `docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` §3 (comparação com terminais
+- `docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` §3 (comparação com terminais
   profissionais — ATAS/Bookmap/GetChart/LuxAlgo), §7 (inventário do
   motor quantitativo/`nexus/`), §8 (Sierra Chart/Exocharts, IA
   aplicada a previsão de cripto — papers reais). Data de referência:
   2026-07-21.
-- `docs/RELATORIO_EPC.md` — inteligências recuperadas/bugs corrigidos
+- `docs/historico/RELATORIO_EPC.md` — inteligências recuperadas/bugs corrigidos
   na mesma trilha.
 
 Este documento CITA e ATUALIZA essas seções (parte do inventário do
@@ -118,6 +134,29 @@ mais replicada em ambos os ecossistemas pesquisados — mas a fonte
 garantem medir a mesma coisa. Vale como contexto para o próprio AR10:
 suas escolhas de tolerância/definição SMC são tão legítimas quanto
 qualquer outra, desde que documentadas (já são).
+
+**Achado novo (01/09/2026) — o motor de renderização em si, não só os
+indicadores**: pedido do Operador para "pesquisar como renderizam
+milhões de pontos sem travar o navegador". Confirmado via `WebSearch`
+(GitHub oficial `tradingview/lightweight-charts`, DeepWiki, releases):
+padrão view/renderer (uma *view* prepara dado por frame, um *renderer*
+desenha no canvas; `ChartModel` coordena, `PaneWidget` é a área
+retangular de cada série), *data conflation* automática (candles a
+menos de 0,5px de distância na tela viram um só ponto ao dar zoom-out
+— nunca desenha mais do que o olho consegue distinguir), e suporte
+recente a `devicePixelContentBox` para pixel-perfeito em qualquer
+densidade de tela. **Isto não é uma lacuna do AR10** — o item 6.1 de
+§4 já confirma que `lightweight-charts` (a própria biblioteca da
+TradingView, Apache-2.0) é a base real do gráfico do AR10, então
+"absorver a tecnologia de renderização deles" já é estrutural, não um
+gap a fechar. O que É real e vale registrar: o AR10 não roda por cima
+dessa base nenhum equivalente à *data conflation* nos SEUS PRÓPRIOS
+overlays de canvas (FVG/OB, ZigZag, Pivot Points etc. desenham 1
+objeto por dado real, sem coalescer em zoom-out extremo) — candidato
+honesto pra §9/§11, não urgente (o próprio `lightweight-charts` já
+resolve isso para as séries nativas; o overlay que mais desenha hoje,
+`liquidity_zones`, já tem um teto de 3 pela arbitragem de orçamento
+compartilhado — ver `nexus/liquidity-significance.ts`).
 
 ---
 
@@ -220,6 +259,52 @@ comparável entre estudos.
 prever preço é recomendado. Qualquer pedido futuro de "usa IA pra
 prever o preço" deve apontar para esta seção — não é uma limitação de
 engenharia do AR10, é o que a própria literatura mostra hoje.
+
+**Atualização real (01/09/2026) — uma categoria DIFERENTE de "IA" já
+graduou desde que a tabela acima foi escrita**: o pedido do Operador
+("Integração de IA... ONNX... LSTM") citava exatamente a classe de
+modelo que a tabela acima já pesquisou e rejeitou (previsão numérica
+de preço). Mas existe hoje, real e ligado (`ramber-ui/src/llm-bridge.ts`
++ `llm-worker.ts`, `@mlc-ai/web-llm`), uma categoria diferente: **Llama
+3 8B rodando 100% local via WebGPU**, num Worker dedicado (nunca o
+main thread — Regra de Ouro 6), que não PREVÊ preço nenhum — só
+sintetiza em linguagem natural os campos REAIS que o Core Engine já
+calculou (`buildTacticalContext()` serializa só dado real: heurística
+de tendência, classificação Lorentziana, zonas SMC, order flow) e tem
+o próprio prompt de sistema proibido explicitamente de inventar nível
+de preço ou insinuar que uma ordem foi/deveria ser enviada. É opt-in
+(download de vários GB só quando o Operador ativa), com feature-
+detection real de `navigator.gpu` (falha fechado e honesto se ausente,
+nunca tenta e quebra).
+
+Achado de auditoria de documentação (não deste doc — do `CLAUDE.md`
+raiz): sua seção "Como isto se conecta aos três Protocolos" ainda
+descreve "IA Orchestration (Llama)" como "uma feature real possível,
+não construída sem pedido explícito do Operador" — mas essa frase é
+sobre um Motor de Autocrítica (uma IA que audita a ARQUITETURA do
+próprio AR10), categoria que de fato continua não construída; não é
+sobre esta síntese tática de mercado, que já existe e está em
+produção. As duas são aplicações genuinamente diferentes da mesma
+infraestrutura (WebLLM/Llama local) — nenhuma frase do CLAUDE.md está
+tecnicamente errada, mas a ausência total de menção a `llm-bridge.ts`/
+`llm-worker.ts` na seção Arquitetura do CLAUDE.md (que a própria
+diretriz do arquivo pede para manter atualizada "conforme o sistema
+cresce") é um gap real de documentação — a mesma classe de achado que
+esta trilha já corrigiu repetidas vezes em `QUARANTINE.md`.
+
+**O que isto significa para o pedido "ONNX + LSTM" do Operador**: a
+resposta honesta não é "construir isso agora" — é que (1) a literatura
+real já pesquisada acima mostra que um LSTM/preditor numérico não teria
+base honesta pra existir (Regra de Ouro 2), e (2) a infraestrutura que
+o pedido realmente buscava (inferência de rede neural local, em tempo
+real, sobre dado tático real) já existe, já é mais adequada ao
+princípio READ_ONLY do projeto (síntese narrativa, não decisão
+numérica), e já está em produção — não como ONNX, como WebLLM, por um
+motivo concreto e já registrado no próprio código: uma tentativa
+anterior de pedido ONNX nesta mesma sessão foi recusada por não existir
+nenhum modelo treinado real pra rodar (rodar um runtime de inferência
+sem modelo treinado seria teatro, não IA real — ver comentário de
+abertura de `llm-bridge.ts`).
 
 ---
 
@@ -617,6 +702,61 @@ custo futuro da migração.
 
 ## 13. Riscos identificados
 
+**Achados urgentes de auditoria (01/09/2026, não pedidos — encontrados
+no caminho da pesquisa de §2/§15, e registrados por exigência da
+Disciplina de trabalho do CLAUDE.md item 1: "toda limitação real
+encontrada... entra na resposta ao Operador mesmo quando não é o foco
+da tarefa"):**
+
+- **Feed de liquidações — RESOLVIDO (02/09/2026).** A suspeita acima
+  (feed degradado desde 23/04/2026) foi confirmada e corrigida. A
+  confirmação que faltava (WebFetch bloqueado, sem egress real neste
+  sandbox) veio via `WebSearch` — os resultados indexados da própria
+  página "Important WebSocket Change Notice" e do anúncio de upgrade
+  (`binance.com`, 06/03/2026) confirmam: `!forceOrder@arr` pertence à
+  categoria `/market`, e a URL nova é o formato combinado
+  `wss://fstream.binance.com/market/stream?streams=!forceOrder@arr`
+  (envelope `{stream, data}`, mesmo padrão que `App.tsx` já usa para
+  ticker/depth). `js/real-data/binance-liquidations-stream.js` corrigido
+  (URL + desembrulho do envelope antes de `parseLiquidationMessage`,
+  que continua puro/inalterado), 3 testes novos em
+  `binance-liquidations-stream.test.ts` (URL correta, desembrulho real,
+  fail-open na forma). **Ainda não verificado contra uma conexão ao
+  vivo** (mesma barreira de rede de sempre) — o Operador confirma no
+  ambiente com egress real se o painel "INSTITUTIONAL LIQUIDATIONS ·
+  REAL" volta a receber eventos.
+- **Preço/book ao vivo (ticker+depth, `App.tsx`) conectava em Binance
+  SPOT (`stream.binance.com`), não Futures — RESOLVIDO (02/09/2026).**
+  V15.1 GOD TIER (já documentado em `diretriz3-fixes.test.ts`) afirma
+  "Futuros exclusivo... extinguindo qualquer roteamento de gráficos para
+  mercado Spot" para todo o resto do sistema (candles via REST,
+  funding/OI, Pivot Points) — o WS de ticker+depth que alimenta
+  `priceData.price` era a única exceção real. Corrigido com autorização
+  explícita do Operador (a mudança altera os NÚMEROS exibidos ao vivo):
+  migrado para `wss://fstream.binance.com` real. A arquitetura final
+  ficou diferente da hipótese registrada aqui antes — não é um único
+  combined-stream `/stream?streams=ticker/depth` como se imaginava, e
+  sim **duas conexões separadas por categoria** (mesma reestruturação de
+  URL de 06/03/2026 já aplicada ao fix de liquidações acima):
+  `wss://fstream.binance.com/market/stream?streams=<symbol>usdt@ticker`
+  (categoria `/market`, confirmado via pesquisa) e
+  `wss://fstream.binance.com/public/stream?streams=<symbol>usdt@depth10@100ms`
+  (categoria `/public` — feeds de alta frequência como `@depth`,
+  evidência forte mas não uma citação direta tão explícita quanto a do
+  ticker). Cada conexão agora é supervisionada por uma
+  `ConnectionManager` real (`nexus/connection-manager.ts` — máquina de
+  reconnect+backoff+heartbeat já construída e testada nesta mesma
+  sessão) em vez do reconnect manual que existia antes; `wsLive` agora é
+  fail-closed de verdade — só `true` quando AMBAS as conexões (preço E
+  book) estão `LIVE`, nunca um fallback silencioso pra Spot se uma
+  cair. 5 testes novos de padrão-no-código-fonte em
+  `ws-live-feed-futures-migration.test.ts`. **Ainda não verificado
+  contra uma conexão ao vivo** (mesma barreira de rede de sempre,
+  agravada aqui pela incerteza real sobre `/public` vs `/market` para
+  depth) — o Operador confirma no ambiente com egress real se o preço/
+  book seguem atualizando normalmente e se o "basis" Spot↔Futures
+  desaparece dos números exibidos.
+
 - **Risco de escopo**: este documento tem ~40 itens catalogados
   entre as 9 categorias. A tentação real é tratá-lo como um checklist
   a esgotar — o próprio espírito da diretiva original (Ordem Direta de
@@ -660,7 +800,7 @@ custo futuro da migração.
 ## 14. Fontes e referências técnicas
 
 ### Herdadas de pesquisa anterior desta sessão
-`docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` — ATAS, Bookmap, GetChart,
+`docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` — ATAS, Bookmap, GetChart,
 LuxAlgo (order flow/heatmap); Sierra Chart, TraderVPS, Exocharts
 (terminais profissionais); MDPI/Forecast, ScienceDirect, Springer,
 PMC, arXiv (IA aplicada a previsão de cripto).
@@ -715,3 +855,69 @@ nenhuma foi gerada de memória. Onde uma fonte não pôde ser confirmada
 com o mesmo rigor das demais (ex.: `WebFetch` bloqueado por HTTP 403
 em `mql5.com`/`tradingview.com`/`rxdb.info`), isso está sinalizado
 explicitamente na seção correspondente, nunca escondido.
+
+### On-Chain / Dados Institucionais dos EUA (§15)
+`research.glassnode.com` (Exchange Metrics); `docs.glassnode.com`
+(Entity-Adjusted Metrics, Transactions API); `insights.glassnode.com`
+(How Many Entities Hold Bitcoin); Dune Docs (`docs.dune.com`,
+Decoded Tables, Multichain Decoding), `dune.com/blog/decoding-contracts`;
+FinBERT — paper original (Araci, 2019, arXiv, "FinBERT: Financial
+Sentiment Analysis with Pre-trained Language Models") e aplicações a
+10-K/10-Q (ResearchGate); Binance Open Platform
+(`developers.binance.com`, WebSocket Streams, Important WebSocket
+Change Notice, Liquidation Order Streams) — `WebFetch` direto bloqueado
+neste sandbox (mesma barreira de todo domínio de exchange), síntese via
+`WebSearch` sobre o conteúdo dessas páginas oficiais.
+
+**Nota de proveniência (01/09/2026)**: pesquisa real via `WebSearch`
+desta sessão. Bloomberg Terminal e FactSet/Capital IQ NÃO têm
+documentação técnica pública de arquitetura interna (são produtos
+comerciais fechados, sem GitHub/whitepaper de engenharia) — §15 é
+honesto sobre isso: não "dissecou" nada que não existe publicamente,
+reportou o que É de conhecimento público (existência/proposta de valor
+de cada categoria de dado) e nada além disso.
+
+---
+
+## 15. Inteligência On-Chain e Dados Institucionais dos EUA
+
+Pesquisa nova (01/09/2026), pedido direto do Operador (documento
+"Mapeamento de Tecnologias e Plataformas para Evolução do Ecossistema
+AR10") — escopo explícito do próprio pedido: **cripto e ativos
+tradicionais dos EUA, nunca B3**. Território genuinamente não coberto
+por §1-14: nada em `ipad_runtime/` hoje consome dado ON-CHAIN (endereço/
+carteira/smart contract) — todo dado real do AR10 vem de klines/
+orderbook/liquidations da própria exchange (Binance/MEXC/Bybit/OKX),
+nunca de um nó de blockchain ou provedor de indexação. Isso não é uma
+omissão — é consistente com "Fontes: Binance como primária, MEXC/Bybit/
+OKX secundárias" já declarado no CLAUDE.md — mas significa que toda
+entrada desta seção é **categoria de dado nova**, não motor de cálculo
+sobre dado já fluindo (diferente de todo o resto deste documento).
+
+| # | Nome | Categoria | Existe no AR10? | Decisão |
+|---|---|---|---|---|
+| 15.1 | Glassnode — Entity-Adjusted Metrics (clustering proprietário de endereços em "entidades", heurísticas de coinbase/change-address) | On-chain | ❌ NÃO | **Laboratório, gated por dado**: metodologia real e citável (heurísticas padrão da indústria + clustering proprietário), mas Glassnode é uma API paga — qualquer adoção exige decisão de custo/assinatura do Operador antes de qualquer motor de cálculo, não uma decisão técnica |
+| 15.2 | Exchange Netflow/Inflow/Outflow (Glassnode, derivado do clustering acima) | On-chain | ❌ NÃO | **Laboratório, mesmo bloqueio de 15.1**: métrica real de pressão de liquidez (saldo entrando/saindo de exchange), mas exige a MESMA fonte de dado on-chain paga — não é um cálculo que o AR10 pode derivar do que já tem (klines/orderbook não contêm endereço nenhum) |
+| 15.3 | Nansen — rotulagem de carteiras ("smart money", 500M+ endereços rotulados) | On-chain | ❌ NÃO | **Pesquisar mais, baixa prioridade**: complementar a Glassnode (rotulagem vs. série temporal), mesmo bloqueio de fonte de dado paga; radar de "fluxo institucional" citado no pedido do Operador é uma metáfora real mas o AR10 já tem um radar PRÓPRIO (OIH/Scanner) sobre dado de exchange, categoria diferente de "smart money" on-chain |
+| 15.4 | Chainalysis — rastreamento/rotulagem para compliance | On-chain | ❌ NÃO, e provavelmente **Descartar**: o produto central da Chainalysis é compliance/investigação (AML, rastreamento forense) — categoria de produto distante do propósito de inteligência de mercado do AR10, mesmo que a tecnologia de clustering se sobreponha com 15.1/15.3 |
+| 15.5 | Dune Analytics — tabelas decodificadas via ABI de smart contract (SQL sobre evento/função decodificados) | On-chain | ❌ NÃO, e **Descartar** como fonte de dado para o AR10 hoje: Dune decodifica ATIVIDADE DE CONTRATO (swaps DEX, mints NFT, governança) — o AR10 opera sobre Futures/Perpétuo CEX (Binance), onde a atividade relevante nunca passa por um smart contract público. Tecnicamente interessante, categoria de dado errada para o propósito real do AR10 |
+| 15.6 | FinBERT — modelo aberto (MIT/uso livre), pré-treinado em corpus financeiro real (10-K/10-Q/earnings calls/newswire, ~4,9 bilhões de tokens), sentimento sobre texto financeiro | NLP | ❌ NÃO | **Laboratório, gated por FONTE DE TEXTO, não por modelo**: FinBERT em si é aberto e RODÁVEL localmente (inclusive via `onnxruntime-web`, ou reaproveitando o Worker do WebLLM já existente — ver §5), mas o AR10 hoje não tem NENHUM feed de notícia/filing real — o bloqueio real não é o modelo, é a ausência de fonte de texto (mesma classe de "lacuna de dado antes de lacuna de engenharia" já documentada em §10 para Footprint/hftbacktest) |
+| 15.7 | Bloomberg Terminal — atalhos de teclado / navegação por comando | UX | Não aplicável — arquitetura de INPUT (teclado físico dedicado, function keys), o AR10 é touch-first (iPad) por decisão de plataforma permanente | **Descartar** — categoria de UX incompatível com a plataforma-alvo, não uma lacuna |
+| 15.8 | Bloomberg Terminal — modelos de correlação de portfólio em tempo real entre dezenas de ativos | Risco/Quant | ⚠️ PARCIAL — o AR10 opera sobre 1 ativo selecionado por vez (mesmo design já validado em §2 item 5 pra Bar Replay); GMIL (`nexus/gmil`) já agrega contexto de MÚLTIPLOS ativos/categorias pro consenso global, mas não é uma matriz de correlação cross-asset | **Laboratório, baixa prioridade**: correlação real entre os pares que o Radar já varre é calculável a partir de dado já real (closes históricos), mas é uma mudança de escopo real (matriz N×N, não um motor de 1 ativo) — não confundir com o Motor de Cenários existente, que já é por-ativo |
+| 15.9 | Bloomberg Terminal — NLP sobre notícias/filings SEC pra sentimento acionável | NLP | ❌ NÃO | Ver 15.6 — mesmo bloqueio de fonte de texto; Bloomberg tem a vantagem estrutural real de já possuir o feed de notícia proprietário, o que o AR10 não tem e não pode replicar sem uma decisão de fonte de dado nova |
+| 15.10 | FactSet/Capital IQ — normalização de demonstrativos financeiros (balanços comparáveis entre empresas) | Dados corporativos | Não aplicável — o AR10 opera sobre USDT-M Futures/Perpétuo (cripto), não ações; "demonstrativo financeiro de empresa" não tem equivalente no domínio real do projeto | **Descartar** — categoria de dado do domínio errado, não uma lacuna |
+
+**Achado central desta seção**: ao contrário de §2-9 (onde a maioria
+dos itens era "motor de cálculo sobre dado que o AR10 já tem"), TODA
+entrada real e aplicável aqui (15.1, 15.2, 15.6, 15.9) esbarra no MESMO
+bloqueio — **fonte de dado nova**, não engenharia. Isso muda a natureza
+da decisão: não é "vale a pena construir o motor", é "vale a pena
+pagar/integrar uma fonte de dado externa nova" — uma decisão de custo e
+de superfície de rede nova (GMIL já documenta em §2 do
+`MAPA_EVOLUCAO_CIBORGUE.md` que ONCHAIN/MACRO ficam `null`
+permanentemente por exigirem chave de API, hoje fora do escopo das
+Restrições Permanentes do projeto). Nenhuma entrada desta seção deveria
+avançar para código sem essa decisão do Operador vir primeiro — a
+mesma disciplina de "Laboratório de Evolução: isolar antes de
+integrar" do CLAUDE.md, aplicada aqui à fonte de dado antes mesmo do
+motor.

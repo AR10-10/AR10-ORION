@@ -380,15 +380,22 @@ describe('V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): e
 describe('Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER): SideBar renomeada, ganho circular do Siriform, DIREÇÃO/POSITION MANAGEMENT em cards separados', () => {
   it('SideBar desacopla id (roteamento real) de label (texto exibido) — só DASHBOARD/SETTINGS continuam com comportamento próprio', () => {
     const app = read('../src/App.tsx');
-    const itemsMatch = app.match(/const items: \{ icon: any; id: string; label: string \}\[\] = \[([\s\S]*?)\n {2}\];/);
-    expect(itemsMatch, 'items do SideBar não encontrado').not.toBeNull();
-    const body = itemsMatch![1];
-    expect(body).toContain('id: "DASHBOARD", label: "COCKPIT"');
+    // Rodada de acessibilidade de navegação (pedido do Operador: "deixa só
+    // os principais... sistema leve profissional, não deleta nada") split
+    // o antigo array único `items` em PRIMARY_TABS (sempre visível) +
+    // SECONDARY_TABS (atrás de "Mais abas") — SETTINGS migrou pra
+    // secundária, mas o roteamento real (id) e o comportamento próprio de
+    // DASHBOARD/SETTINGS no ternário de App() continuam intactos.
+    const primaryMatch = app.match(/const PRIMARY_TABS: \{ icon: any; id: string; label: string \}\[\] = \[([\s\S]*?)\n {2}\];/);
+    const secondaryMatch = app.match(/const SECONDARY_TABS: \{ icon: any; id: string; label: string \}\[\] = \[([\s\S]*?)\n {2}\];/);
+    expect(primaryMatch, 'PRIMARY_TABS do SideBar não encontrado').not.toBeNull();
+    expect(secondaryMatch, 'SECONDARY_TABS do SideBar não encontrado').not.toBeNull();
+    expect(primaryMatch![1]).toContain('id: "DASHBOARD", label: "COCKPIT"');
     // Ordem de migração de idioma: ids/labels da navegação migraram para
     // inglês (SETTINGS/MARKETS/ANALYSIS/...) — as views secundárias agora
     // roteiam dado real via SecondaryModuleView, então os ids são
     // roteamento vivo, não mais só rótulo.
-    expect(body).toContain('id: "SETTINGS", label: "SETTINGS"');
+    expect(secondaryMatch![1]).toContain('id: "SETTINGS", label: "SETTINGS"');
     expect(app).toContain('activeTab === "DASHBOARD" ?');
     expect(app).toContain('activeTab === "SETTINGS" ?');
     expect(app).toContain('onClick={() => setActiveTab(item.id)}');

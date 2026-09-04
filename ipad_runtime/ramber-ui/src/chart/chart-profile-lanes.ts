@@ -101,8 +101,12 @@ export interface ResolvedProfileLane {
   offsetFraction: number;
 }
 
-/** Todas as lanes conhecidas, na ordem real de empilhamento. */
-export const ALL_PROFILE_LANES: readonly ChartProfileLaneId[] = LANE_ORDER;
+// REMOVIDO (2026-08-31): `ALL_PROFILE_LANES` era um alias exportado de
+// `LANE_ORDER` — o MESMO array, com um segundo nome, sem nenhum consumidor
+// (nem no próprio arquivo, nem em testes). Dois nomes para uma coisa só é
+// a duplicação que este projeto combate; e um alias sem uso é o pior caso
+// dela, porque convida o próximo a importar o apelido em vez da fonte.
+// `LANE_ORDER` continua sendo a ordem real de empilhamento.
 
 /**
  * Geometria real das lanes ativas.

@@ -30,17 +30,28 @@ describe('Header: cluster de identidade do ativo — sem fileira de botões redu
 
   it('o badge do ativo ATUAL (ícone ₿/primeira letra) continua real e intacto no canto', () => {
     const s = app();
-    expect(s).toContain('selectedAsset === "BTC"\n                    ? "₿"\n                    : selectedAsset?.[0]}');
+    // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY": ganhou um
+    // 3º ramo (marketMode === "MEXC") entre TRADFI e o fallback ₿/letra —
+    // o fallback Binance em si (BTC/₿) continua intacto, só um nível mais
+    // fundo na ternária.
+    expect(s).toContain('selectedAsset === "BTC"\n                      ? "₿"\n                      : selectedAsset?.[0]}');
   });
 
   it('SmartOmnibox continua sendo o único caminho real de troca de ativo no header — mesma transição de estado que os botões removidos faziam', () => {
     const s = app();
     const idx = s.indexOf('<SmartOmnibox');
     const block = s.slice(idx, s.indexOf('/>', s.indexOf('onSelectTradFi', idx)));
-    expect(block).toContain('selectedLabel={marketMode === "TRADFI" ? (selectedTradFiAsset?.symbol ?? "Buscar ativo") : `${selectedAsset}USDT`}');
+    // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY": selectedLabel
+    // ganhou um 3º ramo (MEXC) e onSelectCrypto agora recebe a identidade
+    // completa (UniversalCryptoSymbol), não só o baseAsset — a transição de
+    // estado real (CRYPTO/BINANCE) continua a mesma de sempre.
+    expect(block).toContain('marketMode === "TRADFI"');
+    expect(block).toContain('(selectedTradFiAsset?.symbol ?? "Buscar ativo")');
+    expect(block).toContain('`${selectedAsset}USDT`');
+    expect(block).toContain('onSelectCrypto={(selection: UniversalCryptoSymbol) => {');
     expect(block).toContain('setMarketMode?.("CRYPTO");');
     expect(block).toContain('setSelectedTradFiAsset?.(null);');
-    expect(block).toContain('setSelectedAsset?.(baseAsset);');
+    expect(block).toContain('setSelectedAsset?.(selection.baseAsset);');
   });
 
   it('ASSETS continua real e em uso (AssetHeatmapWidget) — nunca apagado, só realocado para onde ainda faz sentido (Regra de Ouro 4)', () => {
@@ -52,13 +63,35 @@ describe('Header: cluster de identidade do ativo — sem fileira de botões redu
     expect(heatmapBlock).toContain('ASSETS.map((a) => {');
   });
 
-  it('nenhuma outra ocorrência de código real ASSETS.map( sobrevive além do AssetHeatmapWidget (a fileira do header foi mesmo removida, não duplicada em outro lugar; a única outra menção no arquivo é prosa dentro de um comentário explicativo, não código)', () => {
+  it('a fileira de atalhos VOLTOU, mas NUNCA dentro da linha do preço — o defeito que causou a remoção não pode voltar', () => {
+    // HISTÓRICO, para o próximo que ler isto: a fileira foi removida a
+    // pedido do Operador porque, dentro da linha 1 (h-[46px]), os 12 botões
+    // "comiam" o espaço e CORTAVAM o preço/variação ao vivo em telas reais.
+    // Depois o Operador relatou a falta dela no iPad e pediu de volta.
+    //
+    // O contrato que este teste guarda mudou junto, e ficou MAIS forte: não
+    // é mais "a fileira não pode existir" (isso era o remédio), é "a fileira
+    // não pode dividir espaço com o preço" (isso era a doença).
     const s = app();
-    // ASSETS.map( com parêntese de abertura logo em seguida = uso real de
-    // código (callback); "ASSETS.map)" (parêntese de FECHAMENTO) é só a
-    // própria prosa do comentário que documenta esta remoção — distinção
-    // real, não uma coincidência de contagem.
+
+    // Ela existe de novo — 2 usos reais: o heatmap e a fileira do header.
     const codeOccurrences = s.match(/ASSETS\.map\(\(/g) ?? [];
-    expect(codeOccurrences.length).toBe(1);
+    expect(codeOccurrences.length).toBe(2);
+
+    // E vive FORA da linha do preço: a linha 1 da TopBar (h-[46px]) tem de
+    // fechar ANTES de a fileira começar. Se alguém a mover pra dentro dela
+    // outra vez, este índice inverte e o teste quebra.
+    const topBarIdx = s.indexOf('function TopBar(');
+    expect(topBarIdx).toBeGreaterThan(-1);
+    const linhaDoPreco = s.indexOf('h-[46px] flex items-center justify-between', topBarIdx);
+    const fileira = s.indexOf('aria-label="Atalhos de ativo"', topBarIdx);
+    expect(linhaDoPreco).toBeGreaterThan(-1);
+    expect(fileira).toBeGreaterThan(linhaDoPreco);
+
+    // E rola em vez de espremer: sem overflow interno, um iPad estreito
+    // voltaria a comprimir os vizinhos — que é literalmente o defeito antigo.
+    const blocoFileira = s.slice(fileira - 400, fileira + 1400);
+    expect(blocoFileira).toContain('overflow-x-auto');
+    expect(blocoFileira).toContain('shrink-0');
   });
 });

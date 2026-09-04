@@ -15,7 +15,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 
 describe('engine-bridge.ts: buildMultiTimeframeContext — mesmo Bus, cadência própria, fail-closed honesto', () => {
-  it('busca os 6 prazos via MULTI_TIMEFRAME_LIST + requestFuturesCandleSnapshot (mesmo Bus, zero segunda fonte)', () => {
+  it('busca os prazos via MULTI_TIMEFRAME_LIST + requestFuturesCandleSnapshot (mesmo Bus, zero segunda fonte)', () => {
     const bridge = read('../src/engine-bridge.ts');
     const fnMatch = bridge.match(/export async function buildMultiTimeframeContext\(symbol = 'BTC'\): Promise<MultiTimeframeMatrix \| null> \{([\s\S]*?)\n\}/);
     expect(fnMatch, 'buildMultiTimeframeContext não encontrada').not.toBeNull();
@@ -38,7 +38,7 @@ describe('engine-bridge.ts: buildMultiTimeframeContext — mesmo Bus, cadência 
     expect(body).toContain('return [tf, analyzeTimeframe(tf, [])];');
   });
 
-  it('todos os 6 prazos sem NENHUMA leitura real => null honesto (nunca uma matriz de 6 linhas vazias)', () => {
+  it('todos os prazos sem NENHUMA leitura real => null honesto (nunca uma matriz de linhas vazias)', () => {
     const bridge = read('../src/engine-bridge.ts');
     const fnMatch = bridge.match(/export async function buildMultiTimeframeContext\(symbol = 'BTC'\): Promise<MultiTimeframeMatrix \| null> \{([\s\S]*?)\n\}/);
     const body = fnMatch![1];
@@ -100,7 +100,7 @@ describe('App.tsx: ciclo periódico de 60s independente do ciclo principal de 30
     expect(app).toContain('clearInterval(mtfInterval);');
   });
 
-  it('deps [bootGeneration, selectedAsset] — deliberadamente SEM chartTimeframe (os 6 prazos não dependem de qual está selecionado no gráfico)', () => {
+  it('deps [bootGeneration, selectedAsset] — deliberadamente SEM chartTimeframe (os prazos não dependem de qual está selecionado no gráfico)', () => {
     const app = read('../src/App.tsx');
     // Isola o efeito específico do MTF (não o ciclo principal, que tem as
     // mesmas duas deps + chartTimeframe) ancorando no corpo único que só
@@ -156,5 +156,34 @@ describe('App.tsx: MultiTimeframeMatrixWidget — display only (LEI 24), conflu�
     expect(body).toContain('const longCount = readRows.filter((c) => c.confidenceStance === "LONG").length;');
     expect(body).toContain('const shortCount = readRows.filter((c) => c.confidenceStance === "SHORT").length;');
     expect(body).not.toMatch(/probabilidade calibrada de mercado["'`]?\s*[:=]/i);
+  });
+
+  // Achado real de auditoria (sincronismo pós-SMC Harmonic Fusion): o
+  // rótulo/tooltip diziam "6 PRAZOS"/"6 prazos" escrito à mão, desde antes
+  // da Diretriz Mestra §7 ampliar MULTI_TIMEFRAME_LIST pra 9 — nunca
+  // corrigido, nunca pego (nenhum teste comparava contra o array real).
+  // Agora deriva de MULTI_TIMEFRAME_LIST.length, nunca mais pode divergir
+  // em silêncio se a lista mudar de tamanho de novo.
+  it('o rótulo/tooltip de contagem de prazos são derivados de MULTI_TIMEFRAME_LIST.length — nunca um número escrito à mão que pode divergir', () => {
+    const app = read('../src/App.tsx');
+    const fnMatch = app.match(/function MultiTimeframeMatrixWidget\(\) \{([\s\S]*?)\n\}\n/);
+    const body = fnMatch![1];
+    expect(body).toContain('CONFLUÊNCIA · {MULTI_TIMEFRAME_LIST.length} PRAZOS');
+    expect(body).toContain('`Contagem real de quantos dos ${MULTI_TIMEFRAME_LIST.length} prazos');
+    expect(body).not.toMatch(/6\s*PRAZOS/);
+    expect(body).not.toMatch(/dos 6 prazos/);
+  });
+
+  // SMC Harmonic Fusion — auditoria de sincronismo (pedido do Operador):
+  // Liquidez SMC (OB/FVG/EQL) por prazo, mesmo motor do gráfico principal,
+  // some na tooltip de cada linha da Matriz — fail-open honesto: só entra
+  // quando o trio veio real (nunca um "0" fabricado pra um prazo sem leitura).
+  it('a tooltip por prazo inclui Liquidez SMC real (OB/FVG/EQL) quando o trio existe, fail-open quando ausente', () => {
+    const app = read('../src/App.tsx');
+    const fnMatch = app.match(/function MultiTimeframeMatrixWidget\(\) \{([\s\S]*?)\n\}\n/);
+    const body = fnMatch![1];
+    expect(body).toContain(
+      'ctx.unmitigatedOrderBlockCount !== null\n                  ? `OB ${ctx.unmitigatedOrderBlockCount} · FVG ${ctx.unmitigatedFvgCount} · EQL livre ${ctx.unsweptLiquidityZoneCount}`\n                  : null,',
+    );
   });
 });

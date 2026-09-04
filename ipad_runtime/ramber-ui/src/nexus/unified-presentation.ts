@@ -1,5 +1,5 @@
 // unified-presentation.ts — "Evolução Incremental da Inteligência Central"
-// (carta do Operador em resposta a docs/AUDITORIA_MARKETBRAIN.md), Fase 1:
+// (carta do Operador em resposta a docs/historico/AUDITORIA_MARKETBRAIN.md), Fase 1:
 // UnifiedPresentation. Função pura que LÊ os aggregators já reais
 // (decision-layer.ts, council.ts, regime-engine.js, aura-lifecycle.ts) e
 // monta um `PresentationState` único com proveniência explícita por campo

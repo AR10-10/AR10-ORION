@@ -1,5 +1,5 @@
 // scenario-fingerprint.ts — Escopo Cirúrgico (Operador, Fase 1 confirmada
-// em resposta a docs/AUDITORIA_SINCRONIZACAO_DADOS.md §5.3, "gap 1"):
+// em resposta a docs/historico/AUDITORIA_SINCRONIZACAO_DADOS.md §5.3, "gap 1"):
 // assinatura real de um cenário, derivada inteiramente de leituras JÁ
 // carimbadas em PlanOpenContext (signal-track-record.ts) na abertura do
 // plano — zero segunda fonte, zero motor novo.

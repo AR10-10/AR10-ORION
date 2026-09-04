@@ -13,6 +13,16 @@
 // fractal de K fixo em fractal-swings.js — ZigZag usa limiar %+depth, os
 // parâmetros reais do indicador nomeado).
 //
+// LIMIAR ADAPTATIVO (auditoria do ecossistema de indicadores, achado real):
+// até esta rodada, `computeZigZag` era chamado sem 2º argumento — sempre o
+// default FIXO do motor (5%), idêntico em 1m e em 1W. A perna do Fibonacci
+// já tinha sido corrigida exatamente para não fazer isso (engine-bridge.ts,
+// atrScaledZigZagDeviationPct) — o ZigZag VISÍVEL neste plugin tinha o
+// MESMO defeito que o Fibonacci teve, só que ainda não corrigido. `atrPercent`
+// (ATR% real do tempo gráfico selecionado, regime-engine.js) resolve o mesmo
+// limiar adaptativo aqui — mesma função, mesmo múltiplo, zero segunda
+// matemática. Sem ATR real, cai no default clássico do motor (5%).
+//
 // "Fio de Seda" (Regra de Ouro 5): a linha poligonal é 1px sólida real —
 // nunca setLineDash. Cor azul-neutro (#8ab4f8), mesma família já usada
 // para "estrutura" no resto do HUD (ver TpoProfilePlugin) — deliberado:
@@ -21,7 +31,7 @@
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
-import { computeZigZag, type ZigZagPoint } from "../engine-bridge";
+import { computeZigZag, atrScaledZigZagDeviationPct, type ZigZagPoint } from "../engine-bridge";
 
 const LINE_COLOR = "rgba(138, 180, 248, 0.55)";
 
@@ -29,19 +39,30 @@ interface ZigZagPluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   data: { time: number; open: number; high: number; low: number; close: number }[];
+  // ATR% real do tempo gráfico selecionado (engine.marketRegime.atrPercent).
+  // Optional/fail-closed: null/ausente cai no default clássico do motor
+  // (5%) via atrScaledZigZagDeviationPct — nunca um número fabricado.
+  atrPercent?: number | null;
 }
 
-export function ZigZagPlugin({ chart, series, data }: ZigZagPluginProps) {
+export function ZigZagPlugin({ chart, series, data, atrPercent }: ZigZagPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dataRef = useRef(data);
+  const deviationPct = atrScaledZigZagDeviationPct(atrPercent);
+  const deviationRef = useRef(deviationPct);
   const markDirtyRef = useRef<(() => void) | null>(null);
-  const cacheRef = useRef<{ data: typeof data; points: ZigZagPoint[] }>({ data: [], points: [] });
+  const cacheRef = useRef<{ data: typeof data; deviationPct: number; points: ZigZagPoint[] }>({
+    data: [],
+    deviationPct: NaN,
+    points: [],
+  });
 
   dataRef.current = data;
+  deviationRef.current = deviationPct;
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [data]);
+  }, [data, deviationPct]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -65,11 +86,14 @@ export function ZigZagPlugin({ chart, series, data }: ZigZagPluginProps) {
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
       let points: ZigZagPoint[];
-      if (cacheRef.current.data === dataRef.current) {
+      if (
+        cacheRef.current.data === dataRef.current &&
+        cacheRef.current.deviationPct === deviationRef.current
+      ) {
         points = cacheRef.current.points;
       } else {
-        points = computeZigZag(dataRef.current);
-        cacheRef.current = { data: dataRef.current, points };
+        points = computeZigZag(dataRef.current, deviationRef.current);
+        cacheRef.current = { data: dataRef.current, deviationPct: deviationRef.current, points };
       }
       if (points.length < 2) return; // sem pivô suficiente pra uma linha real — nada desenhado, nunca uma linha fabricada
 

@@ -28,6 +28,8 @@
 // uma confluência geométrica real, nunca lê nem altera decisão nenhuma.
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { InstitutionalZone } from "../nexus/institutional-zones";
 
@@ -139,13 +141,19 @@ interface InstitutionalZonePluginProps {
   // `live` do eixo) — zero segunda coleta. Opcional/fail-closed: ausente
   // = comportamento de sempre (peso só por confluência).
   livePrice?: number | null;
+  // Achado real (auditoria "cada item no seu canto, nada cobrindo nada"):
+  // sem isto a faixa (largura total por natureza) ia até plotRight puro
+  // — cruzando a lane do Volume Profile/TPO/Order Book Depth quando
+  // ativas. Opcional/fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, livePrice }: InstitutionalZonePluginProps) {
+export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, livePrice, activeLanes }: InstitutionalZonePluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const zonesRef = useRef(zones);
   const visualWeightsRef = useRef(visualWeights);
   const livePriceRef = useRef(livePrice);
+  const activeLanesRef = useRef(activeLanes);
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente para o loop de desenho ler — mesmo
@@ -153,10 +161,11 @@ export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, l
   zonesRef.current = zones;
   visualWeightsRef.current = visualWeights;
   livePriceRef.current = livePrice;
+  activeLanesRef.current = activeLanes;
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [zones, visualWeights, livePrice]);
+  }, [zones, visualWeights, livePrice, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -178,6 +187,11 @@ export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, l
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+      // Fronteira medida do eixo (chart-plot-area.ts) + lanes de perfil
+      // ATIVAS (chart-profile-lanes.ts): o desenho para antes do eixo E
+      // antes da lane do Volume Profile/TPO/Order Book Depth.
+      const { plotRight } = measurePlotArea(chart, cssWidth, activeLanesRef.current);
 
       const currentZones = zonesRef.current;
       if (currentZones.length === 0) return; // sem confluência real agora — nada desenhado, nunca um exemplo.
@@ -203,16 +217,16 @@ export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, l
         const weight = baseWeight * proximityFactor(zone.centerPrice, livePriceRef.current);
 
         ctx.fillStyle = `rgba(${ZONE_HUE_RGB}, ${(FILL_ALPHA_MIN + weight * (FILL_ALPHA_MAX - FILL_ALPHA_MIN)).toFixed(3)})`;
-        ctx.fillRect(0, rectY, cssWidth, rectHeight);
+        ctx.fillRect(0, rectY, plotRight, rectHeight);
         // Fio de Seda (Regra de Ouro 5): 1px sólida real nas bordas
         // horizontais da faixa, nunca setLineDash.
         ctx.lineWidth = 1;
         ctx.strokeStyle = `rgba(${ZONE_HUE_RGB}, ${(BORDER_ALPHA_MIN + weight * (BORDER_ALPHA_MAX - BORDER_ALPHA_MIN)).toFixed(3)})`;
         ctx.beginPath();
         ctx.moveTo(0, Math.round(rectY) + 0.5);
-        ctx.lineTo(cssWidth, Math.round(rectY) + 0.5);
+        ctx.lineTo(plotRight, Math.round(rectY) + 0.5);
         ctx.moveTo(0, Math.round(rectY + rectHeight) + 0.5);
-        ctx.lineTo(cssWidth, Math.round(rectY + rectHeight) + 0.5);
+        ctx.lineTo(plotRight, Math.round(rectY + rectHeight) + 0.5);
         ctx.stroke();
       }
     };

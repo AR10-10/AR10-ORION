@@ -388,7 +388,7 @@ describe('OMEGA CORE V-MAX (Fase 1.1): smc/cvd/orderflowSignals — insumos pré
     expect(received[0]).toBe(useUnifiedSnapshotStore.getState().confluenceCorridor);
   });
 
-  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
   // item 1): institutionalZones já tinha fatia real na store (Carta
   // Branca) mas nenhum evento — nenhum assinante podia reagir a "uma zona
   // nova se formou". Mesmo padrão diff-por-referência de todo QUANT.*.
@@ -419,7 +419,7 @@ describe('OMEGA CORE V-MAX (Fase 1.1): smc/cvd/orderflowSignals — insumos pré
     expect(received[0]).toBe(useUnifiedSnapshotStore.getState().institutionalZones);
   });
 
-  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
   // item 2): riskSuggestion (risk-engine.js) já era computado real em
   // App.tsx mas não tinha fatia na store nem evento.
   it('setRiskSuggestion(saída real de buildRiskSuggestion) publica QUANT.RISK_SUGGESTION.UPDATED com a MESMA referência', () => {

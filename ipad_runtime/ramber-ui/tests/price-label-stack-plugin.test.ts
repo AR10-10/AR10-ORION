@@ -170,12 +170,30 @@ describe('PriceLabelStackPlugin: side opcional (left/right) — dois lados resol
     expect(drawSideBlock).toContain('resolveLabelStackPositions<PriceAxisLabel & { naturalY: number }>(');
   });
 
-  it('geometria espelhada real: boxX ancora na margem mínima de cada lado — mesma margem nos dois lados, seja o tier live/critical (LEFT_MARGIN_PX/RIGHT_MARGIN_PX) ou primary/context compacto (COMPACT_EDGE_PADDING_PX, Especificação Visual v1: "2px do edge")', () => {
+  // A GEOMETRIA DO LADO DIREITO MUDOU DE PROPOSITO (pedido do Operador
+  // sobre a barra lateral do eixo). Antes cada etiqueta era alinhada a borda
+  // do CONTAINER, entao o X de inicio dependia do texto — borda serrilhada —
+  // e as largas invadiam as velas (medido: "VWAP 68.412,5" invadia 20,3px).
+  // Agora o lado direito e uma COLUNA: mesma borda esquerda e mesma largura
+  // para todas, ancorada na fronteira medida do eixo. O lado ESQUERDO nao
+  // mudou (nao existe eixo ali), e por isso este teste continua cobrindo os
+  // dois — o espelhamento agora e assimetrico DE PROPOSITO, e o teste diz
+  // isso em vez de fingir que os dois lados seguem a mesma regra.
+  it('lado direito e uma COLUNA ancorada no eixo; lado esquerdo segue na margem minima', () => {
     const s = plugin();
     expect(s).toContain('const LEFT_MARGIN_PX = 2;');
     expect(s).toContain('const RIGHT_MARGIN_PX = 2;');
     expect(s).toContain('const COMPACT_EDGE_PADDING_PX = 2;');
-    expect(drawSideBody()).toContain('const boxX = side === "right" ? cssWidth - edgePaddingX - boxWidth : edgePaddingXLeft;');
+    const corpo = drawSideBody();
+    // A coluna: borda e largura compartilhadas, derivadas da fronteira real.
+    expect(corpo).toContain('const colunaDireita = cssWidth - RIGHT_MARGIN_PX;');
+    expect(corpo).toContain('const colunaEsquerda = Math.min(axisLeft, colunaDireita - larguraMaxima);');
+    expect(corpo).toContain('const boxX = side === "right" ? colunaEsquerda : edgePaddingXLeft;');
+    expect(corpo).toContain('const boxWidth = side === "right" ? colunaLargura : textWidth + textPaddingX * 2;');
+    expect(s).toContain('measurePlotArea');
+    // O defeito original, travado pelo nome: alinhar a etiqueta pela borda
+    // do container e o que produzia o serrilhado e a invasao das velas.
+    expect(corpo).not.toContain('cssWidth - edgePaddingX - boxWidth');
   });
 
   it('o conector do lado esquerdo fica na borda DIREITA da caixa (espelhado do direito, que fica na borda esquerda) — sempre entre a caixa e o centro do gráfico, nunca cortando pra fora da tela', () => {
@@ -549,28 +567,16 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   });
 });
 
-describe('Auditoria de pendências (achado real via harness Playwright): a polilinha harmônica (XABCD/Wolfe) também tinha title nativo poluindo o eixo — terceira ocorrência do MESMO achado do Trend Channel/VWAP/NL/EMA', () => {
-  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
-
-  it('harmonicPolyline nasce com title:"" — o comentário original presumia que lastValueVisible:false já bastava, mas a lib desenha title no eixo mesmo assim (mesmo achado real)', () => {
-    const s = chart();
-    expect(s).not.toContain('title: "XABCD"');
-    const idx = s.indexOf('const harmonicPolyline = chart.addSeries(LineSeries, {');
-    expect(idx, 'criação da série harmonicPolyline não encontrada').toBeGreaterThan(-1);
-    const closeIdx = s.indexOf('harmonicPolylineRef.current = harmonicPolyline;');
-    expect(s.slice(idx, closeIdx)).toContain('title: "",');
-  });
-
-  it('zero informação perdida: a forma da polilinha + o title real da PRZ (price line do ponto D) já comunicam o padrão — nunca um rótulo redundante flutuando na posição natural sem resolução de colisão', () => {
-    const s = chart();
-    // EPC §4 ("apenas as iniciais... menor poluição"): rótulo compacto
-    // `${pattern} ↑/↓ PRZ ${fit}%` — o disclaimer "never probability"
-    // vive íntegro no título do painel Harmonic Patterns (App.tsx), não
-    // repetido no rótulo flutuante do gráfico.
-    expect(s).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
-    expect(s).toContain('const hDirGlyph = top.direction === "BULLISH" ? "↑" : "↓";');
-  });
-});
+// REVOGADO (pendência #6, mesma disciplina de "registrado em vez de
+// apagado" já usada na migração do liquidity_sweep): a describe block que
+// existia aqui testava a polilinha harmônica NATIVA (harmonicPolyline,
+// title:"" pra suprimir o rótulo no eixo). Ela migrou por completo pra
+// HarmonicGeometryPlugin.tsx (canvas próprio) — zero série nativa
+// restante. Achado real feito NA migração: axisLabelVisible:false por si
+// só já suprimia o `title` completamente (nem chegava ao eixo, nem a
+// lugar nenhum da tela) — o rótulo PRZ nunca foi visto pelo Operador; o
+// plugin novo desenha o texto de verdade via drawCanvasLabel. Cobertura
+// completa em harmonic-geometry-plugin-wiring.test.ts.
 
 describe('"bater o olho profissional" (pendência honesta do turno anterior): ENTRY/STOP/TARGET migram do eixo NATIVO para o sistema anti-colisão (priceAxisLabels) — eram o ÚLTIMO grupo que ainda podia sobrepor S1/R1/VWAP', () => {
   const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
@@ -594,7 +600,7 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     // (EPC FINAL §8: nomenclatura curta EN/ST/TP1-3 nos objetos gráficos).
     // Ordem "FECHAMENTO" §3: o MOTIVO estrutural (basis) é Nível 2 — saiu
     // do primário para o secundário (fonte menor), nunca foi apagado.
-    expect(block).toContain('text: `EN ${tradePlan.direction}`, secondaryText: tradePlan.entry.basis, color: entryColor');
+    expect(block).toContain('text: `EN ${tradePlan.direction}`, secondaryText: withScore(tradePlan.entry.basis), color: entryColor');
     expect(block).toContain('const entryColor = "rgba(240, 193, 111, 0.75)";');
     // STOP vermelho no preço EFETIVO (ratchet real), BREACHED do preço vivo
     expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
@@ -612,9 +618,12 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     expect(block).toContain('text: `TP${i + 1}`,');
     // REVERTIDO POR PEDIDO REPETIDO DO OPERADOR (duas rodadas, com captura
     // real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" na tela): a
-    // porcentagem saiu do canvas de vez. Regra de Ouro 4 satisfeita — a
-    // distância percentual continua real e visível no painel do Trade Plan
-    // (App.tsx), que já a renderizava antes desta mudança.
+    // porcentagem de DISTÂNCIA até o alvo saiu do canvas de vez. Regra de
+    // Ouro 4 satisfeita — a distância percentual continua real e visível no
+    // painel do Trade Plan (App.tsx), que já a renderizava antes desta
+    // mudança. `distPct` nunca volta — mas withScore() (rodada posterior,
+    // ver refinamento-final-wiring.test.ts) traz de volta um número
+    // DIFERENTE: a % de confluência do plano, um só token por etiqueta.
     expect(block).not.toContain('distPct');
     expect(block).toContain('color: "rgba(8, 153, 129, 0.75)"');
   });

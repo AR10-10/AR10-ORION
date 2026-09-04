@@ -17,7 +17,7 @@ URL resultante (padrão GitHub Pages para repositório de organização/usuário
 https://<owner>.github.io/<repo>/
 ```
 
-Para este repositório: `https://ar10-10.github.io/ar10-orion/`.
+Para este repositório: `https://ar10-10.github.io/AR10-ORION/`.
 
 ### Pré-requisito único (uma vez por repositório)
 
