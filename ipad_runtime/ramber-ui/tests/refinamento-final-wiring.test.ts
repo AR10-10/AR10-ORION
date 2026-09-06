@@ -267,10 +267,12 @@ describe('Diretriz Mestra: Heat Score + TENDÊNCIA no header, Magnet, futuro, MT
     expect(crosshairBlock).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
     expect(c).not.toContain('CrosshairMode.Normal');
     // AR10_ORDEM_ULTRA_LED_v3.md (Fase A): rightOffset deixou de ser um
-    // literal fixo e passou a vir de resolveChartUltraWideScale
-    // (baseline real ainda 8 até 1440px — ver chart-ultrawide-scale.test.ts
-    // para a tabela completa de breakpoints).
-    expect(c).toContain('rightOffset: initialScale.rightOffset,');
+    // literal fixo e passou a vir de resolveChartUltraWideScale (baseline
+    // real ainda 8 até 1440px). Ordem A1 §19 (fechamento das lacunas do
+    // A1): agora soma a carga real do Trade Plan por cima da base — ver
+    // chart-ultrawide-scale.test.ts para a tabela completa de breakpoints
+    // e para a cobertura de resolveAdaptiveRightOffset/countCriticalRightLevels.
+    expect(c).toContain('rightOffset: initialRightOffset,');
   });
 
   it('§6: barra e painel usam a FAIXA formatEtaRange(msMin, ms) — nunca mais um único número', () => {
@@ -1146,7 +1148,10 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
 
   it('terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe (rótulos compactos EPC §4) — migrado pra HarmonicGeometryPlugin.tsx (pendência #6), cobertura completa em harmonic-geometry-plugin-wiring.test.ts', () => {
     const plugin = readFileSync(resolve(__dirname, '../src/chart/HarmonicGeometryPlugin.tsx'), 'utf8');
-    expect(plugin).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+    // ATUALIZAÇÃO 04/09/2026: PRZ agora desenha por hit dentro de um loop
+    // (fim do winner-take-all, pedido direto do Operador) — variável renomeada
+    // de `top` para `hit`, mesmo texto/terminologia.
+    expect(plugin).toContain('`${hit.pattern} ${hDirGlyph} PRZ ${(hit.fitScore * 100).toFixed(0)}%`');
     expect(plugin).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
   });
 

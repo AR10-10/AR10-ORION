@@ -138,7 +138,7 @@ import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR,
 import { DepthChartPlugin } from "./DepthChartPlugin";
 import { TpoProfilePlugin } from "./TpoProfilePlugin";
 import { computeTpoProfile } from "../nexus/tpo-profile";
-import { resolveChartUltraWideScale } from "./chart-ultrawide-scale";
+import { resolveChartUltraWideScale, resolveAdaptiveRightOffset, countCriticalRightLevels } from "./chart-ultrawide-scale";
 import { CHART_NATIVE_CANVAS_Z_INDEX } from "./chart-layer-depth";
 import { ZigZagPlugin } from "./ZigZagPlugin";
 import { IchimokuPlugin } from "./IchimokuPlugin";
@@ -1159,6 +1159,18 @@ function EnhancedChart_110_PercentImpl({
   // disparam re-render, então o plugin ficaria esperando por uma
   // atualização de `data` não relacionada para "descobrir" o chart pronto.
   const [chartReady, setChartReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick"> } | null>(null);
+  // Ordem A1 §19 (breathing room adaptativo por CARGA, fechamento das
+  // lacunas do A1): quantos níveis reais do Trade Plan (Entry+Invalidation+
+  // TP1-3) estão ativos AGORA. Ref (não state) porque o efeito de MONTAGEM
+  // do chart abaixo só roda uma vez — precisa ler o valor mais recente sem
+  // entrar na dependência dele (isso recriaria o chart inteiro a cada troca
+  // de plano, destruindo pan/zoom do Operador, o mesmo "reload" que o
+  // comentário logo abaixo já proíbe). Escrita pelo efeito reativo
+  // combinado logo após o efeito de montagem (mesmo bloco que também
+  // chama chart.applyOptions quando o chart já existe) — roda ANTES do
+  // efeito de montagem na primeira renderização, na mesma ordem
+  // declarada, então a ref já está atualizada quando a montagem lê.
+  const criticalLevelCountRef = useRef(0);
   // Diretriz Restauração/Inteligência Visual (achado real de auditoria):
   // "Achados da captura real do Operador" (commit anterior) apagou o title
   // das 3 séries do Trend Channel porque a lib desenha title no EIXO mesmo
@@ -1195,6 +1207,14 @@ function EnhancedChart_110_PercentImpl({
   useEffect(() => {
     if (!containerRef.current) return;
     const initialScale = resolveChartUltraWideScale(window.innerWidth);
+    // Ordem A1 §19: respiro inicial já soma a carga real do Trade Plan no
+    // instante da montagem — lê `tradePlan` direto (a closure deste efeito
+    // é fixada na 1ª renderização, já que as deps são `[]`), nunca só a
+    // classe de monitor. `criticalLevelCountRef` guarda o mesmo número
+    // para o resize handler abaixo consultar mais tarde, sem precisar
+    // reagir a `tradePlan` (o que recriaria o chart inteiro).
+    criticalLevelCountRef.current = countCriticalRightLevels(tradePlan ?? null);
+    const initialRightOffset = resolveAdaptiveRightOffset(window.innerWidth, criticalLevelCountRef.current);
     const chart = createChart(containerRef.current, {
       layout: {
         // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md (documento do
@@ -1303,7 +1323,7 @@ function EnhancedChart_110_PercentImpl({
         // documento mede pixels; rightOffset mede LARGURAS DE BARRA (a
         // própria unidade da lib) — grandezas diferentes, e este valor já
         // tem razão própria documentada, não é uma lacuna real.
-        rightOffset: initialScale.rightOffset,
+        rightOffset: initialRightOffset,
         // Achado real da auditoria "AUDITORIA VISUAL CIRÚRGICA" (P14): sem
         // formatter próprio, a lib cai no formato padrão do locale — em
         // pt-BR isso inclui abreviação com ponto solto ("ago.") na virada
@@ -1596,22 +1616,32 @@ function EnhancedChart_110_PercentImpl({
     // muda, nunca em todo pixel de resize.
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
     let currentScale = initialScale;
+    // Ordem A1 §19: o respiro adaptativo tem uma fonte de mudança A MAIS
+    // que fontSize/minimumWidth (redimensionar a janela) — a carga do
+    // Trade Plan pode mudar sem nenhum resize. Rastreado à parte de
+    // `currentScale` (que só conhece a base por monitor) para o resize
+    // nunca "esquecer" um ajuste por carga já aplicado pelo efeito reativo
+    // abaixo — os dois pontos usam a MESMA fórmula (resolveAdaptiveRight
+    // Offset), então nunca divergem em qual valor é o certo agora.
+    let currentRightOffset = initialRightOffset;
     const handleUltraWideResize = () => {
       if (resizeTimeout) clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
         const nextScale = resolveChartUltraWideScale(window.innerWidth);
+        const nextRightOffset = resolveAdaptiveRightOffset(window.innerWidth, criticalLevelCountRef.current);
         if (
           nextScale.fontSize === currentScale.fontSize &&
           nextScale.minimumWidth === currentScale.minimumWidth &&
-          nextScale.rightOffset === currentScale.rightOffset
+          nextRightOffset === currentRightOffset
         ) {
           return;
         }
         currentScale = nextScale;
+        currentRightOffset = nextRightOffset;
         chart.applyOptions({
           layout: { fontSize: nextScale.fontSize },
           rightPriceScale: { minimumWidth: nextScale.minimumWidth },
-          timeScale: { rightOffset: nextScale.rightOffset },
+          timeScale: { rightOffset: nextRightOffset },
         });
       }, 150);
     };
@@ -1646,6 +1676,26 @@ function EnhancedChart_110_PercentImpl({
       setChartReady(null);
     };
   }, []);
+
+  // Ordem A1 §19 (breathing room adaptativo): reage a uma mudança de Trade
+  // Plan SEM esperar por um resize — abrir/fechar/mudar de alvo um plano
+  // real muda a carga da região direita imediatamente, e o Operador não
+  // deveria precisar redimensionar a janela pra ver o respiro se ajustar.
+  // MESMA fórmula do efeito de montagem/resize acima (resolveAdaptiveRight
+  // Offset) — nunca uma segunda decisão sobre o mesmo número. Idempotente
+  // por natureza: se o resize já aplicou o valor certo, este efeito
+  // recalcula o mesmo número e o applyOptions vira um no-op real da lib.
+  // Também mantém criticalLevelCountRef atualizada (única escrita real —
+  // roda ANTES do efeito de montagem na primeira renderização, mesma
+  // ordem declarada, então a ref já reflete um Trade Plan pré-existente
+  // no exato instante em que o chart é criado).
+  useEffect(() => {
+    const count = countCriticalRightLevels(tradePlan ?? null);
+    criticalLevelCountRef.current = count;
+    if (!chartReady) return;
+    const rightOffset = resolveAdaptiveRightOffset(window.innerWidth, count);
+    chartReady.chart.applyOptions({ timeScale: { rightOffset } });
+  }, [chartReady, tradePlan]);
 
   // Atualiza a série EXISTENTE com o candle real — nunca recria o chart.
   // Isto é o que satisfaz "transição suave entre timeframes (sem

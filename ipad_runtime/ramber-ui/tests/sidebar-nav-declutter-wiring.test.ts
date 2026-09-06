@@ -105,8 +105,16 @@ describe('SideBar: gavetas de rodapé — Market Intelligence e Radar/OIH sempre
   });
 });
 
-describe('MoreHorizontal importado de lucide-react — nenhum ícone novo redigitado à parte', () => {
+describe('MoreHorizontal importado de lucide-react — nenhum ícone redigitado à parte', () => {
   it('import real na lista de lucide-react', () => {
-    expect(app).toContain('MoreHorizontal,\n} from "lucide-react";');
+    expect(app).toContain('MoreHorizontal,\n  Gauge,\n} from "lucide-react";');
+  });
+
+  // Gauge (Ordem A1 §9-§10, fechamento das lacunas do A1 — botão de
+  // Performance na régua "mais gavetas") é o único ícone acrescentado
+  // depois de MoreHorizontal — real, importado da MESMA lista, nunca uma
+  // segunda string de ícone redigitada à parte em outro lugar do arquivo.
+  it('Gauge é real (lucide-react), não uma string/glifo inventado em outro lugar do arquivo', () => {
+    expect(app).not.toMatch(/const Gauge\s*=/);
   });
 });

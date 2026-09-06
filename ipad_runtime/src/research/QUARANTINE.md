@@ -472,7 +472,9 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   `SYSTEM_HANDBOOK.md` §6.7.
 
 - **`backtest/compare-runs.js`** (2026-07-20, Fase 9 "Autoevolução
-  Controlada" da Diretriz de Evolução Quantitativa e Aprendizado Real).
+  Controlada" da Diretriz de Evolução Quantitativa e Aprendizado Real;
+  **GRADUADO em 2026-09-04**, ver "GRADUAÇÃO — comparação de backtests
+  dentro do app" mais abaixo para o registro completo).
   `compareBacktestRuns(baseline, candidate)` — veredito estatístico
   (`MELHOROU`/`PIOROU`/`NEUTRO`/`DADOS_INSUFICIENTES`) sobre duas
   execuções reais de `runStructuralBacktest`, via two-proportion z-test
@@ -482,13 +484,6 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   variância pooled nula ⇒ sempre `DADOS_INSUFICIENTES`, nunca um veredito
   fabricado. Nunca aplica nada sozinho — devolve o veredito para leitura
   humana; a "APROVAÇÃO" da Fase 9 continua manual, sempre.
-  Status: **LABORATÓRIO** — nenhum módulo de produção importa daqui
-  (fronteira travada por teste em
-  `ramber-ui/tests/compare-runs.test.ts`). Já é totalmente usável hoje
-  para comparar duas execuções sobre qualquer série de candles (fixture
-  OU real, quando existir) — não depende da Fase 2 do backtest para
-  funcionar como mecanismo, só depende dela para que a comparação
-  descreva desempenho de mercado real em vez de uma série de teste.
 
 - `ramber-ui/src/nexus/reversal-detector.ts` — **Detector de Reversão**
   (`computeReversalReading`) + **instrumento de medição**
@@ -1023,3 +1018,66 @@ como `0%` — vira travessão, porque ausência de medida não é medida zero.
 real (`MIN_TRADES_FOR_VALID_EXPECTANCY`), e há teste comparando os dois.
 Abaixo dele o número real continua visível, com a ressalva junto — esconder
 seria tão desonesto quanto apresentar como sólido.
+
+## GRADUAÇÃO — comparação de backtests dentro do app (compare-runs.js, 2026-09-04)
+
+**Por que agora.** Pedido do Operador ("organiza tudo que tem no
+laboratório e deixa rodando"). Auditoria de `src/research/**` encontrou
+14 engines já graduados, `hmm-regime-model.js` isolado por razão
+estrutural real (retreino exige dado de mercado que este sandbox nunca
+tem — nenhuma mudança forçada aqui, ver seção própria acima), e
+`compare-runs.js` como o único módulo do Laboratório de backtest com
+suíte completa (10 testes) e **zero consumidor de produção** — mesmo
+padrão de falha já registrado nesta trilha para `institutional-blocks.js`/
+`supertrend-engine.js`: um motor correto que ninguém consome não é
+inteligência entregue.
+
+**Zero matemática nova.** `compareBacktestRuns` já existia intocado — a
+graduação é só o fio até a UI, exatamente como `structural-backtest.js`/
+`history-capture.js` graduaram via `backtest-worker.ts` numa rodada
+anterior.
+
+**Por que App.tsx e não um Worker novo.** `structural-backtest.js` roda
+walk-forward sobre milhares de candles (segundos de CPU, por isso o
+Worker). `compareBacktestRuns` é um z-test síncrono sobre dois objetos
+JÁ medidos — trabalho de microssegundos. Criar um Worker só para isso
+seria complexidade sem motivo (Regra de Ouro 6 protege o main thread de
+trabalho PESADO, não proíbe aritmética trivial nele).
+
+**Ligação real (a regra de graduação):**
+- `ramber-ui/src/nexus/backtest-presentation.ts` — `descreverVeredito()`,
+  nova função pura: rotula os 4 vereditos reais sem fazer "MELHOROU"
+  soar como aprovação automática (a Fase 9 exige aprovação humana mesmo
+  assim — `COMPARE_RUNS_AVISO` sempre visível, nunca só no tooltip).
+- `ramber-ui/src/App.tsx` (`BacktestPanel`) — único consumidor
+  autorizado. Um botão "Salvar como baseline" tira uma FOTOGRAFIA local
+  (`useState`, nunca persistida) do resultado já resolvido; rodar outra
+  medição vira a "corrida atual"; `compareBacktestRuns(baseline, r)` só
+  roda quando as duas têm `status === "OK"` — nunca reimplementa as
+  guardas do motor (amostra insuficiente, variância nula continuam
+  decisão exclusiva de `compare-runs.js`).
+- `ramber-ui/tests/compare-runs.test.ts` — a fronteira "ninguém importa"
+  virou "só `src/App.tsx` importa", mesma disciplina real de
+  `structural-backtest.test.ts`: mais específica, nunca afrouxada.
+
+**LEI 24 — display only, travado por teste.** Mesmo bloco de
+`BacktestPanel` já testado (`backtest-in-app.test.ts`, "o backtest não
+decide e não trava a tela") cobre o código novo automaticamente — nenhum
+`setDirection`/`engine.direction`/`setChartLayerVisibility` na função
+inteira. A comparação nunca aplica nada sozinha: é leitura para o
+Operador decidir, exatamente como o próprio módulo já declarava antes de
+ter consumidor nenhum.
+
+**O que esta graduação NÃO faz.** Não persiste a baseline entre sessões
+(recarregar a página perde a fotografia — decisão deliberada, comparar é
+um ato pontual, não um estado do app). Não roda os dois backtests em
+paralelo nem agenda nada — o Operador mede, salva, mede de novo, compara,
+na ordem que quiser. Não resolve a Fase 2 real do backtest (histórico
+capturado de verdade, não só a série do gráfico já em memória) — isso
+seguiria pendente mesmo sem esta graduação.
+
+**Suíte:** `compare-runs.test.ts` (10, execução real do z-test + a
+fronteira agora nomeada) + 6 testes novos em `backtest-in-app.test.ts`
+(`descreverVeredito`, fiação real de `BacktestPanel`, baseline como
+estado local não-persistido, aviso obrigatório renderizado, comparação
+gated pelos dois status OK, execução real ponta a ponta).

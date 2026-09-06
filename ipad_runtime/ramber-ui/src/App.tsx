@@ -196,9 +196,23 @@ import {
   formatarR,
   avisoObrigatorio,
   explicarFalha,
+  descreverVeredito,
   type BacktestAggregate,
   type BacktestProvenance,
 } from "./nexus/backtest-presentation";
+// Ordem A1 §9-§14 (fechamento das lacunas do A1): instrumentação real de
+// FPS, DEV-only — ver PerformanceMonitorPanel/import.meta.env.DEV abaixo.
+import { FpsRecorder, type FpsSample } from "./nexus/fps-monitor";
+// GRADUAÇÃO (pedido do Operador: "organiza tudo que tem no laboratório"):
+// compareBacktestRuns saía do Laboratório de Evolução sem nenhum consumidor
+// de produção (fronteira travada por teste em compare-runs.test.ts, agora
+// atualizada para nomear App.tsx como o único importador autorizado — mesmo
+// padrão real já usado quando structural-backtest.js/history-capture.js
+// graduaram via backtest-worker.ts). App.tsx é o consumidor certo aqui (e
+// não um Worker novo): compareBacktestRuns é um z-test síncrono sobre dois
+// resultados JÁ medidos — nenhum trabalho pesado, nada que justifique a
+// complexidade de mais um Worker.
+import { compareBacktestRuns, COMPARE_RUNS_AVISO } from "../../src/research/backtest/compare-runs.js";
 import { timeframeMinutes } from "./nexus/timeframe-layer-profile";
 // Carta Branca: consumidor real do Evidence Fusion Engine — SYSTEM_HANDBOOK
 // §6.72/§6.74/§6.76 classificaram isto como "iniciativa de arquitetura
@@ -219,6 +233,10 @@ import { computeMacdSeries, latestMacd } from "./nexus/macd";
 // conselho) e armadilhas por corroboração de eventos reais.
 import { buildScenarioProjection, formatScenarioPathLabel, type ScenarioLevel } from "./nexus/scenario-engine";
 import { detectInstitutionalTraps } from "./nexus/trap-detection";
+// Ordem A2.1 (Microstructure Event Engine, escopo "consolidar sob 1
+// contrato tipado"): organiza cvd/orderflowSignals/trapSignals/orderBooks
+// já reais sob um schema único — zero segundo motor, ver header do arquivo.
+import { composeMicrostructureSnapshot } from "./nexus/microstructure-snapshot";
 // Phase Ω Priority 2 ("Probability Engine" no pedido original do Operador —
 // entregue honestamente como Confluence/Conviction Engine, ver o cabeçalho
 // de confluence-engine.ts para o racional completo). Reaplica o MESMO pool
@@ -484,6 +502,7 @@ import {
   Wallet,
   SlidersHorizontal,
   MoreHorizontal,
+  Gauge,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -943,6 +962,19 @@ export default function App() {
   // v16.0 PRO MAX §9.1/§9.4: mesmo padrão exato dos painéis acima (toggle
   // simples, botão dedicado na SideBar, painel fixed/centered).
   const [paperTradingOpen, setPaperTradingOpen] = useState(false);
+  // Ordem A1 §9-§10 (fechamento das lacunas do A1): instrumentação de FPS.
+  // Mesmo padrão exato dos 4 painéis acima — mas Laboratory-only, nunca
+  // "DEV-only" via import.meta.env.DEV: esse flag depende de como o
+  // bundler resolve NODE_ENV/mode no ambiente que serve o app (medido:
+  // false até num `vite` dev server real quando NODE_ENV=production está
+  // no ambiente) — um toggle explícito do Operador é o único jeito
+  // confiável do painel existir em QUALQUER build, inclusive produção,
+  // exatamente onde o Operador de fato quer medir FPS no iPad real (Ordem
+  // A1 §14). Nunca aparece no Terminal normal por padrão (§10): começa
+  // fechado, nunca persiste entre sessões — mesma disciplina de
+  // habilitarManualAberto (ChartLayersPanelContent) e do resto desta
+  // régua.
+  const [performanceMonitorOpen, setPerformanceMonitorOpen] = useState(false);
   // v16.0 DEFINITIVO §9: fila de toasts — sempre-visível, sem toggle (as
   // notificações aparecem por conta própria quando uma transição real
   // acontece). Efêmera por natureza (auto-dismiss em 5s): não entra na
@@ -3636,18 +3668,47 @@ export default function App() {
     voiceEngine.init();
   }, []);
 
+  // Ordem A2.1: mesmo book real por exchange que OrderBookWidget/
+  // OrderFlowHeatmapPlugin já leem (setExchangeOrderBook("BINANCE", ...)
+  // acima) — zero segunda leitura, só um segundo consumidor do dado real
+  // já na store.
+  const exchangeOrderBooks = useExchangeOrderBooks();
   // V-MAX Fase 2 (armadilhas institucionais): corroboração de eventos
   // REAIS — sweeps consumados (flag swept do motor SMC) + sinais reais de
   // ABSORPTION/EXHAUSTION na janela. Lista vazia = estado honesto comum.
-  useEffect(() => {
-    useUnifiedSnapshotStore.getState().setTrapSignals(
+  // Extraído em useMemo (Ordem A2.1: "zero segunda matemática") porque o
+  // Microstructure Snapshot logo abaixo precisa do MESMO resultado —
+  // nunca uma segunda chamada real de detectInstitutionalTraps.
+  const trapSignals = useMemo(
+    () =>
       detectInstitutionalTraps({
         liquidityZones: smcZones.liquidityZones,
         orderflowSignals,
         now: Date.now(),
       }),
+    [smcZones, orderflowSignals],
+  );
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setTrapSignals(trapSignals);
+  }, [trapSignals]);
+  // Ordem A2.1 (Microstructure Event Engine, escopo "consolidar sob 1
+  // contrato tipado"): organiza cvd/orderflowSignals/trapSignals (acima)/
+  // orderBooks — todos já reais — sob o schema único de
+  // nexus/microstructure-snapshot.ts. Zero segundo cálculo: cada campo do
+  // snapshot é passthrough de um motor já real (signal-engine.js via
+  // orderflowSignals/cvd, trap-detection.ts via trapSignals,
+  // order-book-depth.ts via os bids/asks do book real). LEI 24: nunca lê
+  // nem produz Decision/Direction/Entry/Risk/Trade Plan.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setMicrostructureSnapshot(
+      composeMicrostructureSnapshot({
+        orderflowSignals,
+        trapSignals,
+        cvd,
+        orderBooks: exchangeOrderBooks,
+      }),
     );
-  }, [smcZones, orderflowSignals]);
+  }, [orderflowSignals, trapSignals, cvd, exchangeOrderBooks]);
 
   // V-MAX Fase 1 item 5: eventos afetivos REAIS — só TRANSIÇÕES
   // verdadeiras de estado operacional viram evento (refs guardam o estado
@@ -3972,6 +4033,8 @@ export default function App() {
       setMarketAnalysisOpen,
       paperTradingOpen,
       setPaperTradingOpen,
+      performanceMonitorOpen,
+      setPerformanceMonitorOpen,
       chartLayerVisibility,
       toggleChartLayer,
       restoreChartLayersToAuto,
@@ -4057,6 +4120,7 @@ export default function App() {
       radarPanelOpen,
       marketAnalysisOpen,
       paperTradingOpen,
+      performanceMonitorOpen,
       chartLayerVisibility,
       chartLayerAutoMode,
       emaPeriod,
@@ -4486,6 +4550,19 @@ export default function App() {
         <MarketAnalysisPanel priceData={priceData} chartData={chartData} />
         <PaperTradingPanel priceData={priceData} />
         <AlertToastStack alerts={alerts} onDismiss={(id) => setAlerts((prev) => prev.filter((a) => a.id !== id))} />
+        {/* Ordem A1 §9-§10 (fechamento das lacunas do A1): Laboratory-only,
+            nunca ligado por padrão — ver performanceMonitorOpen acima. Um
+            gate "import.meta.env.DEV" pareceria mais automático, mas
+            MEDIDO ao vivo (Playwright contra `vite` dev server real, ver
+            commit): DEV lê `false` sempre que o ambiente que serve o app
+            já tem NODE_ENV=production (verdade neste sandbox, e um risco
+            real de também ser verdade em qualquer outro ambiente com a
+            mesma convenção) — um gate assim esconderia o painel do
+            Operador até no `npm run dev` dele, e nunca apareceria nem de
+            propósito no build de produção que ele realmente usa no iPad
+            (Ordem A1 §14 pede medir lá). O toggle explícito funciona em
+            QUALQUER build, sempre começa fechado. */}
+        {performanceMonitorOpen && <PerformanceMonitorPanel />}
       </div>
     </WidgetContext.Provider>
   );
@@ -5954,6 +6031,52 @@ function AlertToastStack({ alerts, onDismiss }: { alerts: AlertEvent[]; onDismis
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Ordem A1 §9-§10-§12 (fechamento das lacunas do A1): instrumentação REAL
+// de FPS, Laboratory-only (ver performanceMonitorOpen/o botão dedicado na
+// régua "mais gavetas" — nunca ligado por padrão, nunca aparece no
+// Terminal normal). Painel puramente diagnóstico — nunca lê nem influencia
+// Decision/Direction/Entry/Risk/Trade Plan (Ordem A1 §15). Continuamente
+// ativo enquanto aberto: mede o que quer que o Operador esteja fazendo
+// agora (pan/zoom/resize/crosshair/troca de timeframe/camada) sem precisar
+// de um botão por cenário — o ring buffer de fps-monitor.ts já é a janela
+// "recente" (Ordem A1 §11: medir sob interação, nunca só idle).
+function PerformanceMonitorPanel() {
+  const recorderRef = useRef<FpsRecorder | null>(null);
+  const [sample, setSample] = useState<FpsSample | null>(null);
+
+  useEffect(() => {
+    const recorder = new FpsRecorder();
+    recorderRef.current = recorder;
+    recorder.start();
+    const interval = setInterval(() => setSample(recorder.getSample()), 500);
+    return () => {
+      clearInterval(interval);
+      recorder.stop();
+    };
+  }, []);
+
+  if (!sample) return null;
+
+  const statusColor: Record<FpsSample["status"], string> = {
+    HEALTHY: "#00ffaa",
+    DEGRADED: "#f0d06f",
+    CRITICAL: "#ff0055",
+    NOT_MEASURED: "#8ab4f8",
+  };
+  const statusLabel = sample.status === "NOT_MEASURED" ? "NOT MEASURED — ENVIRONMENT LIMITATION" : sample.status;
+
+  return (
+    <div
+      className="!fixed !z-[1300] bottom-2 left-1/2 -translate-x-1/2 pointer-events-none select-none rounded bg-[#010308]/90 border border-[#8ab4f8]/20 px-2 py-1 text-[0.55rem] font-mono text-[#8ab4f8]/80 whitespace-nowrap"
+      aria-hidden="true"
+    >
+      PERFORMANCE · FPS {sample.fps !== null ? sample.fps.toFixed(0) : "—"} · FRAME{" "}
+      {sample.avgFrameTimeMs !== null ? `${sample.avgFrameTimeMs.toFixed(1)}ms` : "—"} ·{" "}
+      <span style={{ color: statusColor[sample.status] }}>{statusLabel}</span>
     </div>
   );
 }
@@ -8441,7 +8564,16 @@ function SideBar({
   activeTab: string;
   setActiveTab: (t: string) => void;
 }) {
-  const { setWorkspaceManagerOpen, setChartLayersOpen, setRadarPanelOpen, setMarketAnalysisOpen, setPaperTradingOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
+  const {
+    setWorkspaceManagerOpen,
+    setChartLayersOpen,
+    setRadarPanelOpen,
+    setMarketAnalysisOpen,
+    setPaperTradingOpen,
+    setPerformanceMonitorOpen,
+    leftDrawerOpen,
+    toggleLeftDrawer,
+  } = useContext(WidgetContext) || {};
   // OMEGA CORE V-MAX (completar Fase 7): contagem real do próprio snapshot
   // — nunca um badge decorativo. "Substitui o botão pulsante" (diretiva):
   // um número real (0 quando não há nada) é honesto; uma animação
@@ -8640,6 +8772,19 @@ function SideBar({
             className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
           >
             <Wallet size={17} className="relative z-10" />
+          </button>
+          {/* Ordem A1 §9-§10 (fechamento das lacunas do A1): instrumentação
+              de FPS. Mesmo padrão exato dos 3 botões acima (toggle simples,
+              painel fixed/centered abaixo) — Laboratory, nunca ligado por
+              padrão, nunca persiste entre sessões. */}
+          <button
+            type="button"
+            onClick={() => setPerformanceMonitorOpen?.((v: boolean) => !v)}
+            title="Performance — instrumentação real de FPS (diagnóstico, nunca afeta Decision/Risk/Trade Plan)"
+            aria-label="Performance — instrumentação real de FPS"
+            className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+          >
+            <Gauge size={17} className="relative z-10" />
           </button>
         </>
       )}
@@ -8980,6 +9125,20 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
   const prov = r?.status === "OK" ? r.provenance ?? null : null;
   const taxa = agg ? descreverTaxa(agg) : null;
 
+  // GRADUAÇÃO (Fase 9, "Autoevolução Controlada"): baseline é uma FOTOGRAFIA
+  // local de uma corrida já resolvida — nunca outra corrida ao vivo, nunca
+  // persistida (comparar é uma decisão pontual do Operador, não um estado
+  // do app). "Comparar" só aparece quando as duas corridas (baseline +
+  // atual) resolveram com status OK — compareBacktestRuns já devolve
+  // DADOS_INSUFICIENTES honesto para o resto (amostra pequena, variância
+  // nula), então este componente só decide QUANDO chamar, nunca reimplementa
+  // as guardas.
+  const [baseline, setBaseline] = useState<typeof r | null>(null);
+  const baselineAgg = baseline?.status === "OK" ? baseline.aggregate ?? null : null;
+  const baselineProv = baseline?.status === "OK" ? baseline.provenance ?? null : null;
+  const comparison = baseline?.status === "OK" && r?.status === "OK" ? compareBacktestRuns(baseline, r) : null;
+  const veredito = comparison ? descreverVeredito(comparison.verdict) : null;
+
   return (
     <ModulePanel title="Backtest Estrutural (desfechos reais, walk-forward zero-lookahead)">
       <div className="flex items-center gap-2 flex-wrap">
@@ -9029,7 +9188,41 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
             <span className="text-[0.45rem] text-[#ffaa00] leading-tight">⚠ {taxa.ressalva}</span>
           )}
           {prov && <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight">{avisoObrigatorio(prov)}</span>}
+          <button
+            type="button"
+            onClick={() => setBaseline(r)}
+            className="self-start text-[0.42rem] px-1.5 py-0.5 rounded border border-[#8ab4f8]/30 text-[#8ab4f8] font-bold uppercase tracking-wider hover:border-[#8ab4f8]/60"
+          >
+            Salvar como baseline
+          </button>
         </>
+      )}
+
+      {baselineAgg && baselineProv && (
+        <div className="border-t border-[#8ab4f8]/10 pt-1 mt-1 flex flex-col gap-0.5">
+          <span className="text-[0.42rem] text-[#8ab4f8]/50 uppercase tracking-wider">
+            Baseline salva: {baselineProv.symbol} {baselineProv.timeframe} · {formatarFracao(baselineAgg.taxaAlvoAmostra)} ({baselineAgg.resolved} resolvidos)
+          </span>
+          {comparison && veredito ? (
+            <>
+              <ModuleStat label="Comparação vs. baseline" value={veredito.label} tone={veredito.tone} />
+              {comparison.zScore !== null && (
+                <ModuleStat label="z-score / Δ taxa" value={`${comparison.zScore.toFixed(2)} / ${formatarFracao(comparison.delta)}`} />
+              )}
+              {comparison.sameContext === false && (
+                <span className="text-[0.42rem] text-[#ffaa00] leading-tight">
+                  ⚠ Baseline e corrida atual são de símbolo/timeframe diferentes — comparação entre contextos distintos.
+                </span>
+              )}
+              {comparison.reason && (
+                <span className="text-[0.42rem] text-[#8ab4f8]/60 leading-tight">{comparison.reason}</span>
+              )}
+              <span className="text-[0.4rem] text-[#8ab4f8]/45 leading-tight">{COMPARE_RUNS_AVISO}</span>
+            </>
+          ) : (
+            <span className="text-[0.42rem] text-[#8ab4f8]/40">Meça a corrida atual (status OK) para comparar com a baseline.</span>
+          )}
+        </div>
       )}
     </ModulePanel>
   );
@@ -9488,7 +9681,19 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Perception Index (CPI · reward/pain memory, real transitions)">
           <ModuleStat label="CPI" value={cpi !== null ? pct(cpi) : MODULE_EMPTY} tone={cpi !== null && cpi >= 0.5 ? "long" : cpi !== null ? "short" : "neutral"} />
         </ModulePanel>
-        <BacktestPanel symbol={selectedAsset ?? "BTCUSDT"} timeframe={chartTimeframe ?? "15m"} />
+        {/* Achado real via verificação ao vivo (Playwright, sandbox de rede
+            bloqueada): symbol={selectedAsset} passava o baseAsset puro
+            ("BTC", 3 caracteres) — mas validarPedido (backtest-worker.ts)
+            exige /^[A-Z0-9]{5,20}$/, o mesmo par completo que todo o resto
+            do app já usa (SmartOmnibox's `${selectedAsset}USDT`,
+            requestFuturesCandleSnapshot's `-PERP`). "MEDIR" sempre
+            devolvia simbolo_invalido para QUALQUER ativo real (BTC/ETH/
+            SOL/... — todos com menos de 5 caracteres) — bug pré-existente,
+            nunca pego porque os testes de execução real chamam
+            validarPedido/executarPedido direto com "BTCUSDT" fixo, nunca
+            através deste call site. Corrigido montando o mesmo par
+            completo, nunca um símbolo novo/inventado. */}
+        <BacktestPanel symbol={`${selectedAsset ?? "BTC"}USDT`} timeframe={chartTimeframe ?? "15m"} />
         <ModulePanel title="Signal Track Record (real first-touch outcomes, persisted)">
           <ModuleStat label="Open Plan" value={trackRecord.active ? `${trackRecord.active.plan.direction} since ${new Date(trackRecord.active.openedAt).toLocaleTimeString("en-US", { hour12: false })}` : "NONE"} />
           <ModuleStat label="Target Hits" value={String(trackRecord.targetHits)} tone="long" />
