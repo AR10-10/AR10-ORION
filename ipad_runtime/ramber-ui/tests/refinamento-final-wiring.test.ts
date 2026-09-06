@@ -267,10 +267,12 @@ describe('Diretriz Mestra: Heat Score + TENDÊNCIA no header, Magnet, futuro, MT
     expect(crosshairBlock).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
     expect(c).not.toContain('CrosshairMode.Normal');
     // AR10_ORDEM_ULTRA_LED_v3.md (Fase A): rightOffset deixou de ser um
-    // literal fixo e passou a vir de resolveChartUltraWideScale
-    // (baseline real ainda 8 até 1440px — ver chart-ultrawide-scale.test.ts
-    // para a tabela completa de breakpoints).
-    expect(c).toContain('rightOffset: initialScale.rightOffset,');
+    // literal fixo e passou a vir de resolveChartUltraWideScale (baseline
+    // real ainda 8 até 1440px). Ordem A1 §19 (fechamento das lacunas do
+    // A1): agora soma a carga real do Trade Plan por cima da base — ver
+    // chart-ultrawide-scale.test.ts para a tabela completa de breakpoints
+    // e para a cobertura de resolveAdaptiveRightOffset/countCriticalRightLevels.
+    expect(c).toContain('rightOffset: initialRightOffset,');
   });
 
   it('§6: barra e painel usam a FAIXA formatEtaRange(msMin, ms) — nunca mais um único número', () => {

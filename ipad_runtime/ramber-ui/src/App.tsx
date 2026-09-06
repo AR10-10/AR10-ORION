@@ -200,6 +200,9 @@ import {
   type BacktestAggregate,
   type BacktestProvenance,
 } from "./nexus/backtest-presentation";
+// Ordem A1 §9-§14 (fechamento das lacunas do A1): instrumentação real de
+// FPS, DEV-only — ver PerformanceMonitorPanel/import.meta.env.DEV abaixo.
+import { FpsRecorder, type FpsSample } from "./nexus/fps-monitor";
 // GRADUAÇÃO (pedido do Operador: "organiza tudo que tem no laboratório"):
 // compareBacktestRuns saía do Laboratório de Evolução sem nenhum consumidor
 // de produção (fronteira travada por teste em compare-runs.test.ts, agora
@@ -495,6 +498,7 @@ import {
   Wallet,
   SlidersHorizontal,
   MoreHorizontal,
+  Gauge,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -954,6 +958,19 @@ export default function App() {
   // v16.0 PRO MAX §9.1/§9.4: mesmo padrão exato dos painéis acima (toggle
   // simples, botão dedicado na SideBar, painel fixed/centered).
   const [paperTradingOpen, setPaperTradingOpen] = useState(false);
+  // Ordem A1 §9-§10 (fechamento das lacunas do A1): instrumentação de FPS.
+  // Mesmo padrão exato dos 4 painéis acima — mas Laboratory-only, nunca
+  // "DEV-only" via import.meta.env.DEV: esse flag depende de como o
+  // bundler resolve NODE_ENV/mode no ambiente que serve o app (medido:
+  // false até num `vite` dev server real quando NODE_ENV=production está
+  // no ambiente) — um toggle explícito do Operador é o único jeito
+  // confiável do painel existir em QUALQUER build, inclusive produção,
+  // exatamente onde o Operador de fato quer medir FPS no iPad real (Ordem
+  // A1 §14). Nunca aparece no Terminal normal por padrão (§10): começa
+  // fechado, nunca persiste entre sessões — mesma disciplina de
+  // habilitarManualAberto (ChartLayersPanelContent) e do resto desta
+  // régua.
+  const [performanceMonitorOpen, setPerformanceMonitorOpen] = useState(false);
   // v16.0 DEFINITIVO §9: fila de toasts — sempre-visível, sem toggle (as
   // notificações aparecem por conta própria quando uma transição real
   // acontece). Efêmera por natureza (auto-dismiss em 5s): não entra na
@@ -3983,6 +4000,8 @@ export default function App() {
       setMarketAnalysisOpen,
       paperTradingOpen,
       setPaperTradingOpen,
+      performanceMonitorOpen,
+      setPerformanceMonitorOpen,
       chartLayerVisibility,
       toggleChartLayer,
       restoreChartLayersToAuto,
@@ -4068,6 +4087,7 @@ export default function App() {
       radarPanelOpen,
       marketAnalysisOpen,
       paperTradingOpen,
+      performanceMonitorOpen,
       chartLayerVisibility,
       chartLayerAutoMode,
       emaPeriod,
@@ -4497,6 +4517,19 @@ export default function App() {
         <MarketAnalysisPanel priceData={priceData} chartData={chartData} />
         <PaperTradingPanel priceData={priceData} />
         <AlertToastStack alerts={alerts} onDismiss={(id) => setAlerts((prev) => prev.filter((a) => a.id !== id))} />
+        {/* Ordem A1 §9-§10 (fechamento das lacunas do A1): Laboratory-only,
+            nunca ligado por padrão — ver performanceMonitorOpen acima. Um
+            gate "import.meta.env.DEV" pareceria mais automático, mas
+            MEDIDO ao vivo (Playwright contra `vite` dev server real, ver
+            commit): DEV lê `false` sempre que o ambiente que serve o app
+            já tem NODE_ENV=production (verdade neste sandbox, e um risco
+            real de também ser verdade em qualquer outro ambiente com a
+            mesma convenção) — um gate assim esconderia o painel do
+            Operador até no `npm run dev` dele, e nunca apareceria nem de
+            propósito no build de produção que ele realmente usa no iPad
+            (Ordem A1 §14 pede medir lá). O toggle explícito funciona em
+            QUALQUER build, sempre começa fechado. */}
+        {performanceMonitorOpen && <PerformanceMonitorPanel />}
       </div>
     </WidgetContext.Provider>
   );
@@ -5965,6 +5998,52 @@ function AlertToastStack({ alerts, onDismiss }: { alerts: AlertEvent[]; onDismis
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Ordem A1 §9-§10-§12 (fechamento das lacunas do A1): instrumentação REAL
+// de FPS, Laboratory-only (ver performanceMonitorOpen/o botão dedicado na
+// régua "mais gavetas" — nunca ligado por padrão, nunca aparece no
+// Terminal normal). Painel puramente diagnóstico — nunca lê nem influencia
+// Decision/Direction/Entry/Risk/Trade Plan (Ordem A1 §15). Continuamente
+// ativo enquanto aberto: mede o que quer que o Operador esteja fazendo
+// agora (pan/zoom/resize/crosshair/troca de timeframe/camada) sem precisar
+// de um botão por cenário — o ring buffer de fps-monitor.ts já é a janela
+// "recente" (Ordem A1 §11: medir sob interação, nunca só idle).
+function PerformanceMonitorPanel() {
+  const recorderRef = useRef<FpsRecorder | null>(null);
+  const [sample, setSample] = useState<FpsSample | null>(null);
+
+  useEffect(() => {
+    const recorder = new FpsRecorder();
+    recorderRef.current = recorder;
+    recorder.start();
+    const interval = setInterval(() => setSample(recorder.getSample()), 500);
+    return () => {
+      clearInterval(interval);
+      recorder.stop();
+    };
+  }, []);
+
+  if (!sample) return null;
+
+  const statusColor: Record<FpsSample["status"], string> = {
+    HEALTHY: "#00ffaa",
+    DEGRADED: "#f0d06f",
+    CRITICAL: "#ff0055",
+    NOT_MEASURED: "#8ab4f8",
+  };
+  const statusLabel = sample.status === "NOT_MEASURED" ? "NOT MEASURED — ENVIRONMENT LIMITATION" : sample.status;
+
+  return (
+    <div
+      className="!fixed !z-[1300] bottom-2 left-1/2 -translate-x-1/2 pointer-events-none select-none rounded bg-[#010308]/90 border border-[#8ab4f8]/20 px-2 py-1 text-[0.55rem] font-mono text-[#8ab4f8]/80 whitespace-nowrap"
+      aria-hidden="true"
+    >
+      PERFORMANCE · FPS {sample.fps !== null ? sample.fps.toFixed(0) : "—"} · FRAME{" "}
+      {sample.avgFrameTimeMs !== null ? `${sample.avgFrameTimeMs.toFixed(1)}ms` : "—"} ·{" "}
+      <span style={{ color: statusColor[sample.status] }}>{statusLabel}</span>
     </div>
   );
 }
@@ -8452,7 +8531,16 @@ function SideBar({
   activeTab: string;
   setActiveTab: (t: string) => void;
 }) {
-  const { setWorkspaceManagerOpen, setChartLayersOpen, setRadarPanelOpen, setMarketAnalysisOpen, setPaperTradingOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
+  const {
+    setWorkspaceManagerOpen,
+    setChartLayersOpen,
+    setRadarPanelOpen,
+    setMarketAnalysisOpen,
+    setPaperTradingOpen,
+    setPerformanceMonitorOpen,
+    leftDrawerOpen,
+    toggleLeftDrawer,
+  } = useContext(WidgetContext) || {};
   // OMEGA CORE V-MAX (completar Fase 7): contagem real do próprio snapshot
   // — nunca um badge decorativo. "Substitui o botão pulsante" (diretiva):
   // um número real (0 quando não há nada) é honesto; uma animação
@@ -8651,6 +8739,19 @@ function SideBar({
             className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
           >
             <Wallet size={17} className="relative z-10" />
+          </button>
+          {/* Ordem A1 §9-§10 (fechamento das lacunas do A1): instrumentação
+              de FPS. Mesmo padrão exato dos 3 botões acima (toggle simples,
+              painel fixed/centered abaixo) — Laboratory, nunca ligado por
+              padrão, nunca persiste entre sessões. */}
+          <button
+            type="button"
+            onClick={() => setPerformanceMonitorOpen?.((v: boolean) => !v)}
+            title="Performance — instrumentação real de FPS (diagnóstico, nunca afeta Decision/Risk/Trade Plan)"
+            aria-label="Performance — instrumentação real de FPS"
+            className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+          >
+            <Gauge size={17} className="relative z-10" />
           </button>
         </>
       )}
