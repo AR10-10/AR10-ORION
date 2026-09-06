@@ -233,6 +233,10 @@ import { computeMacdSeries, latestMacd } from "./nexus/macd";
 // conselho) e armadilhas por corroboração de eventos reais.
 import { buildScenarioProjection, formatScenarioPathLabel, type ScenarioLevel } from "./nexus/scenario-engine";
 import { detectInstitutionalTraps } from "./nexus/trap-detection";
+// Ordem A2.1 (Microstructure Event Engine, escopo "consolidar sob 1
+// contrato tipado"): organiza cvd/orderflowSignals/trapSignals/orderBooks
+// já reais sob um schema único — zero segundo motor, ver header do arquivo.
+import { composeMicrostructureSnapshot } from "./nexus/microstructure-snapshot";
 // Phase Ω Priority 2 ("Probability Engine" no pedido original do Operador —
 // entregue honestamente como Confluence/Conviction Engine, ver o cabeçalho
 // de confluence-engine.ts para o racional completo). Reaplica o MESMO pool
@@ -3664,18 +3668,47 @@ export default function App() {
     voiceEngine.init();
   }, []);
 
+  // Ordem A2.1: mesmo book real por exchange que OrderBookWidget/
+  // OrderFlowHeatmapPlugin já leem (setExchangeOrderBook("BINANCE", ...)
+  // acima) — zero segunda leitura, só um segundo consumidor do dado real
+  // já na store.
+  const exchangeOrderBooks = useExchangeOrderBooks();
   // V-MAX Fase 2 (armadilhas institucionais): corroboração de eventos
   // REAIS — sweeps consumados (flag swept do motor SMC) + sinais reais de
   // ABSORPTION/EXHAUSTION na janela. Lista vazia = estado honesto comum.
-  useEffect(() => {
-    useUnifiedSnapshotStore.getState().setTrapSignals(
+  // Extraído em useMemo (Ordem A2.1: "zero segunda matemática") porque o
+  // Microstructure Snapshot logo abaixo precisa do MESMO resultado —
+  // nunca uma segunda chamada real de detectInstitutionalTraps.
+  const trapSignals = useMemo(
+    () =>
       detectInstitutionalTraps({
         liquidityZones: smcZones.liquidityZones,
         orderflowSignals,
         now: Date.now(),
       }),
+    [smcZones, orderflowSignals],
+  );
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setTrapSignals(trapSignals);
+  }, [trapSignals]);
+  // Ordem A2.1 (Microstructure Event Engine, escopo "consolidar sob 1
+  // contrato tipado"): organiza cvd/orderflowSignals/trapSignals (acima)/
+  // orderBooks — todos já reais — sob o schema único de
+  // nexus/microstructure-snapshot.ts. Zero segundo cálculo: cada campo do
+  // snapshot é passthrough de um motor já real (signal-engine.js via
+  // orderflowSignals/cvd, trap-detection.ts via trapSignals,
+  // order-book-depth.ts via os bids/asks do book real). LEI 24: nunca lê
+  // nem produz Decision/Direction/Entry/Risk/Trade Plan.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setMicrostructureSnapshot(
+      composeMicrostructureSnapshot({
+        orderflowSignals,
+        trapSignals,
+        cvd,
+        orderBooks: exchangeOrderBooks,
+      }),
     );
-  }, [smcZones, orderflowSignals]);
+  }, [orderflowSignals, trapSignals, cvd, exchangeOrderBooks]);
 
   // V-MAX Fase 1 item 5: eventos afetivos REAIS — só TRANSIÇÕES
   // verdadeiras de estado operacional viram evento (refs guardam o estado

@@ -62,6 +62,10 @@ import type { ConfluenceCorridorReading } from "../nexus/confluence-corridor";
 import type { RadarQualificationResult } from "../nexus/radar-qualification";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
+// Ordem A2.1 (Microstructure Event Engine, escopo "consolidar sob 1
+// contrato tipado"): compositor puro sobre cvd/orderflowSignals/
+// trapSignals/orderBooks já reais nesta mesma store — zero segundo motor.
+import type { MicrostructureSnapshot } from "../nexus/microstructure-snapshot";
 import type { TradePlan } from "../nexus/trade-plan";
 import type { MultiTimeframeMatrix } from "../nexus/multi-timeframe-engine";
 import type { GmilSnapshot } from "../gmil/gmil-orchestrator";
@@ -301,6 +305,14 @@ export interface UnifiedSnapshotState {
   // cálculo, mesmo objeto já resolvido). null enquanto o Core Engine não
   // emitiu direção real ainda (mesmo estado honesto comum do resto do §3).
   riskSuggestion: RiskSuggestion | null;
+  // Ordem A2.1 — organiza cvd/orderflowSignals/trapSignals/orderBooks
+  // (todos já reais, cada um já com fatia própria acima/abaixo) sob um
+  // schema tipado único, com qualidade real por fonte. Zero segundo
+  // cálculo: cada campo do snapshot é passthrough de um motor já real, ou
+  // uma agregação leve e documentada (ver nexus/microstructure-snapshot.ts).
+  // null até o primeiro ciclo real computar (mesmo estado honesto comum
+  // do resto do §3).
+  microstructureSnapshot: MicrostructureSnapshot | null;
 
   // §4 CÉREBRO (camada de análise — LEI 24: jamais alimenta o Core Engine)
   // Item 4 — Conselho Multi-Agente (contrato versionado): 6 votos reais +
@@ -452,6 +464,7 @@ interface UnifiedSnapshotActions {
   setOrderflowSignals: (signals: OrderflowSignal[]) => void;
   setConfluenceCorridor: (reading: ConfluenceCorridorReading | null) => void;
   setRiskSuggestion: (suggestion: RiskSuggestion | null) => void;
+  setMicrostructureSnapshot: (snapshot: MicrostructureSnapshot | null) => void;
 
   // §4 CÉREBRO
   setCouncil: (decision: CouncilDecision | null) => void;
@@ -542,6 +555,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     orderflowSignals: [],
     confluenceCorridor: null,
     riskSuggestion: null,
+    microstructureSnapshot: null,
     // §4 CÉREBRO
     council: null,
     scenario: null,
@@ -607,6 +621,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setOrderflowSignals: (signals) => set((s) => { s.orderflowSignals = signals; }),
     setConfluenceCorridor: (reading) => set((s) => { s.confluenceCorridor = reading; }),
     setRiskSuggestion: (suggestion) => set((s) => { s.riskSuggestion = suggestion; }),
+    setMicrostructureSnapshot: (snapshot) => set((s) => { s.microstructureSnapshot = snapshot; }),
     // §4 CÉREBRO
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
@@ -759,6 +774,8 @@ export const useConfluenceCorridorSnapshot = (): ConfluenceCorridorReading | nul
   useUnifiedSnapshotStore((s) => s.confluenceCorridor);
 export const useRiskSuggestionSnapshot = (): RiskSuggestion | null =>
   useUnifiedSnapshotStore((s) => s.riskSuggestion);
+export const useMicrostructureSnapshot = (): MicrostructureSnapshot | null =>
+  useUnifiedSnapshotStore((s) => s.microstructureSnapshot);
 
 // §4 CÉREBRO
 export const useCouncilSnapshot = (): CouncilDecision | null =>
