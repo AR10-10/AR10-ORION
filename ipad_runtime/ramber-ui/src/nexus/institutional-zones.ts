@@ -290,3 +290,51 @@ export function computeInstitutionalZones(input: InstitutionalZoneInput): Instit
 
   return zones.sort((a, b) => b.distinctSourceCount - a.distinctSourceCount).slice(0, MAX_INSTITUTIONAL_ZONES);
 }
+
+// ORDEM 2B.1 (VALIDAR DEFINITIVAMENTE O FIX — "não aceitar um fix que
+// apenas posterga writes infinitos"): computeInstitutionalZones acima é
+// puro por VALOR, mas devolve um array NOVO por referência a cada chamada
+// — o comportamento normal de qualquer função pura que constrói sua
+// saída. Isso é inofensivo em si, mas o chamador real
+// (EnhancedChart_110_Percent.tsx) publica esse retorno na store global
+// (setInstitutionalZones) a cada render em que suas próprias entradas
+// mudam de referência — e a store tem um assinante ANCESTRAL
+// (App.tsx/useInstitutionalZonesSnapshot). Sem uma guarda de igualdade
+// REAL no ponto de escrita, uma cadeia upstream instável (o achado real
+// desta rodada: várias populações de zona em App.tsx eram `const` soltos,
+// nunca memoizados) fecha um ciclo autossustentado: escreve → re-renderiza
+// o ancestral → recomputa → escreve de novo — mesmo quando o CONTEÚDO
+// nunca mudou. `queueMicrotask` (ORDEM 2B) só adiava esse ciclo; nunca o
+// quebrava.
+//
+// Esta função compara DUAS listas de Zona Institucional por VALOR (nunca
+// por referência) — mesmo padrão de "comparação estrutural rasa" que
+// qualquer seletor Zustand já faz para primitivos, estendido aqui para uma
+// estrutura aninhada real. `setInstitutionalZones` (unified-snapshot-
+// store.ts) usa isto para pular o `set()` por completo quando o valor novo
+// é semanticamente idêntico ao já armazenado — zero re-render de
+// assinante, mesmo que o chamador tenha (por qualquer razão futura, aqui
+// ou em qualquer outro caminho) produzido uma referência nova. Segunda
+// camada de defesa, não substitui a estabilização de referência upstream
+// — as duas são necessárias: uma evita o trabalho desnecessário na
+// origem, a outra garante que o pior caso (referência nova, valor igual)
+// nunca alcança um assinante.
+export function institutionalZonesEqual(a: InstitutionalZone[], b: InstitutionalZone[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const za = a[i];
+    const zb = b[i];
+    if (za.top !== zb.top || za.bottom !== zb.bottom || za.centerPrice !== zb.centerPrice) return false;
+    if (za.distinctSourceCount !== zb.distinctSourceCount) return false;
+    if (za.members.length !== zb.members.length) return false;
+    for (let j = 0; j < za.members.length; j++) {
+      const ma = za.members[j];
+      const mb = zb.members[j];
+      if (ma.sourceKind !== mb.sourceKind || ma.label !== mb.label || ma.price !== mb.price || ma.top !== mb.top || ma.bottom !== mb.bottom) {
+        return false;
+      }
+    }
+  }
+  return true;
+}

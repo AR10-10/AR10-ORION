@@ -56,6 +56,7 @@ import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
 import type { TrianglePatternHit } from "../nexus/triangle-pattern";
 import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
 import type { InstitutionalZone } from "../nexus/institutional-zones";
+import { institutionalZonesEqual } from "../nexus/institutional-zones";
 import type { LayerRelevanceReading, AutoLayerDecision } from "../nexus/layer-relevance";
 import type { EvidenceFusionReading } from "../nexus/evidence-fusion";
 import type { ConfluenceCorridorReading } from "../nexus/confluence-corridor";
@@ -621,7 +622,18 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setHarmonicPatterns: (hits) => set((s) => { s.harmonicPatterns = hits; }),
     setTrianglePattern: (hit) => set((s) => { s.trianglePattern = hit; }),
     setHeadShouldersPattern: (hit) => set((s) => { s.headShouldersPattern = hit; }),
-    setInstitutionalZones: (zones) => set((s) => { s.institutionalZones = zones; }),
+    // ORDEM 2B.1: guarda de igualdade REAL antes de tocar o state — nunca
+    // aceitar uma referência nova sem verificar se o CONTEÚDO mudou (ver
+    // comentário de institutionalZonesEqual em nexus/institutional-zones.ts
+    // para a causa raiz real que motivou esta guarda: um upstream instável
+    // publicando a mesma leitura repetidamente por referência nova). Um
+    // `set()` pulado é zero re-render de assinante — a defesa funciona
+    // mesmo que uma futura regressão upstream volte a produzir referências
+    // novas para o mesmo valor.
+    setInstitutionalZones: (zones) => set((s) => {
+      if (institutionalZonesEqual(s.institutionalZones, zones)) return;
+      s.institutionalZones = zones;
+    }),
     setLayerRelevance: (reading) => set((s) => { s.layerRelevance = reading; }),
     setChartLayerDecision: (decision) => set((s) => { s.chartLayerDecision = decision; }),
     setEvidenceFusion: (reading) => set((s) => { s.evidenceFusion = reading; }),

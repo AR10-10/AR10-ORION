@@ -2200,29 +2200,49 @@ function EnhancedChart_110_PercentImpl({
   // idêntica leitura — mesmo espírito de "computada uma vez, lida por
   // QUALQUER outro consumidor" já documentado para layerRelevance.
   //
-  // ORDEM 2B (P0 CHART RENDER FAILURE): CAUSA RAIZ REAL do "BTC/USDT ·
-  // ERRO DE RENDERIZAÇÃO" reportado no iPad, reproduzida ao vivo (fixture
-  // de 300 candles, dev E produção — React error #185, "Cannot update a
-  // component while rendering a different component"). App.tsx é quem lê
-  // institutionalZones da store (useInstitutionalZonesSnapshot(), linha
-  // ~10596) — ou seja, este efeito de um componente FILHO
-  // (EnhancedChart_110_Percent) escreve num slice que sua PRÓPRIA
-  // ancestral (App) assina. No PRIMEIRO mount real do gráfico (transição
-  // chartData.length 0→N, exatamente o instante em que este componente
-  // passa a existir), o write síncrono dentro do useEffect ainda competia
-  // com o flush de efeitos passivos da MESMA commit que está montando
-  // App→...→este componente — React trata isso como "atualizar um
-  // ancestral enquanto um descendente ainda está sendo processado nesta
-  // mesma passada" e derruba o render inteiro. `queueMicrotask` empurra a
-  // escrita pra depois desse flush terminar por completo — mesma leitura,
-  // mesmo valor, só não compete mais pela mesma passada síncrona. Zero
-  // mudança de SEMÂNTICA (o array publicado é idêntico, CouncilWidget
-  // continua lendo o mesmo institutionalZones de sempre) — só QUANDO ele
-  // chega à store.
+  // ORDEM 2B / ORDEM 2B.1 (P0 CHART RENDER FAILURE, DIAGNÓSTICO CORRIGIDO):
+  // CAUSA RAIZ REAL do "BTC/USDT · ERRO DE RENDERIZAÇÃO" reportado no
+  // iPad, reproduzida ao vivo (fixture de 300 candles, dev E produção) era
+  // **"Maximum update depth exceeded"** (nestedUpdateCount > 50, lançado
+  // por getRootForUpdatedFiber em react-dom) — nunca "React error #185 /
+  // Cannot update a component while rendering a different component" (a
+  // primeira versão deste comentário, no commit que introduziu o
+  // `queueMicrotask` abaixo, citava esse rótulo errado; a mensagem
+  // "Cannot update..." é um `console.error` distinto, não-lançável, de
+  // scheduleUpdateOnFiber — nunca observado nesta investigação).
+  //
+  // Isto era um LOOP real de atualizações, não uma colisão pontual entre
+  // ancestral/descendente na mesma passada de commit: App.tsx (quem lê
+  // institutionalZones via useInstitutionalZonesSnapshot(), a ANCESTRAL
+  // deste componente) tinha várias populações de zona (unmitigatedFvgs/
+  // unmitigatedBlocks/liquidityZones/breakerZones/mitigationZones em
+  // App.tsx) computadas como `const` soltos — `.filter()`/`.map()` a CADA
+  // render, sempre com uma referência NOVA mesmo com o mesmo conteúdo.
+  // Isso derrotava o React.memo deste componente, forçando
+  // institutionalZoneInput/institutionalZones (acima) a recomputar a cada
+  // render do ancestral — o que disparava este efeito, que escrevia na
+  // store, que re-renderizava o ancestral de novo. Zero dado novo de
+  // mercado necessário: o ciclo se sustentava sozinho.
+  //
+  // `queueMicrotask` (ORDEM 2B) só adiava QUANDO essa escrita acontecia —
+  // o ciclo em si continuava, só de forma assíncrona, até
+  // nestedUpdateCount estourar (exatamente o "não aceitar um fix que
+  // apenas posterga writes infinitos" que ORDEM 2B.1 exigiu verificar).
+  // Removido: a correção real vive em dois lugares —
+  //   1. App.tsx memoiza agora aquela cadeia de populações pelas
+  //      dependências REAIS (smcZones/liquidityVoids/institutionalBlocks/
+  //      chartObstacleZones/livePrice.price/chartAtrPercent) — a mesma
+  //      referência só muda quando o dado real por trás dela muda.
+  //   2. setInstitutionalZones (unified-snapshot-store.ts) ganhou uma
+  //      guarda de igualdade REAL (institutionalZonesEqual,
+  //      nexus/institutional-zones.ts) — mesmo que uma referência nova
+  //      chegue aqui por qualquer razão futura, o `set()` só toca o state
+  //      (e só então notifica assinantes) quando o CONTEÚDO mudou de
+  //      verdade. Escrita síncrona dentro de useEffect nunca foi o
+  //      problema (roda depois do commit, não durante o render) — só a
+  //      instabilidade de referência upstream era.
   useEffect(() => {
-    queueMicrotask(() => {
-      useUnifiedSnapshotStore.getState().setInstitutionalZones(institutionalZones);
-    });
+    useUnifiedSnapshotStore.getState().setInstitutionalZones(institutionalZones);
   }, [institutionalZones]);
 
   // Ordem Nº 03: candidatos reais para a competição cruzada de destaque —
