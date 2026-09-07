@@ -65,7 +65,8 @@ describe('App.tsx: TelemetryHealthWidget mostra o veredito real do Chart Integri
 
   it('a Row real aparece no painel SYSTEM HEALTH', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('<Row label="INTEGRIDADE DO GRÁFICO" value={CHART_INTEGRITY_LABEL[chartIntegrity.status]} valueClass={chartIntegrityColor} />');
+    // Frente 3 §17 (padronização de idioma): rótulo traduzido pra English Technical.
+    expect(app).toContain('<Row label="CHART INTEGRITY" value={CHART_INTEGRITY_LABEL[chartIntegrity.status]} valueClass={chartIntegrityColor} />');
   });
 
   it('os 4 estados reais de ChartIntegrityStatus têm rótulo E mapeamento de cor — nenhum estado sem cobertura', () => {

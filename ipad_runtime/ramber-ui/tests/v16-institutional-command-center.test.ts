@@ -203,7 +203,8 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
     // "pending" (nunca teve ciclo ainda) nunca é confundido com
     // "desatualizado" (já teve ciclo ok, mas os dados pararam de chegar).
     expect(body).toContain('engineStatus === "ok" && !isDataFresh');
-    expect(body).toContain('"DESATUALIZADO"');
+    // Frente 3 §17 (padronização de idioma): "DESATUALIZADO" -> "STALE".
+    expect(body).toContain('"STALE"');
     expect(body).toContain('"OFFLINE"');
     expect(body).not.toMatch(/Math\.random/);
   });

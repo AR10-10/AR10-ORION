@@ -271,8 +271,9 @@ describe('ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado): dado real já
     expect(app).toContain('const gmilQualityState = classifyWeight(gmilAvgWeight);');
     expect(app).toContain('const gmilColor = DATA_QUALITY_COLOR[gmilQualityState];');
     // as 2 novas linhas do painel — mesmo padrão <Row> das linhas já existentes
-    expect(app).toContain('<Row label="SUFICIÊNCIA DE DADOS" value={sufficiencyLabel} valueClass={sufficiencyColor} />');
-    expect(app).toContain('<Row label="QUALIDADE GMIL (CONTEXTO)" value={gmilLabel} valueClass={gmilColor} />');
+    // (Frente 3 §17: rótulos traduzidos pra English Technical)
+    expect(app).toContain('<Row label="DATA SUFFICIENCY" value={sufficiencyLabel} valueClass={sufficiencyColor} />');
+    expect(app).toContain('<Row label="GMIL QUALITY (CONTEXT)" value={gmilLabel} valueClass={gmilColor} />');
   });
 
   it('a média de qualidade GMIL só considera provedores que já tentaram ao menos 1 fetch real — provedor nunca-rodado não conta como "ruim"', () => {
