@@ -7448,6 +7448,220 @@ idêntico em módulos/bytes ao commit anterior.
 
 ---
 
+### 6.96 "ORDEM 2 — FRENTE 2" (auditoria de duplicidade + consolidação
+visual/idioma/AUTO-MANUAL) — mapa completo + 2 rodadas de correção
+comprovada, zero decisão destrutiva
+
+Quarta ordem da mesma família (memo de 20 seções §6.93; Ordem 2 de 29
+seções §6.94; Ordem 3 de 37 seções §6.95), desta vez sobre o PRÓPRIO
+sistema: duplicidade real de indicadores/engines/agentes/fluxo de dado,
+consolidação visual, padronização de idioma (English Technical), regras
+de rótulo do gráfico (acrônimos/paleta/tipografia) e padronização
+AUTO/MANUAL. Reafirmada em 3 versões sucessivas pelo Operador (a última
+restaurando o escopo completo das 2 anteriores sob um único método:
+AUDITAR → MAPEAR → CLASSIFICAR → CONSOLIDAR SOMENTE O COMPROVADAMENTE
+REDUNDANTE → TESTAR → VALIDAR), com gate explícito contra decisão
+destrutiva por conveniência ("em dúvida, preservar ambos e documentar a
+dúvida").
+
+**Frente 1 (§2, bugs/estados vazios/CPU-RAM) já fechada e mergeada
+antes desta entrada** (PR #27, `ba911d9`) — não recapitulada aqui.
+
+**Achado central da auditoria, arquivo-a-arquivo (5 investigações
+independentes: ferramentas/cálculos duplicados, infraestrutura
+AUTO/MANUAL, indicadores/engines por domínio, agentes+visual, labels/
+cores/Clean Mode):** a suspeita de duplicidade generalizada NÃO se
+confirmou. O sistema já é, na maior parte, bem organizado — os poucos
+achados reais e acionáveis eram pequenos (uma sigla colidindo, um
+comentário desatualizado, um literal de cor fora da paleta canônica), e
+a maior superfície real de trabalho revelada foi de IDIOMA (rótulos
+ainda em português), não de duplicidade de cálculo.
+
+#### §3-§4 Indicadores/Engines — tabela de classificação
+
+| Item | Arquivo(s) | Classificação | Prioridade | Ação |
+|---|---|---|---|---|
+| Estrutura de mercado (1H), computada por 2 caminhos | `engine-bridge.ts:468-493` (`refreshHtfMarketStructureInBackground`, cache 5min) vs `nexus/multi-timeframe-engine.ts:56,186` (`analyzeMarketStructureRaw`, ciclo 60s) | SOBREPOSIÇÃO PARCIAL, JUSTIFICADA | P2 (não P0/P1 — ver análise abaixo) | Preservar ambos, documentado |
+| ATR% (Wilder série vs SMA escalar) | `lorentzian-classifier.js:200` vs `market-regime/regime-engine.js:185` (`meanTrueRangePercent`, privada) | IMPLEMENTAÇÕES DIFERENTES COM MESMO NOME (justificada — o próprio `regime-engine.js:163-184` já documenta a distinção) | P2 (doc apenas) | `liquidity-significance.ts:44-48` corrigido (afirmava "ambos Wilder 14", falso) |
+| EMA/SMA (WASM escalar vs TS série) | `lib.rs:187,174` vs implementações TS por indicador | IMPLEMENTAÇÕES DIFERENTES COM MESMO NOME (domínio: hot-path vs plotagem) | P3 | Nenhuma — documentado aqui |
+| Swing highs/lows (fractal) | `fractal-swings.js` | FALSO POSITIVO — já consolidado (auditoria 2026-07-03) | — | Nenhuma |
+| Clustering de preço | `price-clustering.js` | FALSO POSITIVO — já consolidado (auditoria 2026-08-24) | — | Nenhuma |
+| ZigZag vs StructureTrace | `zigzag-engine.js` / `computeStructuralSwings` (K diferente) | FUNCIONALIDADE ÚNICA — dois propósitos por design; Ordem proíbe unificar | — | Nenhuma |
+| `trap-detection.ts` comentário stale ("reimplementado... nunca import cross-package") | `nexus/trap-detection.ts:146-157` | Documentação incorreta — código (linha 182) sempre importou `price-clustering.js` | P2 | Corrigido |
+
+**Sobre a estrutura de 1H "duplicada" (o único item que uma leitura
+rápida classificaria P0/P1):** investigação linha a linha mostrou que os
+dois caminhos têm cadência diferente (5min vs 60s), janela diferente
+(60 vs 100 candles) e consumidor diferente (badge HTF do ciclo principal
+vs linha 1H da Multi-Timeframe Matrix) — e o próprio `multi-timeframe-
+engine.ts` documenta que o cálculo aqui é JS puro sobre ≤100 candles,
+"custo real medido em frações de milissegundo". Forçar um cache
+compartilhado trocaria uma independência real (cada consumidor decide
+sua própria janela/staleness) por um ganho de performance que não
+existe (o cálculo já é desprezível). Decisão: **preservar ambos**, per a
+regra "em dúvida, nunca uma decisão destrutiva por conveniência" — não é
+recusa em investigar, é o resultado da investigação.
+
+#### §5 Fluxo de dado
+
+Reaproveita o achado já registrado em §6 desta seção (Frente 1, CPU/RAM)
+e a arquitetura já documentada em `CLAUDE.md` (`MarketDataBus`, cache por
+`symbol:timeframe`, dedupe de FETCH mas não de CÁLCULO — exatamente o
+mecanismo por trás do item de 1H acima). Nenhum segundo caminho de
+WebSocket/polling/store encontrado nesta auditoria além do já fechado na
+Frente 1 (Radar scanner).
+
+#### §6 Componentes visuais
+
+Nenhuma duplicação visual real confirmada. `StructureTracePlugin`
+permanece a única linha estrutural (fractal K=2, `computeStructuralSwings`)
+— `ZigZagPlugin` é alimentado por um motor e propósito diferentes
+(`zigzag-engine.js`), nunca substituindo/duplicando o Trace, exatamente
+como a Ordem exige. Observação registrada, não uma duplicata: dois
+sistemas de desenho de rótulo coexistem (`price-label-stack.ts` para
+chips do eixo, `nexus/canvas-label.ts` para rótulos de evento no meio do
+canvas) — arquiteturas legitimamente diferentes (âncora no eixo vs
+âncora num ponto do gráfico), registrado para referência futura, sem
+ação.
+
+#### §7 Agentes
+
+Dos ~15 nomes citados (Market/Technical/Context/Memory/Risk/Rambi/
+Cortex/Biological/Supervisor/Voice/Data/UI-Code Integrity/Quant Brain/
+Pattern Miner/Sentinel), só **7 existem como entidades de código reais e
+distintas**: `CouncilAgentId` em `nexus/council.ts:50-57` (LIQUIDITY/
+STRUCTURE/ORDERFLOW/RISK/MANIPULATION/FIBONACCI/MOMENTUM) — votados
+SINCRONAMENTE no mesmo ciclo de decisão, nunca processos concorrentes.
+Os demais nomes vêm da linguagem aspiracional dos 3 documentos de
+Protocolo (`PROTOCOLO_ORGANISMO_VIVO.md` e família) — sem correspondência
+1:1 no código. **Conclusão prática:** não existe uma arquitetura de
+múltiplos processos concorrentes disputando CPU/RAM neste repositório —
+o único conflito real de main-thread já identificado (Radar scanner
+síncrono) já foi mitigado na Frente 1 (§2.3, fechado). Não há uma
+segunda frente de "conflito entre agentes" para resolver aqui.
+
+#### §8 Tabela de prioridades consolidada
+
+- **P0**: nenhum achado (nenhuma execução dupla com dado conflitante,
+  decisão diferente, ou race condition confirmada nesta auditoria).
+- **P1**: nenhum achado que sobreviveu à investigação linha a linha (o
+  candidato inicial, 1H market structure, foi reclassificado P2 acima
+  após confirmar cadência/janela/consumidor distintos e custo
+  desprezível).
+- **P2**: 2 comentários desatualizados (corrigidos, commit `fb015a0`); 1
+  colisão de sigla ST=Stop×ST=SuperTrend (corrigida); 1 literal de cor
+  fora da paleta canônica na etiqueta de eixo do Sweep (corrigido); 1
+  mistura de idioma na tabela de siglas de padrão de vela (corrigida) —
+  todos no commit `7a00d5c`.
+- **P3**: EMA/SMA (diferença justificada); dois sistemas de rótulo de
+  canvas coexistindo por arquitetura diferente (registrado, sem ação).
+
+#### §13-§15 Padronização visual/idioma/AUTO-MANUAL
+
+**AUTO/MANUAL (§21):** a infraestrutura já existia, completa e correta —
+`nexus/layer-relevance.ts` (2 estágios: gate de relevância +
+competição por orçamento visual, `AUTO_LAYER_MAX_SIMULTANEOUS=6`) e o
+painel real `ChartLayersPanelContent` (default automático, override
+manual por camada, nunca altera cálculo/Risk/Decision/Trade-Plan — exatamente
+a regra pedida). Faltava só o VOCABULÁRIO: 100% português. Traduzido
+nesta rodada (commit `7a00d5c`) — ver lista completa no próprio commit.
+Um segundo mecanismo mais cru (mostrar/esconder painel inteiro,
+`widgets`/`toggleWidget`) também existe, e uma pendência registrada
+ANTES desta sessão ("2 flags mortas, gmil_context/system_health") foi
+**verificada e corrigida aqui**: é falso positivo — `Widget()` tem um
+gate genérico universal (`!visible → null`, linha 9202) que cobre
+QUALQUER id, e `ConfigPanel()` já itera todos os widgets com um botão
+real de visibilidade; as duas ficam de propósito fora do Workspace
+Manager (always-docked, decisão documentada no próprio código), nunca
+"mortas".
+
+**Labels do gráfico (§14):** auditoria completa (agente dedicado, 94
+tool calls) mapeou TODO texto desenhado no canvas + toda cor + toda
+fonte. Achados corrigidos nesta rodada: colisão ST/STR, mistura de
+idioma nos códigos de padrão de vela, literal de cor fora da paleta no
+rótulo de eixo do Sweep, único `ctx.font` congelado (não escalava com a
+tela) em `DeltaDivergencePlugin.tsx`, e o último texto de canvas em
+português (mesmo arquivo). Achados **registrados, não corrigidos** (ver
+"O que este round honestamente NÃO fez" abaixo): inconsistências de
+comprimento de sigla que não são erros (EMA "E21" no eixo vs "EMA21" no
+chip — contextos diferentes, ambos corretos), paleta parcialmente
+adotada (13 de ~25 arquivos de `chart/*.tsx` ainda definem cor ad hoc em
+vez de importar `canvas-palette.ts` — nenhum usa uma cor ERRADA para o
+significado, só não importa a constante), e ausência confirmada de um
+"Modo Clean" (hide-all-labels) — não existe hoje, e não foi construído
+(feature nova, fora do escopo de consolidação desta frente per §19).
+
+**Idioma (§17):** o grosso da tradução de rótulos operator-facing
+**fica pendente para uma rodada dedicada** (ver seção de pendências
+abaixo) — a superfície real é maior do que os 2 painéis fechados aqui
+(System Health, Council widget, Market Analysis/Publicação modal, VWAP
+COMPRADOR/VENDEDOR, ~10 entradas do próprio Chart Layers panel) e
+traduzir só uma fração criaria mais mistura de idioma dentro do mesmo
+painel, não menos — o oposto do que §17 pede.
+
+#### §16 Checklist de aceite — honesto, por sub-lista
+
+- **AUDITORIA**: **PASS** — mapa de duplicidade completo, cada item
+  classificado, P0-P3 definido, falsos positivos identificados,
+  implementações oficiais confirmadas, consumidores mapeados.
+- **CONSOLIDAÇÃO**: **PASS PARCIAL** — nenhuma funcionalidade real
+  apagada; os 2 achados P2 comprovados (comentários + STR) foram
+  consolidados; nenhuma dupla-verdade criada; Quarentena não foi
+  necessária (nenhum código morto encontrado que justificasse).
+- **VISUAL**: **PASS PARCIAL** — paleta/label/font corrigidos nos 3
+  pontos comprovados; padronização de idioma AINDA NÃO completa (ver
+  pendência acima) — nunca reportado como concluído.
+- **AUTO/MANUAL**: **PASS** — infraestrutura já correta, vocabulário
+  agora em English Technical, default AUTO preservado, nenhum toggle
+  novo criado (a regra "não criar dezenas de toggles" foi seguida
+  encontrando que a infra já existia, não inventando uma).
+- **TESTES**: **PASS** — 288 arquivos / 4745 testes, tsc limpo, build
+  ok, zero duplicata de engine/conexão/cálculo introduzida, zero
+  regressão visual/semântica, zero funcionalidade real perdida.
+- **VALIDAÇÃO VISUAL**: **PASS PARCIAL** — verificado ao vivo via
+  Playwright (dev server real) só o que mudou nesta rodada
+  (ChartLayersPanel + Settings, zero erro novo, zero português
+  remanescente nos 2 painéis); NÃO verificado nos viewports iPad
+  completos do §37 original — este round validou funcionalidade e
+  ausência de regressão, não a auditoria visual iPad completa (sem
+  capturas reais desta rodada específica).
+
+**Status geral da Frente 2 nesta entrega: PASS COM LIMITAÇÕES.** O gate
+de auditoria-antes-de-alterar foi seguido; toda alteração de código feita
+tinha uma prova concreta de blast radius (grep em `src/`+`tests/` antes
+de editar) e teste atualizado 1:1. Não é a versão final — ver pendências.
+
+#### O que este round honestamente NÃO fez
+
+- **Tradução completa de idioma (§17)**: System Health widget, Council
+  widget, Market Analysis/Publicação modal, VWAP COMPRADOR/VENDEDOR, e a
+  maior parte do próprio Chart Layers panel (PADRÕES GRÁFICOS,
+  LIQUIDAÇÕES FORÇADAS, SESSÕES, ZONA INSTITUCIONAL, PROFUNDIDADE DO
+  LIVRO, PERFIL TPO, CENÁRIOS, PADRÕES DE VELA, DIVERGÊNCIA DE DELTA)
+  continuam em português — blast radius maior (múltiplos arquivos
+  interdependentes) do que cabia numa rodada só sem risco de tradução
+  parcial piorar a mistura de idioma.
+- **Adoção completa da paleta canônica**: 13 arquivos de `chart/*.tsx`
+  continuam definindo cor ad hoc (nenhum ERRADO semanticamente, só sem
+  importar `canvas-palette.ts`) — registrado, não migrado.
+- **Modo Clean (hide-all-labels)**: confirmado ausente, não construído —
+  é uma feature nova, não uma consolidação; precisa de pedido próprio.
+- **Consolidação do 1H market structure**: investigada e deliberadamente
+  NÃO tocada — preservar > forçar convergência sem ganho real (ver
+  análise acima).
+- **§24-§37 (responsividade/iPad)**: explicitamente fora de escopo desta
+  frente (reservado para a próxima, per pedido explícito do Operador —
+  "não iniciar a Frente 3 automaticamente").
+- Nenhum item novo (indicador/engine/agente/fonte de dado/Worker/etc.)
+  foi criado — §19 (não-expansão) respeitado integralmente.
+
+**Commits desta entrega:** `fb015a0` (2 comentários de duplicidade
+corrigidos), `7a00d5c` (labels/cores/AUTO-MANUAL). `npm run verify`
+verde nos dois. PR em andamento na branch
+`claude/localizar-arquivo-nuvem-qr0z6x`.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
