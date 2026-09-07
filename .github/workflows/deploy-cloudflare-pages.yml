@@ -51,33 +51,15 @@ jobs:
           npm ci --include=dev
           npm run test
 
-      # FAIL-CLOSED DE CONFIGURAÇÃO: sem o segredo do portão, o build
-      # produziria um app que ninguém abre (ver access-gate.tsx). Melhor
-      # falhar aqui, com a causa dita, do que publicar um painel morto.
-      - name: Verificar segredo do portão de acesso
-        env:
-          VITE_ACCESS_HASH: ${{ secrets.VITE_ACCESS_HASH }}
-        run: |
-          if [ -z "$VITE_ACCESS_HASH" ]; then
-            echo "::error::O segredo VITE_ACCESS_HASH não está definido no repositório."
-            echo "::error::Defina em Settings > Secrets and variables > Actions."
-            echo "::error::Ele é o SHA-256 da senha do portão — ver docs/ACESSO_PRIVADO.md."
-            exit 1
-          fi
-          if ! printf '%s' "$VITE_ACCESS_HASH" | grep -Eq '^[0-9a-fA-F]{64}$'; then
-            echo "::error::VITE_ACCESS_HASH não é um SHA-256 hexadecimal de 64 caracteres."
-            exit 1
-          fi
-          echo "Segredo presente e no formato correto."
-
+      # ORDEM "REMOVER PASSWORD GATE TEMPORÁRIO" (2026-09-07): o antigo
+      # portão em JavaScript (access-gate.tsx) saiu do caminho crítico em
+      # todo lugar — este workflow também dependia dele (secret
+      # VITE_ACCESS_HASH) e ficaria fail-closed à toa, já que o build atual
+      # não monta mais nenhum gate para esse secret proteger. A trava real
+      # deste workflow continua sendo o Cloudflare Access (ver cabeçalho
+      # acima e docs/ACESSO_PRIVADO.md) — nunca um hash embutido no bundle.
       - name: Build AR10 CYBORG (React/Vite)
         working-directory: ipad_runtime/ramber-ui
-        env:
-          # Injetado no build. O Vite inlina variáveis VITE_* no bundle — o
-          # hash sai do código-fonte versionado, mas continua legível no
-          # JavaScript publicado. Isso é inevitável em site estático, e por
-          # isso a trava real é o Cloudflare Access, nunca este portão.
-          VITE_ACCESS_HASH: ${{ secrets.VITE_ACCESS_HASH }}
         run: |
           npm ci --include=dev
           npm run build

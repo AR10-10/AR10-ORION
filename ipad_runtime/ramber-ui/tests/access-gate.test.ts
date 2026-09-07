@@ -172,6 +172,26 @@ describe('deploy-ipad-pwa.yml: build/deploy nunca mais exigem VITE_ACCESS_HASH (
   });
 });
 
+describe('deploy-cloudflare-pages.yml: mesmo saneamento — achado real numa reauditoria (nao fazia parte do caminho critico do GitHub Pages, mas ficou preso ao mesmo secret)', () => {
+  const workflow = () => read('../../../.github/workflows/deploy-cloudflare-pages.yml');
+
+  it('não existe mais o passo "Verificar segredo do portão de acesso"', () => {
+    const w = workflow();
+    expect(w).not.toContain('Verificar segredo do portão de acesso');
+    expect(w).not.toContain('secrets.VITE_ACCESS_HASH');
+  });
+
+  it('o passo de build não injeta VITE_ACCESS_HASH nenhum, e o job continua testes -> build -> publicar', () => {
+    const w = workflow();
+    const buildIdx = w.indexOf('Build AR10 CYBORG');
+    expect(buildIdx, 'passo de build não encontrado').toBeGreaterThan(-1);
+    const bloco = w.slice(buildIdx, buildIdx + 300);
+    expect(bloco).not.toContain('VITE_ACCESS_HASH');
+    expect(w.indexOf('Run test suite')).toBeGreaterThan(-1);
+    expect(w.indexOf('Publicar no Cloudflare Pages')).toBeGreaterThan(buildIdx);
+  });
+});
+
 describe('build real: nenhum secret é necessário para o app abrir (execução real, não suposição)', () => {
   it('npm run build produz um bundle que NUNCA menciona a cortina antiga — tree-shaken por completo (dead code, zero import)', () => {
     const distDir = resolve(here, '../dist/assets');
