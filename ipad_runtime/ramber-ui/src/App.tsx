@@ -12320,6 +12320,15 @@ const ORGANISM_HEALTH_QUALITY: Record<OrganismHealthVerdict, DataQualityLabel> =
   AGUARDANDO: "DADOS_INSUFICIENTES",
 };
 
+// Pedido do Operador ("auto-diagnóstico rodando sozinho de tempos em
+// tempos, não só quando alguém pede"), parte 3/3 do plano confirmado —
+// substitui a razão anterior deste módulo ("lê sob demanda em vez de
+// assinar", comentário do botão abaixo). 60s: mesma ordem de grandeza do
+// FRESHNESS_THRESHOLD_MS de health-monitor.ts (60s) — rápido o bastante
+// pra pegar um problema real sem virar ruído num relatório feito pra ser
+// LIDO por um humano (não um sinal de alta frequência como isDataFresh).
+const AUTO_DIAGNOSTIC_INTERVAL_MS = 60_000;
+
 function TelemetryHealthWidget() {
   const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders, selectedAsset } = useContext(WidgetContext) || {};
   // Ordem "Ciborgue Vivo" §3: mesmos sinais reais já lidos abaixo para as
@@ -12416,6 +12425,54 @@ function TelemetryHealthWidget() {
   });
   const organismHealthColor = DATA_QUALITY_COLOR[ORGANISM_HEALTH_QUALITY[organismHealth.verdict]];
 
+  // ORDEM Nº 01: mesma visão versionada/read-only que os motores reais já
+  // usam (getSnapshotForEngine, organism-orchestrator.ts) — este widget é
+  // um OBSERVADOR externo (como o próprio stage-runner.ts se descreve),
+  // nunca um motor. Recomputado a cada render (o mesmo que já acontece com
+  // organismHealth/qualityLabel/etc. acima) em vez de só no clique, pra
+  // que o ciclo automático abaixo sempre leia o estado mais recente.
+  const engineView = getSnapshotForEngine();
+  // Ordem Fechamento (§3): MESMA fórmula já usada pelo painel "EVIDENCE
+  // FUSION" do CouncilWidget (N campos com pelo menos 1 montador real /
+  // 10) — zero segunda medição, só lida daqui via a visão versionada em
+  // vez de recomputar fuseEvidence.
+  const evidenceFusion = engineView.snapshot.evidenceFusion;
+  const evidenceFusionFieldCoverage = evidenceFusion
+    ? Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length / 10
+    : null;
+  const diagnosticInput = {
+    offline,
+    isDataFresh,
+    health,
+    engineStatus: engineStatus ?? "pending",
+    engineReason: realCycle?.reason ?? null,
+    dataQualityClassification: quality?.classification ?? null,
+    connections,
+    stageTrace: traceStages(engineView.snapshot, engineView.seq),
+    evidenceFusionFieldCoverage,
+  } as const;
+  // Ref (não estado): o efeito abaixo só precisa ler o valor MAIS RECENTE
+  // a cada disparo do interval, nunca recriar o interval a cada mudança de
+  // dado real (que aconteceria a cada tick de preço/book) — mesmo padrão
+  // "captura antes do uso assíncrono" já usado no resto da base.
+  const diagnosticInputRef = useRef(diagnosticInput);
+  diagnosticInputRef.current = diagnosticInput;
+
+  // Pedido do Operador (parte 3/3, "auto-diagnóstico... não só sob
+  // demanda"): o relatório completo se autoatualiza enquanto este widget
+  // está montado — zero segundo motor, mesma buildDiagnosticReport pura de
+  // sempre, só chamada por um relógio em vez de só por clique. Limitação
+  // honesta: como qualquer outro widget React, só roda enquanto a aba/
+  // seção que contém este painel está montada na tela — não é um serviço
+  // de fundo independente da navegação (isso exigiria mover todo este
+  // cálculo pro nível de App(), fora do escopo desta rodada).
+  useEffect(() => {
+    const id = setInterval(() => {
+      setDiagnosticReport(buildDiagnosticReport(diagnosticInputRef.current));
+    }, AUTO_DIAGNOSTIC_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+
   const Row = ({ label, value, valueClass }: { label: string; value: string; valueClass: string }) => (
     <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
       <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">{label}</span>
@@ -12462,47 +12519,21 @@ function TelemetryHealthWidget() {
             worker, cujo nome de cache deriva desta mesma constante).
             Aparece UMA vez em toda a UI (zero repetição). */}
         <Row label="BUILD" value={APP_SEAL} valueClass="text-[#00f0ff]" />
-        {/* Ordem "Ciborgue Vivo" §3 ("gerar relatórios claros para nós"):
-            síntese sob demanda dos MESMOS sinais reais já mostrados acima
+        {/* Ordem "Ciborgue Vivo" §3 ("gerar relatórios claros para nós") +
+            pedido do Operador (parte 3/3, "auto-diagnóstico... não só sob
+            demanda"): síntese dos MESMOS sinais reais já mostrados acima
             (mais offline/frescor/conexões por exchange) — nunca uma
-            segunda medição, só um relatório legível quando o Operador
-            pede. Autocorreção real já existe nas camadas de dado
-            (reconexão de WS, fail-closed do Bus) — este botão só torna o
+            segunda medição. Autoatualiza a cada 60s (efeito acima) e
+            também no clique, pra uma leitura imediata sem esperar o
+            relógio. Autocorreção real já existe nas camadas de dado
+            (reconexão de WS, fail-closed do Bus) — este painel só torna o
             estado real visível, não substitui nem duplica aquilo. */}
         <button
           type="button"
-          onClick={() => {
-            // ORDEM Nº 01: mesma visão versionada/read-only que os motores
-            // reais já usam (getSnapshotForEngine, organism-orchestrator.ts)
-            // — este botão é um OBSERVADOR externo (como o próprio stage-
-            // runner.ts se descreve), nunca um motor, então lê sob demanda
-            // em vez de assinar.
-            const engineView = getSnapshotForEngine();
-            // Ordem Fechamento (§3): MESMA fórmula já usada pelo painel
-            // "EVIDENCE FUSION" do CouncilWidget (N campos com pelo menos 1
-            // montador real / 10) — zero segunda medição, só lida daqui via
-            // a visão versionada em vez de recomputar fuseEvidence.
-            const evidenceFusion = engineView.snapshot.evidenceFusion;
-            const evidenceFusionFieldCoverage = evidenceFusion
-              ? Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length / 10
-              : null;
-            setDiagnosticReport(
-              buildDiagnosticReport({
-                offline,
-                isDataFresh,
-                health,
-                engineStatus: engineStatus ?? "pending",
-                engineReason: realCycle?.reason ?? null,
-                dataQualityClassification: quality?.classification ?? null,
-                connections,
-                stageTrace: traceStages(engineView.snapshot, engineView.seq),
-                evidenceFusionFieldCoverage,
-              }),
-            );
-          }}
+          onClick={() => setDiagnosticReport(buildDiagnosticReport(diagnosticInput))}
           className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff30] hover:bg-[#00f0ff10] transition-colors text-left"
         >
-          <span className="text-[0.45rem] text-[#00f0ff] font-bold tracking-wide">GERAR RELATÓRIO DE AUTODIAGNÓSTICO</span>
+          <span className="text-[0.45rem] text-[#00f0ff] font-bold tracking-wide">AUTODIAGNÓSTICO (auto a cada 60s)</span>
           <span className="text-[0.5rem] font-mono font-black text-[#00f0ff]">▶</span>
         </button>
         {diagnosticReport && (
@@ -12517,7 +12548,7 @@ function TelemetryHealthWidget() {
           >
             <div className="flex justify-between items-center">
               <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
-                SEVERIDADE GERAL
+                SEVERIDADE GERAL · {new Date(diagnosticReport.generatedAt).toLocaleTimeString()}
               </span>
               <span
                 className={`text-[0.5rem] font-mono font-black ${

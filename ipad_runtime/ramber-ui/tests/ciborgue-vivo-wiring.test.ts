@@ -321,18 +321,37 @@ describe('affective-memory.ts: estrutura contradizendo/confirmando o sinal ativo
   });
 });
 
-describe('App.tsx: TelemetryHealthWidget ganha o gerador de relatório de autodiagnóstico sob demanda', () => {
-  it('botão real chama buildDiagnosticReport com os MESMOS sinais já lidos pelas Rows existentes', () => {
+describe('App.tsx: TelemetryHealthWidget ganha o gerador de relatório de autodiagnóstico — periódico (a cada 60s) e sob demanda', () => {
+  it('diagnosticInput real (offline/isDataFresh/health/connections) é computado a cada render e reusado pelo botão', () => {
     const app = read('../src/App.tsx');
     const fnMatch = app.match(/function TelemetryHealthWidget\(\) \{([\s\S]*?)\n\}\n/);
     expect(fnMatch, 'TelemetryHealthWidget não encontrada').not.toBeNull();
     const body = fnMatch![1];
-    expect(body).toContain('buildDiagnosticReport({');
+    expect(body).toContain('const diagnosticInput = {');
     expect(body).toContain('offline,');
     expect(body).toContain('isDataFresh,');
     expect(body).toContain('health,');
     expect(body).toContain('connections,');
+    expect(body).toContain('onClick={() => setDiagnosticReport(buildDiagnosticReport(diagnosticInput))}');
     expect(body).toContain('formatDiagnosticReportMarkdown(diagnosticReport)');
+  });
+
+  // Pedido do Operador ("auto-diagnóstico rodando sozinho de tempos em
+  // tempos, não só quando alguém pede") — parte 3/3 do plano confirmado
+  // após a checagem de staleness (parte 1) e a reconexão mais agressiva
+  // do book (parte 2). Trava o mecanismo real: um ref atualizado a cada
+  // render (nunca um estado, que recriaria o interval a cada tick de
+  // preço) + um único setInterval de 60s com cleanup real.
+  it('autoatualiza via setInterval real (60s) lendo sempre o valor mais recente por ref — nunca recriando o interval a cada render', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('const AUTO_DIAGNOSTIC_INTERVAL_MS = 60_000;');
+    const fnMatch = app.match(/function TelemetryHealthWidget\(\) \{([\s\S]*?)\n\}\n/);
+    const body = fnMatch![1];
+    expect(body).toContain('const diagnosticInputRef = useRef(diagnosticInput);');
+    expect(body).toContain('diagnosticInputRef.current = diagnosticInput;');
+    expect(body).toMatch(
+      /useEffect\(\(\) => \{\s*const id = setInterval\(\(\) => \{\s*setDiagnosticReport\(buildDiagnosticReport\(diagnosticInputRef\.current\)\);\s*\}, AUTO_DIAGNOSTIC_INTERVAL_MS\);\s*return \(\) => clearInterval\(id\);\s*\}, \[\]\);/,
+    );
   });
 
   // ORDEM OFICIAL Nº 01 (Autogovernança): traceStages() (stage-runner.ts,
