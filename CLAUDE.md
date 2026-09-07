@@ -36,6 +36,30 @@ executa ordens, nunca movimenta capital, nunca guarda credenciais.
 - Identidade de modelo (qual modelo é este) nunca aparece em commit, PR,
   código ou qualquer artefato do repositório — só em chat.
 
+## Autorização permanente: merge automático (2026-09-07)
+
+O Operador autorizou explicitamente, via pergunta direta (`AskUserQuestion`,
+opção "Sim, pode mergear sozinho quando estiver verde"): toda sessão pode
+mergear uma PR própria direto em `main` assim que `npm run verify`
+(tsc + suíte inteira + build) estiver verde nela, **sem perguntar de novo a
+cada vez**. Pedido de origem: "quero que role 100% automático, mesmo tempo
+que tu executa e constrói, mudando automático no painel principal" — o
+deploy público já dispara sozinho em todo push em `main`
+(`.github/workflows/deploy-ipad-pwa.yml`, ver `docs/ACESSO_PRIVADO.md`);
+esta autorização fecha o último passo manual do ciclo.
+
+Esta autorização é só para o passo mecânico "está tudo validado, bota na
+linha principal" — **não substitui nenhuma outra regra deste arquivo**:
+- Nunca mergear com uma regressão real que a própria sessão tenha notado,
+  mesmo com CI verde (CI prova ausência de regressão CONHECIDA, nunca
+  todas as regressões possíveis).
+- Nunca forçar push nem reescrever história de branch alheia.
+- Todas as Regras de Ouro abaixo, LEI 24, e as Restrições permanentes
+  acima continuam valendo exatamente como antes.
+- Decisões de ESCOPO/arquitetura (o que construir, qual abordagem)
+  continuam exigindo confirmação como sempre — esta autorização cobre só
+  o merge de trabalho já aprovado/construído, nunca decide o que construir.
+
 ## Regras de Ouro (dados e cálculo)
 
 1. **Zero mocks, zero `Math.random()`, zero dado sintético no fluxo de

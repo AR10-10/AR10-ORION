@@ -1,7 +1,10 @@
 # AR10 CYBORG — Continuidade Operacional
 
-**Gerado em**: 2026-09-06 · **Branch**: `claude/localizar-arquivo-nuvem-qr0z6x` ·
-**PR aberta**: [#17](https://github.com/AR10-10/AR10-ORION/pull/17) (draft, CI verde) ·
+**Gerado em**: 2026-09-06 · **Atualizado em**: 2026-09-07 ·
+**PR [#17](https://github.com/AR10-10/AR10-ORION/pull/17) mesclada em `main`** (merge commit
+`b3613d4`) — todo o conteúdo deste documento já está na linha principal.
+**Branch de trabalho atual**: `claude/localizar-arquivo-nuvem-qr0z6x`, resetada
+a partir de `main` pós-merge (nenhum commit pendente nela ainda) ·
 **Pedido de origem**: Operador — "faz saneamento, vê se está tudo em ordem, me dá
 um arquivo MD pra eu levar e continuar certinho".
 
@@ -37,8 +40,10 @@ um arquivo MD pra eu levar e continuar certinho".
   nunca commitado) — boot limpo, zero `pageerror`, todo widget em estado
   honesto (AWAITING/DADOS INSUFICIENTES — nunca fabricado), exatamente o
   esperado neste sandbox de rede zero-egress.
-- PR #17 aberta contra `main`, CI verde, `mergeable_state: clean`, zero
-  comentário de review pendente.
+- PR #17 **mesclada em `main`** em 2026-09-07 (autorizado pelo Operador),
+  CI verde no merge commit `b3613d4`. O push do merge disparou
+  automaticamente `deploy-ipad-pwa.yml` (confirmado ao vivo) — que ainda
+  falha no mesmo passo do achado abaixo, até o secret existir.
 
 ## 1.1 Achado crítico (2026-09-07) — a resposta real a "por que não vejo diferença visual"
 
@@ -58,9 +63,11 @@ não-entregue — é um único secret nunca cadastrado.
   para nunca publicar um build que tranca o próprio Operador pra fora.
 - **Consequência real:** absolutamente nada desde o build de 24/08 chegou
   ao site público — nem MEXC, nem o Terminal, nem a rodada de acessibilidade
-  (foco visível, ARIA live, `prefers-reduced-motion`), nem esta PR #17
-  (A1 fechamento + A2.1 + fix harmônico). Está tudo real, testado e no
-  repositório — só nunca publicado onde o Operador olha.
+  (foco visível, ARIA live, `prefers-reduced-motion`), nem o conteúdo da
+  PR #17, já mesclado em `main` (A1 fechamento + A2.1 + fix harmônico +
+  as 3 partes do aviso de dado obsoleto/reconexão/autodiagnóstico). Está
+  tudo real, testado e em `main` — só nunca publicado onde o Operador
+  olha.
 - **Correção é 100% do lado do Operador** (`docs/ACESSO_PRIVADO.md` §4, já
   documentado antes deste achado, só não conectado explicitamente a este
   sintoma): gerar o hash (`printf '%s' 'SUA_SENHA_NOVA' | shasum -a 256`) e

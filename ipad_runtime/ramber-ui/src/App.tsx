@@ -204,6 +204,7 @@ import {
 // FPS, DEV-only — ver PerformanceMonitorPanel/import.meta.env.DEV abaixo.
 import { FpsRecorder, type FpsSample } from "./nexus/fps-monitor";
 import { shouldShowFreshnessBanner, formatFreshnessBannerLabel } from "./nexus/data-freshness-banner";
+import { subscribeToServiceWorkerUpdate } from "./pwa-update-signal";
 // GRADUAÇÃO (pedido do Operador: "organiza tudo que tem no laboratório"):
 // compareBacktestRuns saía do Laboratório de Evolução sem nenhum consumidor
 // de produção (fronteira travada por teste em compare-runs.test.ts, agora
@@ -4575,6 +4576,7 @@ export default function App() {
         <PaperTradingPanel priceData={priceData} />
         <AlertToastStack alerts={alerts} onDismiss={(id) => setAlerts((prev) => prev.filter((a) => a.id !== id))} />
         <DataFreshnessBanner />
+        <UpdateAvailableBanner />
         {/* Ordem A1 §9-§10 (fechamento das lacunas do A1): Laboratory-only,
             nunca ligado por padrão — ver performanceMonitorOpen acima. Um
             gate "import.meta.env.DEV" pareceria mais automático, mas
@@ -6061,6 +6063,47 @@ function DataFreshnessBanner() {
       className="!fixed !z-[1260] top-1 right-2 max-w-[70vw] overflow-hidden text-ellipsis whitespace-nowrap pointer-events-none px-3 py-1 rounded-full bg-[#ff0055]/90 text-white text-[0.6rem] font-bold tracking-wider font-mono shadow-[0_0_20px_rgba(255,0,85,0.5)] backdrop-blur-sm"
     >
       {formatFreshnessBannerLabel(state, Date.now())}
+    </div>
+  );
+}
+
+// UpdateAvailableBanner — pedido do Operador ("eu quero sentir a evolução
+// rodando"): o Service Worker real (sw/build-sw.mjs) já assume uma versão
+// nova NA HORA (skipWaiting+clients.claim) sempre que um novo build é
+// publicado — mas o JS desta aba continua sendo o antigo até um reload de
+// verdade (comportamento padrão de PWA, documentado no próprio build-
+// sw.mjs). O evento real do navegador (`controllerchange`) sempre existiu;
+// nunca virava aviso nenhum na tela — o Operador só saberia fechando e
+// reabrindo o app por conta própria, sem nenhum sinal. Sempre montado
+// (nunca atrás de um toggle de Laboratório): precisa aparecer sozinho.
+//
+// Empilhado abaixo do DataFreshnessBanner, mesmo canto superior direito
+// (medido ao vivo como o único ponto vazio da barra superior) — os dois
+// quase nunca aparecem juntos, mas quando aparecem não se sobrepõem.
+//
+// Diferente do DataFreshnessBanner: este É um controle interativo real
+// (recarregar agora), sem nenhuma outra região aria-live cobrindo esta
+// informação — `role="status"` aqui é o próprio anúncio, não uma
+// duplicata de nada existente.
+function UpdateAvailableBanner() {
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    return subscribeToServiceWorkerUpdate(navigator.serviceWorker, () => setUpdateAvailable(true));
+  }, []);
+
+  if (!updateAvailable) return null;
+
+  return (
+    <div role="status" className="!fixed !z-[1260] top-9 right-2 pointer-events-none">
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="pointer-events-auto flex items-center gap-2 px-3 py-1 rounded-full bg-[#00f0ff]/90 text-[#010308] text-[0.6rem] font-bold tracking-wider font-mono shadow-[0_0_20px_rgba(0,240,255,0.5)] backdrop-blur-sm active:bg-[#00f0ff]"
+      >
+        VERSÃO NOVA — RECARREGAR AGORA
+      </button>
     </div>
   );
 }
