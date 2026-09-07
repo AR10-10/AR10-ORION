@@ -143,9 +143,9 @@ describe("os outros módulos de laboratório continuam cercados", () => {
     );
   });
 
-  it("o guarda do motor HMM dormente continua existindo", () => {
+  it("o guarda do motor HMM continua existindo — graduou em 2026-09-07 ('ninguém' virou 'só engine-bridge.ts'), mas a fronteira em si não desapareceu", () => {
     expect(readFileSync(resolve(__dirname, "hmm-regime-model.test.ts"), "utf8")).toContain(
-      "nenhum módulo de produção importa ainda",
+      "só engine-bridge.ts importa",
     );
   });
 });

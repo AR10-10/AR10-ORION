@@ -2297,6 +2297,10 @@ export default function App() {
       // computada em engine-bridge.ts sobre os mesmos candles do Bus do
       // ciclo — puro passthrough aqui, nunca recomputado na UI.
       marketRegime: cycleOk ? (realCycle?.marketRegime ?? null) : null,
+      // GRADUAÇÃO (2026-09-07): leitura HMM probabilística (research/engines/
+      // hmm-regime-model.js), mesma disciplina de passthrough de marketRegime
+      // acima — computada em engine-bridge.ts, nunca recomputada na UI.
+      hmmRegime: cycleOk ? (realCycle?.hmmRegime ?? null) : null,
       // Os 3 números que DECIDEM `direction` logo acima. Passthrough puro
       // (mesma disciplina de marketRegime), para o Medidor de Distância à
       // Decisão poder medir a fronteira REAL do Núcleo em vez de estimá-la.
@@ -12822,6 +12826,30 @@ function DecisionValidationWidget() {
         ? "text-[#00f0ff]"
         : "text-[#00ffaa]";
 
+  // GRADUAÇÃO (2026-09-07, Laboratório de Evolução — Entrega 43): leitura
+  // HMM de 3 estados (Rabiner 1989, motor no Laboratório de Evolução),
+  // treinada do zero a cada ciclo em engine-bridge.ts sobre os MESMOS
+  // candles já usados por classifyMarketRegime. COMPLEMENTAR ao regime
+  // determinístico (ADX/Bollinger) já exibido em CONTEXTO/ContextReadStrip
+  // — nunca um substituto: um badge redundante com esse mesmo lugar foi
+  // avaliado e REJEITADO na própria Entrega 43 (ver QUARANTINE.md). A
+  // probabilidade aqui é a distribuição POSTERIOR do PRÓPRIO MODELO sobre
+  // qual dos 3 estados latentes (não-supervisionados) o mercado está agora
+  // — nunca uma probabilidade calibrada de acerto de mercado (Regra de
+  // Ouro 2). Fora da contagem de confluência de propósito, mesma razão do
+  // Cross-Venue/Reversão Estrutural acima: contexto estatístico, não uma
+  // camada de opinião sobre LONG/SHORT (LEI 24).
+  const hmmRegimeReading = engine?.hmmRegime ?? null;
+  const hmmTopProbability = hmmRegimeReading?.stateProbabilities?.length
+    ? Math.max(...hmmRegimeReading.stateProbabilities)
+    : null;
+  const hmmLabel = hmmRegimeReading
+    ? `${hmmRegimeReading.regimeLabel ?? "ESTADO SEM CONCORDÂNCIA REAL"}${
+        num(hmmTopProbability) ? ` · ${(hmmTopProbability * 100).toFixed(0)}%` : ""
+      }`
+    : AWAIT;
+  const hmmColor = hmmRegimeReading ? "text-[#00f0ff]" : "text-[#8ab4f8]/50";
+
   // Fase H: sugestão de dimensionamento (% equity / % risco). Fail-closed:
   // SEM_SUGESTAO exibe 0% com o motivo real. O selo é PERMANENTE e
   // incondicional (diretriz 3 da ordem de ignição).
@@ -13010,6 +13038,24 @@ function DecisionValidationWidget() {
           </span>
           <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-widest">
             CORE BINANCE·MEXC (microestrutura) · BYBIT/OKX (preço apenas)
+          </span>
+        </div>
+        {/* GRADUAÇÃO (2026-09-07): HMM de 3 estados, complementar ao regime
+            determinístico já exibido em CONTEXTO — nunca um substituto
+            (ver comentário acima da leitura). Card próprio em vez de
+            reaproveitar o "Regime: {label} {direção}" do header porque a
+            informação aqui é categoricamente diferente: uma distribuição
+            POSTERIOR de um modelo treinado ao vivo, não uma classificação
+            determinística de regra fixa. */}
+        <div
+          className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0"
+          title="Hidden Markov Model de 3 estados (Rabiner 1989), treinado do zero a cada ciclo sobre os candles reais já em memória — leitura NÃO-SUPERVISIONADA, complementar ao regime determinístico (ADX/Bollinger) já exibido em CONTEXTO. O percentual é a probabilidade POSTERIOR do PRÓPRIO MODELO sobre o estado latente atual — nunca uma probabilidade calibrada de acerto de mercado (este repositório não tem backtest real que sustente essa segunda afirmação)."
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">
+            REGIME PROBABILÍSTICO (HMM)
+          </span>
+          <span className={`text-[0.5rem] font-mono font-black ${hmmColor} break-words`}>
+            {hmmLabel}
           </span>
         </div>
         {/* ORDEM DO OPERADOR ("não deixa nada no laboratório"): Detector de

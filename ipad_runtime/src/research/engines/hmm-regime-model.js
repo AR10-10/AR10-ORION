@@ -89,11 +89,15 @@ export const metadata = {
         'Rotulação de estado por concordância empírica com regime-engine.js, nunca suposição fixa de índice',
     ],
     required_data: ['ohlcv_series suficiente para ADX+1 candle (HMM_MIN_CANDLES_FOR_FEATURES)'],
-    status: 'LABORATORIO',
+    // GRADUADO em 2026-09-07 — computeHmmRegimeReading() é importado por
+    // engine-bridge.ts (runRealAnalysisCycle), treinado do ZERO a cada ciclo
+    // de 30s sobre os mesmos 100 candles do Bus que classifyMarketRegime já
+    // usa. Ver QUARANTINE.md para o registro completo da graduação.
+    status: 'ACTIVE_READ_ONLY',
     limitations: [
-        'Pipeline de treino em Web Worker, persistência IndexedDB e retreino semanal automático deliberadamente NÃO construídos — a parte "ao vivo" exigiria dado real de mercado que este sandbox nunca teve (zero egress em toda a sessão).',
-        'Integração com o Profitability Engine (expectância filtrada por regime) é ideia válida para o futuro, mas depende de um HMM treinado E de trades suficientes rotulados por regime — nenhum dos dois existe ainda.',
-        'NÃO importado por nenhum caminho de produção — fronteira travada por teste próprio (hmm-regime-model.test.ts), não só por esta metadata.',
+        'Pipeline de treino em Web Worker, persistência IndexedDB e retreino semanal automático deliberadamente NÃO construídos — cada ciclo treina do zero sobre a janela de 100 candles já em memória (~72 pontos de feature reais), nunca sobre histórico persistido entre ciclos.',
+        'Integração com o Profitability Engine (expectância filtrada por regime) é ideia válida para o futuro, mas depende de trades suficientes rotulados por regime — ainda não existe.',
+        'Único consumidor autorizado: engine-bridge.ts (runRealAnalysisCycle). Fronteira travada por teste (hmm-regime-model.test.ts), não só por esta metadata.',
     ],
 };
 
@@ -408,5 +412,77 @@ export function labelHmmStates(candles, features, states) {
       }
     }
     return best;
+  });
+}
+
+// GRADUAÇÃO (2026-09-07): piso real de pontos de feature para o treino ao
+// vivo ter algum sentido. Convenção documentada, não uma calibração
+// estatística (mesmo espírito de DEFAULT_TRANSITION_PRIOR acima) — mas
+// ancorada num número real: o ciclo principal (engine-bridge.ts) pede
+// exatamente 100 candles ao Bus (mesma janela de classifyMarketRegime), o
+// que produz tipicamente ~72 pontos de feature (100 − adxWindow + 1, com
+// adxWindow=29). 60 fica abaixo disso com folga para variação real de
+// mercado (candles com ATR%<=0 são descartados por extractFeatureSeries),
+// mas ainda alto o bastante para o Baum-Welch não treinar 3 estados sobre
+// uma dúzia de observações.
+export const HMM_MIN_FEATURES_FOR_LIVE_READING = 60;
+
+function insufficientReading(reason) {
+  return Object.freeze({
+    status: "DADOS_INSUFICIENTES",
+    status_reason: reason,
+    state: null,
+    regimeLabel: null,
+    stateProbabilities: null,
+    logLikelihood: null,
+    featuresUsed: 0,
+    read_only: true,
+  });
+}
+
+/** Leitura HMM completa e ao vivo, sobre candles reais: treina (Baum-Welch),
+ *  decodifica o candle mais recente (Viterbi), rotula por concordância
+ *  empírica com regime-engine.js (labelHmmStates) e devolve a distribuição
+ *  POSTERIOR real (gamma, Rabiner §III) do último instante — nunca só o
+ *  rótulo duro. `stateProbabilities` é a probabilidade do PRÓPRIO MODELO
+ *  sobre em qual dos 3 estados latentes o mercado está agora — não é, e não
+ *  deve ser lida como, uma probabilidade calibrada de acerto de mercado
+ *  (Regra de Ouro 2: este repositório não tem backtest real que sustente
+ *  essa segunda afirmação). Zero segunda matemática: reusa integralmente as
+ *  funções acima, incluindo forwardScaled/backwardScaled já escalonados —
+ *  a única linha nova é a normalização gamma = alpha*beta/soma no último t,
+ *  o mesmo passo que baumWelch já faz internamente a cada iteração de EM. */
+export function computeHmmRegimeReading(candles, options = {}) {
+  const features = extractFeatureSeries(candles, options);
+  if (features.length < HMM_MIN_FEATURES_FOR_LIVE_READING) {
+    return insufficientReading(
+      `amostra_de_features_curta_demais_${features.length}_minimo_${HMM_MIN_FEATURES_FOR_LIVE_READING}`,
+    );
+  }
+
+  const observations = features.map((f) => discretizeObservation(f));
+  const model = baumWelch(observations, HMM_STATE_COUNT, HMM_SYMBOL_COUNT);
+  const { states } = viterbi(observations, model.A, model.B, model.pi);
+  const currentState = states[states.length - 1];
+  const labels = labelHmmStates(candles, features, states);
+
+  const { alpha, c } = forwardScaled(observations, model.A, model.B, model.pi);
+  const beta = backwardScaled(observations, model.A, model.B, c);
+  const lastT = observations.length - 1;
+  let denom = 0;
+  for (let j = 0; j < HMM_STATE_COUNT; j++) denom += alpha[lastT][j] * beta[lastT][j];
+  const stateProbabilities = denom > 0
+    ? Array.from({ length: HMM_STATE_COUNT }, (_, i) => (alpha[lastT][i] * beta[lastT][i]) / denom)
+    : null;
+
+  return Object.freeze({
+    status: "OK",
+    status_reason: "hmm_treinado_e_decodificado_sobre_candles_reais_do_ciclo",
+    state: currentState,
+    regimeLabel: labels[currentState] ?? null,
+    stateProbabilities,
+    logLikelihood: model.logLikelihood,
+    featuresUsed: features.length,
+    read_only: true,
   });
 }
