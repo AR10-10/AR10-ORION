@@ -388,3 +388,106 @@ describe('CrossExchangeService: MEXC real (REST poll de preço, mesmo padrão de
     expect(mexcEvents).toHaveLength(1);
   });
 });
+
+// Ordem A2.2 (Cross-Venue Intelligence, Binance×MEXC): startMexcDepthOnly()
+// é a única peça nova nesta rodada — as isolações abaixo travam exatamente
+// os 2 riscos que o próprio cabeçalho do arquivo documenta: nunca duplicar
+// o WS Binance já em produção, nunca competir com mexcCrossExchangeCheck
+// (App.tsx) pela escrita de connections.MEXC.
+describe('CrossExchangeService.startMexcDepthOnly(): SÓ a profundidade MEXC — nunca Binance, nunca o ticker MEXC', () => {
+  let bus: TypedEventBus;
+  let service: CrossExchangeService;
+  let wsFactoryCalls: number;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    useUnifiedSnapshotStore.setState(STORE_RESET);
+    bus = new TypedEventBus();
+    wsFactoryCalls = 0;
+    vi.mocked(fetchBybitPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
+    vi.mocked(fetchOkxPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
+    vi.mocked(fetchMexcPerpTicker).mockResolvedValue({ ok: true, price: 65000, fundingRate: null, openInterest: null });
+    vi.mocked(fetchMexcDepth).mockResolvedValue({
+      ok: true,
+      bids: [{ price: 100, size: 1 }],
+      asks: [{ price: 101, size: 1 }],
+    });
+  });
+
+  afterEach(async () => {
+    service?.stop();
+    await vi.runOnlyPendingTimersAsync().catch(() => {});
+    vi.useRealTimers();
+  });
+
+  function makeService(restPollMs = 60_000) {
+    service = new CrossExchangeService({
+      symbol: 'BTC',
+      timeframe: '15m',
+      bus,
+      wsFactory: () => {
+        wsFactoryCalls += 1;
+        return new FakeSocket();
+      },
+      restPollMs,
+    });
+    return service;
+  }
+
+  it('grava orderBooks.MEXC real (bids/asks/timestamp) e publica DATA.ORDERBOOK_UPDATED, mesmo caminho real de pollMexcDepth', async () => {
+    const received: any[] = [];
+    bus.on('DATA.ORDERBOOK_UPDATED', (p) => received.push(p));
+    makeService().startMexcDepthOnly();
+    await vi.runOnlyPendingTimersAsync();
+    const book = useUnifiedSnapshotStore.getState().orderBooks.MEXC;
+    expect(book?.bids).toEqual([{ price: 100, size: 1 }]);
+    expect(book?.asks).toEqual([{ price: 101, size: 1 }]);
+    expect(received.some((e) => e.exchange === 'MEXC')).toBe(true);
+  });
+
+  it('NUNCA abre o WebSocket (wsFactory nunca chamado) — a duplicação da conexão Binance que o cabeçalho do arquivo proíbe', async () => {
+    makeService().startMexcDepthOnly();
+    await vi.runOnlyPendingTimersAsync();
+    expect(wsFactoryCalls).toBe(0);
+    expect(useUnifiedSnapshotStore.getState().connections.BINANCE).toBeUndefined();
+  });
+
+  it('NUNCA chama fetchMexcPerpTicker nem escreve connections.MEXC — isso é papel de mexcCrossExchangeCheck (App.tsx), nunca dois escritores concorrentes', async () => {
+    // Contagem por DELTA, não toHaveBeenCalled(): os mocks são módulo-
+    // level (vi.mock no topo do arquivo), então o histórico de chamadas
+    // se acumula entre TODOS os testes deste arquivo — mesma disciplina
+    // já necessária em qualquer suite que não usa clearMocks global.
+    const before = vi.mocked(fetchMexcPerpTicker).mock.calls.length;
+    makeService().startMexcDepthOnly();
+    await vi.runOnlyPendingTimersAsync();
+    expect(vi.mocked(fetchMexcPerpTicker).mock.calls.length).toBe(before);
+    expect(useUnifiedSnapshotStore.getState().connections.MEXC).toBeUndefined();
+  });
+
+  it('NUNCA faz poll de Bybit/OKX — fora do escopo A2.2 (price cross-check já servido por outro caminho)', async () => {
+    const bybitBefore = vi.mocked(fetchBybitPerpTicker).mock.calls.length;
+    const okxBefore = vi.mocked(fetchOkxPerpTicker).mock.calls.length;
+    makeService().startMexcDepthOnly();
+    await vi.runOnlyPendingTimersAsync();
+    expect(vi.mocked(fetchBybitPerpTicker).mock.calls.length).toBe(bybitBefore);
+    expect(vi.mocked(fetchOkxPerpTicker).mock.calls.length).toBe(okxBefore);
+  });
+
+  it('é idempotente (chamar duas vezes não duplica o interval) e stop() encerra de verdade', async () => {
+    const s = makeService(1000);
+    s.startMexcDepthOnly();
+    s.startMexcDepthOnly();
+    await vi.runOnlyPendingTimersAsync();
+    const callsBeforeStop = vi.mocked(fetchMexcDepth).mock.calls.length;
+    s.stop();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(vi.mocked(fetchMexcDepth).mock.calls.length).toBe(callsBeforeStop);
+  });
+
+  it('continua fail-closed: profundidade falha nunca escreve orderBooks.MEXC (mesma trava real de pollMexcDepth)', async () => {
+    vi.mocked(fetchMexcDepth).mockResolvedValue({ ok: false, bids: [], asks: [] });
+    makeService().startMexcDepthOnly();
+    await vi.runOnlyPendingTimersAsync();
+    expect(useUnifiedSnapshotStore.getState().orderBooks.MEXC).toBeUndefined();
+  });
+});

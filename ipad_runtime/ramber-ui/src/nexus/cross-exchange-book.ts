@@ -92,8 +92,11 @@ function insufficient(reason: string, computedAt: number): CrossExchangeBookRead
 
 /** Melhor nível real de um lado do livro. `side` decide o critério: bid quer o
  *  MAIOR preço, ask quer o MENOR. Ignora nível com preço/tamanho não finito ou
- *  tamanho <= 0 — nível fantasma não é topo de livro. */
-function bestLevel(levels: { price: number; size: number }[], side: "bid" | "ask"): number | null {
+ *  tamanho <= 0 — nível fantasma não é topo de livro.
+ *  Exportada (Ordem A2.2, Cross-Venue Intelligence): cross-venue-
+ *  intelligence.ts reusa o MESMO critério pra achar o mid de uma amostra de
+ *  histórico L2 — nunca uma segunda implementação de "melhor nível". */
+export function bestLevel(levels: { price: number; size: number }[], side: "bid" | "ask"): number | null {
   let best: number | null = null;
   for (const l of levels) {
     if (!Number.isFinite(l.price) || !Number.isFinite(l.size) || l.size <= 0 || l.price <= 0) continue;
