@@ -2,9 +2,19 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore: 14 engines graduados + 2 utilitários compartilhados
+**Status desta árvore: 15 engines graduados + 2 utilitários compartilhados
 abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em 2026-06-30
 (purge de código morto).**
+
+**Atualização (graduação de `hmm-regime-model.js`, 2026-09-07, pedido direto
+do Operador — "graduar HMM + backtest"): 15º engine. Auditoria antes de
+mexer (mesma disciplina de sempre) encontrou que "backtest" já estava
+INTEIRAMENTE graduado desde 2026-09-04 (`structural-backtest.js`,
+`history-capture.js` via `backtest-worker.ts`, e `compare-runs.js` via
+`BacktestPanel`) — só `hmm-regime-model.js` continuava real no Laboratório.
+Corrigido no mesmo pedido ao Operador, em vez de graduar algo que já estava
+graduado. Contagem conferida contra a árvore NO MESMO commit, como sempre.
+Ver seção própria abaixo para o registro completo.**
 
 **Atualização (graduação de `andrews-pitchfork-engine.js`, 2026-09-01): 14º
 engine — a última ferramenta de gráfico com nome próprio ausente que não
@@ -91,8 +101,8 @@ src/research/
     │                                   fixa estava escrito 3 vezes)
     ├── andrews-pitchfork-engine.js    ACTIVE_READ_ONLY (graduado 2026-09-01 —
     │                                   ver secao própria abaixo)
-    └── hmm-regime-model.js            LABORATÓRIO (isolado 2026-08-10, não graduado —
-                                        ver secao "Laboratório de engines" abaixo)
+    └── hmm-regime-model.js            ACTIVE_READ_ONLY (graduado 2026-09-07 —
+                                        ver secao própria abaixo)
 ```
 
 > **Esta árvore é gerada da realidade, não de memória.** Ela ficou errada uma
@@ -398,11 +408,15 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   Profitability Engine (expectancy filtrada por regime — ideia real e
   válida para o futuro, depende de ter tanto um HMM treinado quanto
   trades suficientes rotulados por regime, nenhum dos dois existe ainda).
-  Status: **LABORATÓRIO** — nenhum módulo de produção importa daqui
-  (fronteira travada por teste em
-  `ramber-ui/tests/hmm-regime-model.test.ts`). Treino/inferência ao vivo,
-  UI e integração com o Core Engine/ProfitabilityEngine são passos
-  futuros deliberadamente separados desta entrega.
+  Status no momento deste registro (2026-08-10): **LABORATÓRIO** — nenhum
+  módulo de produção importava daqui (fronteira travada por teste em
+  `ramber-ui/tests/hmm-regime-model.test.ts`). Treino/inferência ao vivo, UI
+  e integração com o Core Engine/ProfitabilityEngine eram passos futuros
+  deliberadamente separados desta entrega. Graduou em **2026-09-07** —
+  treino+inferência ao vivo a cada ciclo (nunca persistência/retreino
+  agendado) + card próprio na UI; integração com o Profitability Engine
+  continua de fora — ver `## hmm-regime-model.js — GRADUADO` mais abaixo
+  para o registro completo da graduação.
 
 ## Laboratório de backtest (nunca caminho de produção)
 
@@ -1081,3 +1095,108 @@ fronteira agora nomeada) + 6 testes novos em `backtest-in-app.test.ts`
 (`descreverVeredito`, fiação real de `BacktestPanel`, baseline como
 estado local não-persistido, aviso obrigatório renderizado, comparação
 gated pelos dois status OK, execução real ponta a ponta).
+
+## `hmm-regime-model.js` — GRADUADO (2026-09-07)
+
+**Por que agora.** Pedido direto do Operador ("o que falta pro sistema
+ficar perfeito... tem tecnologia tipo NASA/militar que falta?"), respondido
+com uma recomendação honesta em vez de inventar "tecnologia militar"
+inexistente: 4 frentes reais candidatas, apresentadas via `AskUserQuestion`
+— o Operador escolheu "Graduar HMM + backtest". Auditoria antes de mexer
+(Regra Zero de sempre) encontrou que "backtest" já estava 100% graduado
+desde 2026-09-04 (ver seção acima) — só `hmm-regime-model.js` seguia real
+no Laboratório. A resposta ao Operador corrigiu essa suposição em vez de
+fingir uma segunda graduação que não existia.
+
+**Zero matemática nova.** `computeHmmRegimeReading(candles)` só ORGANIZA
+funções puras já existentes e testadas desde a Entrega 43
+(`extractFeatureSeries` → `discretizeObservation` → `baumWelch` → `viterbi`
+→ `labelHmmStates`), mais uma única linha genuinamente nova: a
+normalização `gamma = alpha·beta / Σ` no último instante (o mesmo passo
+que `baumWelch` já faz internamente a cada iteração de EM, aqui aplicado
+uma vez mais com os parâmetros FINAIS do treino) para expor a distribuição
+POSTERIOR real sobre os 3 estados — não só o rótulo duro do Viterbi.
+
+**Por que main thread, não Worker (Regra de Ouro 6) — decisão medida, não
+suposta.** Timing real (Node, fora da suíte) sobre a janela de 100 candles
+que o ciclo real usa: mediana ~2.5-3.6ms, pior caso observado ~30ms
+(provavelmente JIT/GC, não sustentado). Mesmo numa janela 6x maior (600
+candles, muito acima do que o ciclo pede) o custo foi ~39ms — ainda
+main-thread-safe porque o ciclo roda 1x a cada 30s, nunca por frame (o
+motivo real do Worker de `structural-backtest.js` é segundos de CPU por
+walk-forward de milhares de candles; este é outro perfil de custo
+inteiramente). Mesmo raciocínio já registrado para `compare-runs.js`
+("Regra de Ouro 6 protege o main thread de trabalho PESADO, não proíbe
+aritmética não-trivial nele" — aqui adaptado para "não-trivial mas
+milissegundos", não "trivial").
+
+**Piso real de amostra.** `HMM_MIN_FEATURES_FOR_LIVE_READING = 60` —
+convenção documentada (não calibração estatística), ancorada num número
+real: o ciclo pede exatamente 100 candles ao Bus (mesma janela de
+`classifyMarketRegime`), o que produz tipicamente 72 pontos de feature
+(`100 − adxWindow + 1`, `adxWindow=29`). 60 fica abaixo disso com folga
+real para candles descartados por ATR%≤0, mas alto o bastante para o
+Baum-Welch não treinar 3 estados sobre uma amostra irrisória. Abaixo do
+piso: `DADOS_INSUFICIENTES` explícito, nunca um modelo fabricado sobre
+poucos pontos (Regra de Ouro 3).
+
+**Ligação real (a regra de graduação).**
+- `research/engines/hmm-regime-model.js` — `computeHmmRegimeReading()`
+  novo, `metadata.status` de `LABORATORIO` para `ACTIVE_READ_ONLY`.
+- `ramber-ui/src/engine-bridge.ts` (`runRealAnalysisCycle`) — único
+  consumidor autorizado. Computa `hmmRegime` sobre `snapshot.candles`, os
+  MESMOS 100 candles já usados por `classifyMarketRegime` — zero rede
+  extra, zero segunda janela.
+- `ramber-ui/src/App.tsx` — `engine.hmmRegime` é puro passthrough (mesma
+  disciplina de `engine.marketRegime`); novo card "REGIME PROBABILÍSTICO
+  (HMM)" em `DecisionValidationWidget`, **fora da contagem de confluência**
+  de propósito (mesma razão do Cross-Venue Intelligence e da Reversão
+  Estrutural: é contexto estatístico, nunca uma camada de opinião sobre
+  LONG/SHORT).
+- `ramber-ui/tests/hmm-regime-model.test.ts` — a fronteira "ninguém importa"
+  virou "só `engine-bridge.ts` importa", mesma disciplina real de
+  `structural-backtest.test.ts`: mais específica, nunca afrouxada.
+
+**REGRA DE HONESTIDADE preservada (a mesma razão que rejeitou `RegimeBadge`
+na Entrega 43).** O card novo NUNCA duplica "Regime: {label} {direção}" já
+sempre visível no header (`ContextReadStrip`) — categoricamente diferente:
+aquele é uma classificação determinística de regra fixa (ADX/Bollinger);
+este é a distribuição POSTERIOR de um modelo treinado do zero a cada
+ciclo, não-supervisionado, sobre estados latentes sem rótulo a priori.
+`regimeLabel` pode ser `null` mesmo com `status: 'OK'` — quando o estado
+mais provável agora nunca teve um voto real de `labelHmmStates` (estado
+sem concordância empírica observável) — a UI mostra "ESTADO SEM
+CONCORDÂNCIA REAL", nunca um rótulo inventado (Regra de Ouro 3).
+
+**Regra de Ouro 2 preservada — o ponto mais importante desta graduação.**
+`stateProbabilities` é uma probabilidade real, mas do MODELO sobre seu
+PRÓPRIO estado latente — nunca uma probabilidade calibrada de acerto de
+mercado. O tooltip do card diz isso explicitamente, sempre visível (nunca
+só escondido em texto pequeno): "este repositório não tem backtest real
+que sustente essa segunda afirmação".
+
+**LEI 24 — display only, travado por teste.** `computeHmmRegimeReading`
+nunca retorna um campo de decisão (`signal`/`direction`) — travado por
+teste dedicado. O card em `DecisionValidationWidget` está dentro do mesmo
+bloco de função já coberto por `phase-omega-priority2-wiring.test.ts`
+("nenhuma escrita de volta em engine.direction/engine.confidence").
+
+**O que esta graduação NÃO faz.** Não persiste o modelo treinado entre
+ciclos (cada ciclo de 30s treina do zero sobre a janela então-atual de
+candles — decisão deliberada, mesma economia de estado de
+`compare-runs.js` não persistir baseline). Não integra com o Profitability
+Engine (expectância filtrada por regime) — ainda depende de trades
+suficientes rotulados por regime, que não existem. Não constrói pipeline
+de retreino agendado nem persistência IndexedDB — as mesmas exclusões já
+documentadas desde a Entrega 43, ainda válidas.
+
+**Suíte:** `hmm-regime-model.test.ts` ganhou 5 testes novos para
+`computeHmmRegimeReading` (fail-closed abaixo do piso com contagem
+hand-derivada de 57 features sobre 85 candles, exceção nunca vazada,
+igualdade EXATA contra a composição manual dos passos — prova de reuso —,
+soma do posterior = 1.0, contrato sem campo de decisão) + a fronteira
+atualizada (29 testes totais no arquivo). `hmm-regime-wiring.test.ts`
+(novo, 7 testes, padrão `readFileSync`+regex de
+`cross-venue-intelligence-wiring.test.ts`): import real, mesma janela de
+candles, passthrough, card monta com o aviso obrigatório, rótulo nunca
+fabricado, fora do array `checks` de confluência.

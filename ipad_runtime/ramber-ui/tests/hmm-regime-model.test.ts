@@ -12,7 +12,10 @@ import {
   extractFeatureSeries,
   discretizeObservation,
   labelHmmStates,
+  computeHmmRegimeReading,
   HMM_SYMBOL_COUNT,
+  HMM_STATE_COUNT,
+  HMM_MIN_FEATURES_FOR_LIVE_READING,
   O1_BIN_EDGES,
   O2_BIN_EDGES,
   O3_BIN_EDGES,
@@ -252,8 +255,78 @@ describe('labelHmmStates: rótulo por CONCORDÂNCIA empírica real com regime-en
   });
 });
 
-describe('hmm-regime-model: FRONTEIRA (Laboratório de Evolução) — nenhum módulo de produção importa ainda', () => {
-  it('hmm-regime-model.js não é importado por engine-bridge.ts nem qualquer outro caminho de produção — só testes (ver QUARANTINE.md)', () => {
+describe('computeHmmRegimeReading: leitura ao vivo (GRADUAÇÃO 2026-09-07) — treino+decodificação+rótulo+posterior num único contrato', () => {
+  it('amostra abaixo do piso (HMM_MIN_FEATURES_FOR_LIVE_READING) -> DADOS_INSUFICIENTES honesto, nunca um modelo treinado sobre amostra rasa', () => {
+    // 85 candles -> extractFeatureSeries produz exatamente 85-28=57 pontos
+    // (adxWindow=29, hand-contado, mesma conta de extractFeatureSeries acima)
+    // -- abaixo do piso de 60, nunca por acidente.
+    const candles = trendingCandles(85);
+    expect(extractFeatureSeries(candles)).toHaveLength(57);
+    const r = computeHmmRegimeReading(candles);
+    expect(r.status).toBe('DADOS_INSUFICIENTES');
+    expect(r.status_reason).toBe(`amostra_de_features_curta_demais_57_minimo_${HMM_MIN_FEATURES_FOR_LIVE_READING}`);
+    expect(r.state).toBeNull();
+    expect(r.regimeLabel).toBeNull();
+    expect(r.stateProbabilities).toBeNull();
+    expect(r.logLikelihood).toBeNull();
+    expect(r.featuresUsed).toBe(0);
+  });
+
+  it('candles vazios/insuficientes para a própria extração -> mesmo caminho fail-closed, nunca uma exceção', () => {
+    const r = computeHmmRegimeReading(trendingCandles(10));
+    expect(r.status).toBe('DADOS_INSUFICIENTES');
+    expect(r.featuresUsed).toBe(0);
+  });
+
+  it('amostra real (150 candles) -> status OK com o MESMO resultado de rodar cada passo manualmente (prova de reuso, zero segunda matemática)', () => {
+    const candles = trendingCandles(150);
+    const features = extractFeatureSeries(candles);
+    const observations = features.map((f) => discretizeObservation(f));
+    const model = baumWelch(observations, HMM_STATE_COUNT, HMM_SYMBOL_COUNT)!;
+    const { states } = viterbi(observations, model.A, model.B, model.pi);
+    const expectedState = states[states.length - 1];
+    const expectedLabels = labelHmmStates(candles, features, states);
+    const { alpha, c } = forwardScaled(observations, model.A, model.B, model.pi);
+    const beta = backwardScaled(observations, model.A, model.B, c);
+    const lastT = observations.length - 1;
+    let denom = 0;
+    for (let j = 0; j < HMM_STATE_COUNT; j++) denom += alpha[lastT][j] * beta[lastT][j];
+    const expectedProbabilities = Array.from({ length: HMM_STATE_COUNT }, (_, i) => (alpha[lastT][i] * beta[lastT][i]) / denom);
+
+    const r = computeHmmRegimeReading(candles);
+    expect(r.status).toBe('OK');
+    expect(r.featuresUsed).toBe(features.length);
+    expect(r.state).toBe(expectedState);
+    expect(r.regimeLabel).toBe(expectedLabels[expectedState] ?? null);
+    expect(r.logLikelihood).toBe(model.logLikelihood);
+    expect(r.stateProbabilities).toHaveLength(HMM_STATE_COUNT);
+    for (let i = 0; i < HMM_STATE_COUNT; i++) {
+      expect(r.stateProbabilities![i]).toBeCloseTo(expectedProbabilities[i], 10);
+    }
+  });
+
+  it('stateProbabilities é uma distribuição real: soma 1.0 (propriedade real do posterior gamma, Rabiner §III)', () => {
+    const r = computeHmmRegimeReading(trendingCandles(150));
+    expect(r.status).toBe('OK');
+    const sum = r.stateProbabilities!.reduce((a, b) => a + b, 0);
+    expect(sum).toBeCloseTo(1, 8);
+  });
+
+  it('LEI 24: o contrato de retorno nunca inclui um campo de decisão (LONG/SHORT/WAIT) — é sempre leitura de contexto', () => {
+    const r = computeHmmRegimeReading(trendingCandles(150));
+    expect(r).not.toHaveProperty('signal');
+    expect(r).not.toHaveProperty('direction');
+    expect(r.read_only).toBe(true);
+  });
+});
+
+describe('hmm-regime-model: FRONTEIRA (GRADUAÇÃO 2026-09-07) — só engine-bridge.ts importa', () => {
+  it('hmm-regime-model.js só é importado por engine-bridge.ts (runRealAnalysisCycle) — mesma disciplina de structural-backtest.test.ts: a guarda ficou MAIS específica, nunca afrouxada', () => {
+    // Antes dizia "ninguém" (Laboratório). Agora nomeia o ÚNICO consumidor
+    // autorizado (ver QUARANTINE.md — seção de graduação) e continua
+    // proibindo todo o resto: um segundo importador em App.tsx, num motor,
+    // ou no Core Engine derrubaria esta suíte.
+    const CONSUMIDOR_AUTORIZADO = 'engine-bridge.ts';
     const roots = [resolve(here, '../src'), resolve(here, '../../src')];
     const offenders: string[] = [];
     const walk = (dir: string) => {
@@ -264,7 +337,7 @@ describe('hmm-regime-model: FRONTEIRA (Laboratório de Evolução) — nenhum m�
           walk(p);
         } else if (/\.(ts|tsx|js|mjs)$/.test(entry.name) && p !== resolve(here, '../../src/research/engines/hmm-regime-model.js')) {
           const src = readFileSync(p, 'utf8');
-          if (src.includes('research/engines/hmm-regime-model')) offenders.push(p);
+          if (src.includes('research/engines/hmm-regime-model') && !p.replace(/\\/g, '/').endsWith(CONSUMIDOR_AUTORIZADO)) offenders.push(p);
         }
       }
     };

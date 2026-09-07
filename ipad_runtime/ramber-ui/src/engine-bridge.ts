@@ -122,6 +122,10 @@ import { analyze as analyzeAndrewsPitchforkPure } from '../../src/research/engin
 // nunca a FORMA da vela. Ver header do motor + QUARANTINE.md.
 import { analyze as analyzeCandlePatterns } from '../../src/research/engines/candlestick-patterns.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
+// GRADUAÇÃO (2026-09-07): leitura HMM probabilística (Laboratório desde a
+// Entrega 43) — único consumidor autorizado (ver QUARANTINE.md e a
+// fronteira travada por teste em hmm-regime-model.test.ts).
+import { computeHmmRegimeReading } from '../../src/research/engines/hmm-regime-model.js';
 // OMEGA CORE V-MAX Fase 7: mesmo Trade Plan real (Fase 4 do Signal
 // Precision) e mesmo Corredor de Confluência real (Fase 5) que o ativo
 // selecionado já usa — o scanner do Radar nunca reimplementa nenhum dos
@@ -305,6 +309,24 @@ export interface RealCycleResult {
     // (unidade de risco = max(dist. do stop, ATR%)). Puro passthrough.
     atrPercent: number | null;
     changedAt: number;
+  } | null;
+  // GRADUAÇÃO (2026-09-07, Laboratório de Evolução): leitura PROBABILÍSTICA
+  // de regime via Hidden Markov Model de 3 estados (research/engines/
+  // hmm-regime-model.js, Rabiner 1989), complementar ao classificador
+  // determinístico ADX/Bollinger acima — nunca um substituto. Treinado do
+  // zero a cada ciclo sobre os MESMOS 100 candles do Bus (custo real medido:
+  // mediana ~3ms, muito abaixo do necessário para justificar um Worker —
+  // ver QUARANTINE.md). `stateProbabilities` é a distribuição POSTERIOR do
+  // PRÓPRIO MODELO sobre em qual estado latente o mercado está agora — não
+  // é, e nunca deve ser lida como, uma probabilidade calibrada de acerto de
+  // mercado (Regra de Ouro 2). Contexto exibido, nunca um gate sobre
+  // `signal` (mesma regra do regime determinístico/Lorentziano/HTF).
+  hmmRegime?: {
+    state: number;
+    regimeLabel: string | null;
+    stateProbabilities: number[] | null;
+    logLikelihood: number | null;
+    featuresUsed: number;
   } | null;
   // Fase F: passthrough do relatório de qualidade da fonte (Data Quality
   // Layer da Fase C, já presente em todo snapshot do Bus) — o Ensemble usa
@@ -686,6 +708,24 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
       };
     }
 
+    // GRADUAÇÃO (2026-09-07): mesma janela de 100 candles acima, mesma
+    // disciplina fail-closed — DADOS_INSUFICIENTES vira null explícito,
+    // nunca vaza pela fronteira tipada (mesmo padrão de marketRegime).
+    // Custo real medido antes de graduar: mediana ~3ms para esta janela,
+    // muito abaixo do necessário para justificar Worker (Regra de Ouro 6;
+    // comparar com o motivo real do Worker de structural-backtest.js —
+    // segundos de CPU, não milissegundos).
+    const hmmResult = computeHmmRegimeReading(snapshot.candles);
+    const hmmRegime: RealCycleResult['hmmRegime'] = hmmResult.status === 'OK'
+      ? {
+          state: hmmResult.state,
+          regimeLabel: hmmResult.regimeLabel,
+          stateProbabilities: hmmResult.stateProbabilities,
+          logLikelihood: hmmResult.logLikelihood,
+          featuresUsed: hmmResult.featuresUsed,
+        }
+      : null;
+
     return {
       ok: true,
       lastPrice: evidence.ticker.last_price,
@@ -728,6 +768,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
       htfTimeframe: HTF_INTERVAL,
       htfUpdatedAt: htf.updatedAt,
       marketRegime,
+      hmmRegime,
       dataQuality: snapshot.quality
         ? {
             weight: snapshot.quality.weight ?? null,
