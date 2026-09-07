@@ -73,6 +73,8 @@ não-entregue — é um único secret nunca cadastrado.
 
 | Entrega | Onde | Resultado |
 |---|---|---|
+| **"Sistema sentir dado obsoleto"** (3 partes, ver §8) | `data-freshness-banner.ts`, `health-monitor.ts`, `App.tsx` (depthManager + TelemetryHealthWidget) | Aviso visível sempre montado + fix real de `isDataFresh` mentindo no boot + reconexão do book 5x mais rápida numa queda + autodiagnóstico a cada 60s. |
+| **Achado: deploy público parado desde 24/08** (sem código — investigação) | `docs/CONTINUIDADE_OPERACIONAL.md` §1.1 | Causa real de "não vejo diferença visual": `VITE_ACCESS_HASH` nunca foi cadastrado como secret — ação 100% do Operador, documentada com o comando exato. |
 | **A2.1 — Microstructure Event Engine** (escopo "consolidar sob 1 contrato tipado", confirmado pelo Operador) | `nexus/microstructure-snapshot.ts` (novo) | Organiza `signal-engine.js`/`trap-detection.ts`/`order-book-depth.ts` sob um `MicrostructureSnapshot` tipado, com qualidade real por fonte. Zero motor novo. Ligado à store (`unified-snapshot-store.ts` §3) e a `App.tsx`. |
 | **A1 — Visual Foundation, fechamento** | `chart-ultrawide-scale.ts` (respiro adaptativo), `nexus/fps-monitor.ts` (novo, instrumentação real de FPS) | Breathing room reage à carga real do Trade Plan. Painel de Performance real, Laboratory-only (toggle explícito — `import.meta.env.DEV` provou não ser confiável neste tipo de ambiente). |
 | **A1 — Auditoria completa** | (sem código — mapeamento) | Confirmou que trace roxo/seta de direção/anti-colisão/density tiers/z-order já estavam corretos, construídos em rodadas anteriores. |
@@ -173,24 +175,31 @@ npm run dev              # dev server real — precisa de VITE_ACCESS_HASH
                           # de gerar um hash temporário, nunca committado)
 ```
 
-## 8. Pergunta em aberto pro Operador (não resolvida ainda)
+## 8. "Sistema sentir que não tá rodando dado real" — resolvido e entregue (2026-09-07)
 
-O Operador pediu, na mesma mensagem que gerou este documento, que "o
-sistema seja inteligente" o bastante pra perceber sozinho quando não está
-recebendo dado real, e que — rodando de verdade no Safari — ele
-"automaticamente" faça verificações e se atualize. Isso pode significar
-pelo menos 3 coisas bem diferentes de construir:
+A pergunta em aberto da versão anterior deste documento (3 interpretações
+possíveis do pedido do Operador) foi confirmada por ele mesmo — as 3
+juntas, nesta ordem — e as 3 já foram entregues nesta mesma PR:
 
-1. Um indicador mais visível de "sem dado real há X segundos" (extensão
-   do que `nexus/health-monitor.ts`/`isDataFresh` já calculam hoje, só
-   não aparece com destaque).
-2. Reconexão automática mais agressiva quando a WebSocket cai (lógica
-   nova de retry, hoje o app já reconecta mas não foi medido se é rápido
-   o bastante).
-3. Um ciclo de auto-diagnóstico periódico (não só sob demanda) usando
-   `nexus/self-diagnostics.ts`, que hoje só roda quando pedido.
+1. **Aviso visível de dado obsoleto.** `nexus/data-freshness-banner.ts`
+   (puro, testado) + `DataFreshnessBanner` sempre montado em `App.tsx`
+   (nunca atrás de um toggle). Achado real no caminho: `isDataFresh`
+   mentia como "fresco" logo no boot (reset honesto pra vazio também
+   estampava `Date.now()`) — corrigido na origem, em `health-monitor.ts`,
+   não só na apresentação.
+2. **Reconexão mais agressiva do book.** `depthManager` (App.tsx) passa a
+   reutilizar `DEPTH_STALE_THRESHOLD_MS` (2s, já declarado em
+   `microstructure-snapshot.ts`) em vez dos defaults genéricos do
+   `ConnectionManager` (10s/20s) — força reconexão em ~4s reais numa
+   queda silenciosa, em vez de 20s. `tickerManager` não foi tocado (sem
+   evidência de que os defaults dele estejam errados).
+3. **Autodiagnóstico periódico.** `TelemetryHealthWidget` autoatualiza o
+   relatório completo (`buildDiagnosticReport`) a cada 60s via
+   `setInterval` + ref, além do botão sob demanda que continua existindo.
+   Limitação honesta: só roda enquanto o widget está montado na tela —
+   não é serviço de fundo independente de navegação.
 
-As três são tecnicamente possíveis e nenhuma fabrica dado nem quebra
-LEI 24 — mas são features BEM diferentes em tamanho e risco. Antes de
-qualquer uma virar código, uma sessão futura deveria confirmar com o
-Operador qual dessas (ou outra coisa) ele quer de verdade.
+Cada uma tem sua auditoria registrada na própria mensagem de commit
+(problema/análise/solução/impacto/riscos/testes) — não duplicado aqui.
+Nenhuma fabrica dado, nenhuma quebra LEI 24. Nenhuma pergunta pendente
+desta trilha específica.
