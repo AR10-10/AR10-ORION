@@ -94,7 +94,7 @@ describe("Fiação real em App.tsx — sempre montado, nunca atrás de um toggle
   it("o componente é aria-hidden — não duplica a região aria-live real de LiveRegionAnnouncer.tsx", () => {
     const src = appSrc();
     const start = src.indexOf("function DataFreshnessBanner()");
-    const end = src.indexOf("function AlertToastStack(");
+    const end = src.indexOf("// UpdateAvailableBanner —");
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const body = src.slice(start, end);
@@ -105,7 +105,7 @@ describe("Fiação real em App.tsx — sempre montado, nunca atrás de um toggle
   it("o tick de 1s só roda enquanto visível (setInterval dentro do guard de `visible`) — zero custo no caminho saudável", () => {
     const src = appSrc();
     const start = src.indexOf("function DataFreshnessBanner()");
-    const end = src.indexOf("function AlertToastStack(");
+    const end = src.indexOf("// UpdateAvailableBanner —");
     const body = src.slice(start, end);
     expect(body).toMatch(/if\s*\(!visible\)\s*return;\s*\n\s*const id = setInterval/);
   });
@@ -113,7 +113,7 @@ describe("Fiação real em App.tsx — sempre montado, nunca atrás de um toggle
   it("retorna null quando não visível — nunca ocupa espaço no caminho saudável (fail-closed ao contrário do resto do app)", () => {
     const src = appSrc();
     const start = src.indexOf("function DataFreshnessBanner()");
-    const end = src.indexOf("function AlertToastStack(");
+    const end = src.indexOf("// UpdateAvailableBanner —");
     const body = src.slice(start, end);
     expect(body).toMatch(/if\s*\(!visible\)\s*return null;/);
   });
