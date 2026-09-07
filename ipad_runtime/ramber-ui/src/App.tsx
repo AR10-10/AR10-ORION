@@ -9065,8 +9065,17 @@ function RightRail() {
 // (e.g. an exchange response schema change) — this must never take down the
 // rest of the cockpit. Error boundaries have no hook equivalent; a class
 // component is the only way React supports catching render errors.
+//
+// ORDEM 2B (P0 CHART RENDER FAILURE): achado real de auditoria — esta
+// boundary descartava o `error` por completo (só guardava um boolean),
+// diferente da irmã GlobalErrorBoundary (global-error-boundary.tsx), que
+// já captura E mostra `error.message`. Era exatamente essa lacuna que
+// tornou o "BTC/USDT · ERRO DE RENDERIZAÇÃO" opaco — nenhuma pista do que
+// realmente quebrou. Corrigido reaproveitando o MESMO padrão já
+// comprovado da boundary global (captura + exibe + console.error real via
+// componentDidCatch), nunca uma segunda arquitetura de error boundary.
 interface WidgetErrorBoundaryState {
-  hasError: boolean;
+  error: Error | null;
 }
 class WidgetErrorBoundary extends React.Component<
   { title?: string; children: React.ReactNode },
@@ -9074,21 +9083,33 @@ class WidgetErrorBoundary extends React.Component<
 > {
   constructor(props: { title?: string; children: React.ReactNode }) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { error: null };
   }
-  static getDerivedStateFromError(): WidgetErrorBoundaryState {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): WidgetErrorBoundaryState {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // Real diagnóstico no console — a próxima vez que um painel quebrar,
+    // a causa real fica no log do navegador (DevTools/Safari remoto no
+    // iPad), nunca só o texto genérico da tela. Nunca envia rede, nunca
+    // muda estado além do já capturado por getDerivedStateFromError.
+    console.error(`[WidgetErrorBoundary] ${this.props.title || "PAINEL"}:`, error, info.componentStack);
   }
   render() {
-    if (this.state.hasError) {
+    if (this.state.error) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center gap-1 text-center px-2">
+        <div className="flex-1 flex flex-col items-center justify-center gap-1 text-center px-2 overflow-y-auto">
           <span className="text-[0.5rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
             {this.props.title || "PAINEL"} · ERRO DE RENDERIZAÇÃO
           </span>
           <span className="text-[0.45rem] text-[#8ab4f8]/50">
             Os demais painéis continuam ativos.
           </span>
+          {this.state.error.message ? (
+            <span className="text-[0.42rem] text-[#8ab4f8]/40 break-words max-w-full px-2">
+              {this.state.error.message}
+            </span>
+          ) : null}
         </div>
       );
     }

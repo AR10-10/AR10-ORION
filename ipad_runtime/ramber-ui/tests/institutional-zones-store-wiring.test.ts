@@ -45,9 +45,15 @@ describe('EnhancedChart_110_Percent.tsx: publica o MESMO array já computado —
     const c = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const memoIdx = c.indexOf('const institutionalZones = useMemo(() => computeInstitutionalZones(institutionalZoneInput), [institutionalZoneInput]);');
     expect(memoIdx, 'useMemo real não encontrado').toBeGreaterThan(-1);
-    const block = c.slice(memoIdx, memoIdx + 900);
-    expect(block).toContain('useUnifiedSnapshotStore.getState().setInstitutionalZones(institutionalZones);');
-    expect(block).toContain('}, [institutionalZones]);');
+    // Janela alargada (900 -> 2200): ORDEM 2B somou um comentário real
+    // explicando a causa raiz do "BTC/USDT · ERRO DE RENDERIZAÇÃO" (React
+    // error #185) entre o useMemo e o useEffect — mesma proximidade lógica
+    // de sempre, só mais documentação no meio.
+    const block = c.slice(memoIdx, memoIdx + 2200);
+    // ORDEM 2B: a escrita real agora é adiada via queueMicrotask (corrige
+    // o #185 — ver comentário no próprio arquivo) — ainda a MESMA chamada,
+    // só não mais síncrona dentro do efeito.
+    expect(block).toContain('useEffect(() => {\n    queueMicrotask(() => {\n      useUnifiedSnapshotStore.getState().setInstitutionalZones(institutionalZones);\n    });\n  }, [institutionalZones]);');
   });
 
   it('importa useUnifiedSnapshotStore (zero segunda instância de store)', () => {

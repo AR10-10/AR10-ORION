@@ -2199,8 +2199,30 @@ function EnhancedChart_110_PercentImpl({
   // cálculo) para que CouncilWidget/qualquer consumidor futuro leiam a
   // idêntica leitura — mesmo espírito de "computada uma vez, lida por
   // QUALQUER outro consumidor" já documentado para layerRelevance.
+  //
+  // ORDEM 2B (P0 CHART RENDER FAILURE): CAUSA RAIZ REAL do "BTC/USDT ·
+  // ERRO DE RENDERIZAÇÃO" reportado no iPad, reproduzida ao vivo (fixture
+  // de 300 candles, dev E produção — React error #185, "Cannot update a
+  // component while rendering a different component"). App.tsx é quem lê
+  // institutionalZones da store (useInstitutionalZonesSnapshot(), linha
+  // ~10596) — ou seja, este efeito de um componente FILHO
+  // (EnhancedChart_110_Percent) escreve num slice que sua PRÓPRIA
+  // ancestral (App) assina. No PRIMEIRO mount real do gráfico (transição
+  // chartData.length 0→N, exatamente o instante em que este componente
+  // passa a existir), o write síncrono dentro do useEffect ainda competia
+  // com o flush de efeitos passivos da MESMA commit que está montando
+  // App→...→este componente — React trata isso como "atualizar um
+  // ancestral enquanto um descendente ainda está sendo processado nesta
+  // mesma passada" e derruba o render inteiro. `queueMicrotask` empurra a
+  // escrita pra depois desse flush terminar por completo — mesma leitura,
+  // mesmo valor, só não compete mais pela mesma passada síncrona. Zero
+  // mudança de SEMÂNTICA (o array publicado é idêntico, CouncilWidget
+  // continua lendo o mesmo institutionalZones de sempre) — só QUANDO ele
+  // chega à store.
   useEffect(() => {
-    useUnifiedSnapshotStore.getState().setInstitutionalZones(institutionalZones);
+    queueMicrotask(() => {
+      useUnifiedSnapshotStore.getState().setInstitutionalZones(institutionalZones);
+    });
   }, [institutionalZones]);
 
   // Ordem Nº 03: candidatos reais para a competição cruzada de destaque —
