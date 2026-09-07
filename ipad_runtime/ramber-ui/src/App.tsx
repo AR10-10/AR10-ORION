@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -103,10 +103,14 @@ import type { Timeframe, ExchangeConnectionState } from "./nexus/types";
 // connection-manager.ts em vez de escrever uma segunda fórmula à mão no
 // efeito de boot abaixo.
 import { ConnectionManager } from "./nexus/connection-manager";
-// V-MAX Fase 0.8: Health Monitor real, ligado direto (ver comentário no
-// efeito de boot mais abaixo sobre por que este, diferente do
-// CrossExchangeService da Fase 0.5, não fica dormente).
+// V-MAX Fase 0.8: Health Monitor real, ligado direto.
 import { getNexusCore } from "./nexus/nexus-core";
+// Ordem A2.2 (Cross-Venue Intelligence): CrossExchangeService.start()
+// completo continua dormente (duplicaria o WS Binance já em produção
+// abaixo) — só startMexcDepthOnly() é ligado (ver efeito de boot mais
+// abaixo e o próprio cabeçalho do arquivo), a única peça de rede nova
+// desta Ordem.
+import { CrossExchangeService } from "./nexus/cross-exchange-service";
 import { getHealthMonitor } from "./nexus/health-monitor";
 // Ordem "Próxima Evolução do Organismo": o orquestrador traduz cada escrita
 // de fatia de saída de motor no UnifiedGlobalSnapshot em um evento tipado no
@@ -458,6 +462,10 @@ import { fetchBybitPerpTicker, compareCrossExchange, type CrossExchangeCheck } f
 // Ponta Solta 1 (Auditoria do Ecossistema): leitura real do livro L2 por
 // corretora que a store já capturava e ninguém lia.
 import { computeCrossExchangeBook, describeCrossExchangeBook } from "./nexus/cross-exchange-book";
+// Ordem A2.2 (Cross-Venue Intelligence): "COMPARAR VENUES, NÃO FUNDIR
+// VENUES" — core real Binance×MEXC + Bybit/OKX como PRICE CROSS-CHECK
+// ONLY (Regra de Honestidade). Ver header do módulo.
+import { composeCrossVenueIntelligence, describeCrossVenueIntelligence } from "./nexus/cross-venue-intelligence";
 import { computeReversalReading, describeReversalReading } from "./nexus/reversal-detector";
 // Terceira fonte real (pedido do Operador: "puxa dados públicos de
 // qualquer outra corretora"): OKX Perpétuo, mesmo papel e mesma trava
@@ -3921,6 +3929,24 @@ export default function App() {
       orchestrator.stop();
     };
   }, []);
+  // Ordem A2.2 (Cross-Venue Intelligence, Binance×MEXC): a única peça de
+  // rede nova desta Ordem — startMexcDepthOnly() (ver seu próprio
+  // cabeçalho em cross-exchange-service.ts) popula orderBooks.MEXC de
+  // verdade, sem tocar a conexão Binance nem o ticker MEXC já cobertos em
+  // outro lugar deste arquivo. Só crypto: Binance/MEXC não existem pra um
+  // ativo TradFi. Reabre ao trocar de ativo (mesmo motivo de qualquer
+  // outra conexão por símbolo neste arquivo: reconectar é mais simples e
+  // honesto que tentar re-subscrever um poll já em curso).
+  useEffect(() => {
+    if (!isFullCryptoMode) return;
+    const service = new CrossExchangeService({
+      symbol: selectedAsset,
+      timeframe: chartTimeframe as Timeframe,
+      bus: getNexusCore().bus,
+    });
+    service.startMexcDepthOnly();
+    return () => service.stop();
+  }, [isFullCryptoMode, selectedAsset]);
   // v16.0 DEFINITIVO §9 ("Sistema de Sobrevivência"): assina o mesmo bus do
   // orquestrador acima para o único evento com publicador real hoje
   // (ORGANISM.TRACK_RECORD.UPDATED — "uma transição real, um evento",
@@ -12714,7 +12740,7 @@ function formatConsensusScore(score: number | null): string {
 }
 
 function DecisionValidationWidget() {
-  const { engine, institutionalConsensus, ensembleConsensus, convictionReading: convictionReadingFromContext, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe } =
+  const { engine, institutionalConsensus, ensembleConsensus, convictionReading: convictionReadingFromContext, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe, crossExchangeCheck, okxCrossExchangeCheck, mexcCrossExchangeCheck } =
     useContext(WidgetContext) || {};
   // Achado de auditoria: mesmo hook já usado por 2 outros widgets
   // (Decision Context, TRUST SCORE do Council) — trustScore.crossExchangeConvergence
@@ -12763,6 +12789,37 @@ function DecisionValidationWidget() {
       ? "text-[#8ab4f8]/50"
       : (crossBook.consolidatedSpread ?? 0) < 0
         ? "text-[#f0d06f]"
+        : "text-[#00ffaa]";
+
+  // Ordem A2.2 (Cross-Venue Intelligence): "COMPARAR VENUES, NÃO FUNDIR
+  // VENUES" — core real é só Binance×MEXC (as 2 únicas com order book/
+  // trades reais neste código); Bybit/OKX entram como PRICE CROSS-CHECK
+  // ONLY, reusando os MESMOS CrossExchangeCheck já computados em App.tsx
+  // (zero segunda leitura). binanceL2History/mexcL2History alimentam
+  // lead/lag só quando há evidência real — ver cabeçalho de
+  // cross-venue-intelligence.ts sobre por que isso reporta
+  // INSUFFICIENT_EVIDENCE na maior parte do tempo (MEXC ainda é REST/60s).
+  const binanceL2History = useL2History("BINANCE");
+  const mexcL2History = useL2History("MEXC");
+  const crossVenue = useMemo(
+    () =>
+      composeCrossVenueIntelligence({
+        books: exchangeBooks,
+        binanceHistory: binanceL2History,
+        mexcHistory: mexcL2History,
+        bybitCheck: crossExchangeCheck ?? { ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" },
+        okxCheck: okxCrossExchangeCheck ?? { ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" },
+        mexcPriceCheck: mexcCrossExchangeCheck ?? { ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" },
+        nowMs: Date.now(),
+      }),
+    [exchangeBooks, binanceL2History, mexcL2History, crossExchangeCheck, okxCrossExchangeCheck, mexcCrossExchangeCheck],
+  );
+  const crossVenueLabel = describeCrossVenueIntelligence(crossVenue);
+  const crossVenueColor =
+    crossVenue.core.status !== "OK"
+      ? "text-[#8ab4f8]/50"
+      : crossVenue.core.leadLag.status === "OK"
+        ? "text-[#00f0ff]"
         : "text-[#00ffaa]";
 
   // Fase H: sugestão de dimensionamento (% equity / % risco). Fail-closed:
@@ -12932,6 +12989,27 @@ function DecisionValidationWidget() {
           </span>
           <span className={`text-[0.5rem] font-mono font-black ${crossBookColor} break-words`}>
             {crossBookLabel}
+          </span>
+        </div>
+        {/* Ordem A2.2 (Cross-Venue Intelligence): card próprio, mesmo
+            padrão dos irmãos acima — nunca junto do "LIVRO ENTRE PRAÇAS"
+            porque aquele já é genérico (qualquer N praças com livro);
+            este é especificamente o core Binance×MEXC + liquidez + lead/
+            lag + a Regra de Honestidade (Bybit/OKX nunca aparecem como
+            microestrutura aqui, só como price cross-check). LEI 24:
+            display only, fora da contagem de confluência. */}
+        <div
+          className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0"
+          title="Ordem A2.2: compara Binance×MEXC de verdade (livro, liquidez, lead/lag quando há evidência) — as únicas 2 praças com order book real neste sistema. Bybit/OKX aparecem só como cross-check de preço (markPrice), nunca como microestrutura — eles não têm livro nem trade stream reais aqui. Contexto de execução — nunca uma decisão de trading."
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">
+            CROSS-VENUE INTELLIGENCE
+          </span>
+          <span className={`text-[0.5rem] font-mono font-black ${crossVenueColor} break-words`}>
+            {crossVenueLabel}
+          </span>
+          <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-widest">
+            CORE BINANCE·MEXC (microestrutura) · BYBIT/OKX (preço apenas)
           </span>
         </div>
         {/* ORDEM DO OPERADOR ("não deixa nada no laboratório"): Detector de

@@ -111,6 +111,27 @@ export class CrossExchangeService {
     this.mexcTimer = setInterval(() => this.pollMexc(), this.restPollMs);
   }
 
+  /** Ordem A2.2 (Cross-Venue Intelligence, Binance×MEXC): inicia SÓ o poll
+   *  real de profundidade da MEXC (fetchMexcDepth, já testado acima) — a
+   *  única peça que faltava pra computeCrossExchangeBook() ter uma segunda
+   *  praça de verdade além da Binance (orderBooks.MEXC nunca era escrito em
+   *  produção, só pelo start() completo acima, nunca chamado).
+   *
+   *  Deliberadamente NÃO chama startBinance() (duplicaria o WebSocket
+   *  Binance Spot que este arquivo mantém sobre o Futures já em produção em
+   *  App.tsx — exatamente o risco que o cabeçalho deste arquivo documenta
+   *  desde sempre) nem pollRestExchange("MEXC", ...) do ticker (já coberto
+   *  por mexcCrossExchangeCheck/App.tsx — chamar os dois escreveria
+   *  connections.MEXC por dois caminhos concorrentes). Bybit/OKX
+   *  permanecem fora por desenho: a Ordem A2.2 os trata como
+   *  PRICE CROSS-CHECK ONLY, já servido por outro caminho existente. */
+  startMexcDepthOnly(): void {
+    if (this.running) return;
+    this.running = true;
+    this.pollMexcDepth();
+    this.mexcTimer = setInterval(() => this.pollMexcDepth(), this.restPollMs);
+  }
+
   stop(): void {
     this.running = false;
     this.binanceManager?.stop();
@@ -245,6 +266,18 @@ export class CrossExchangeService {
     const snapshot: L2Snapshot = { bids: depth.bids, asks: depth.asks, updatedAt: Date.now() };
     useUnifiedSnapshotStore.getState().setExchangeOrderBook("MEXC", snapshot);
     this.bus.emit({ type: "DATA.ORDERBOOK_UPDATED", payload: { exchange: "MEXC" } });
+    // Ordem A2.2 (Cross-Venue Intelligence): MESMO evento real também vira
+    // uma amostra no histórico L2 da MEXC (pré-requisito de
+    // computeLeadLag em cross-venue-intelligence.ts) — mesmo padrão já
+    // real da Binance (App.tsx, sampleL2History a cada tick de depth),
+    // nunca uma segunda captura de rede. sampleL2History decide sozinho
+    // (função pura em l2-history.ts) se já passou tempo suficiente pra
+    // reter.
+    useUnifiedSnapshotStore.getState().sampleL2History("MEXC", {
+      time: snapshot.updatedAt,
+      bids: snapshot.bids,
+      asks: snapshot.asks,
+    });
   }
 
   private async pollRestExchange(exchange: Exchange, fetcher: (symbol: string) => Promise<PerpTicker>): Promise<void> {

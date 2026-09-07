@@ -37,7 +37,7 @@ describe('App.tsx: convictionReading calculado UMA VEZ em App() e compartilhado 
     // A mesma chave aparece no objeto de valor E no array de deps do useMemo.
     const occurrences = app.match(/\bensembleConsensus,\n\s*convictionReading,/g) ?? [];
     expect(occurrences.length).toBe(2);
-    expect(app).toContain('convictionReading: convictionReadingFromContext, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe }');
+    expect(app).toContain('convictionReading: convictionReadingFromContext, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe, crossExchangeCheck, okxCrossExchangeCheck, mexcCrossExchangeCheck }');
   });
 
   it('LEI 24: nenhuma escrita de volta em engine.direction/engine.confidence a partir da leitura de convicção', () => {
