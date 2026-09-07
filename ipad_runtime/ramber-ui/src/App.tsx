@@ -209,6 +209,7 @@ import {
 import { FpsRecorder, type FpsSample } from "./nexus/fps-monitor";
 import { shouldShowFreshnessBanner, formatFreshnessBannerLabel } from "./nexus/data-freshness-banner";
 import { subscribeToServiceWorkerUpdate } from "./pwa-update-signal";
+import { computeToastPlacement } from "./chart/chart-safe-zone";
 // GRADUAÇÃO (pedido do Operador: "organiza tudo que tem no laboratório"):
 // compareBacktestRuns saía do Laboratório de Evolução sem nenhum consumidor
 // de produção (fronteira travada por teste em compare-runs.test.ts, agora
@@ -6144,46 +6145,121 @@ function UpdateAvailableBanner() {
   );
 }
 
+// ORDEM 2A ("Fechar gap de notificações / Chart Spatial Safety"): a
+// medição real (ORDEM 2, item 8, Playwright ao vivo) provou que o canto
+// inferior direito ORIGINAL (bottom-3 right-3) invadia ~195px do gráfico
+// — RightRail só tem 48-56px, o gráfico ocupa toda a largura restante,
+// não existe margem livre naquele canto em nenhuma resolução testada.
+// Movido para o canto superior direito — o MESMO ponto que
+// DataFreshnessBanner/UpdateAvailableBanner já usam, já validado ao vivo
+// como "o único ponto confirmado vazio em qualquer largura testada"
+// (comentário original dos dois, reaproveitado aqui) — mas com a altura
+// disponível calculada DINAMICAMENTE pelo topo real do gráfico
+// (chart-safe-zone.ts::computeToastPlacement), nunca um valor fixo:
+// quando o gráfico está maximizado (App.tsx já documenta esse modo:
+// "cobrindo a barra"), a faixa livre encolhe e o stack encolhe junto —
+// nunca sobrepõe, mesmo nesse caso extremo.
+function useChartTop(): number | null {
+  const [top, setTop] = useState<number | null>(null);
+  useEffect(() => {
+    const measure = () => {
+      const el = document.querySelector<HTMLElement>("[data-chart-region]");
+      setTop(el ? el.getBoundingClientRect().top : null);
+    };
+    measure();
+    // ResizeObserver cobre resize/reflow do próprio wrapper (troca de
+    // aba, abrir/fechar drawer, maximizar o gráfico); o listener de
+    // window cobre rotação de iPad e redimensionamento da janela, que
+    // não necessariamente disparam o ResizeObserver do elemento medido.
+    const el = document.querySelector<HTMLElement>("[data-chart-region]");
+    const ro = el ? new ResizeObserver(measure) : null;
+    if (el && ro) ro.observe(el);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+  return top;
+}
+
 function AlertToastStack({ alerts, onDismiss }: { alerts: AlertEvent[]; onDismiss: (id: string) => void }) {
-  if (alerts.length === 0) return null;
+  const chartTop = useChartTop();
+  const [viewportHeight, setViewportHeight] = useState(() => (typeof window !== "undefined" ? window.innerHeight : 1024));
+  useEffect(() => {
+    const onResize = () => setViewportHeight(window.innerHeight);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const placement = computeToastPlacement(chartTop, viewportHeight);
+
+  // Mais urgente em cima: com vários toasts subindo juntos, o olho vai no
+  // primeiro — e o primeiro tem de ser o que mais importa. A lista de
+  // estado continua na ordem de chegada (é ela que o auto-dismiss usa);
+  // só a apresentação reordena. maxVisible (item 7 da ordem — "respeitar
+  // o espaço ocupado por outros toasts") corta pelos mais urgentes,
+  // nunca apaga o histórico: `alerts` no estado de App() continua
+  // completo, só quantos CARTÕES desenham ao mesmo tempo é limitado —
+  // mesmo padrão de selectRelevantLabels (price-label-stack.ts).
+  const visible = sortAlertsByUrgency(alerts).slice(0, placement.maxVisible);
+  if (visible.length === 0) return null;
+
+  // GARANTIA REAL (testada em chart-safe-zone.test.ts): top+maxHeight
+  // nunca alcança o topo do gráfico. overflow-y:auto aqui é um cinto de
+  // segurança adicional, NUNCA a correção em si (a correção real é
+  // maxHeight já vir do topo medido do gráfico) — mesmo que o cálculo de
+  // maxVisible subestime a altura real de algum cartão, o stack ainda
+  // não pode transbordar visualmente sobre o gráfico.
   return (
-    <div className="!fixed !z-[1200] bottom-3 right-3 flex flex-col gap-1.5 w-64 max-w-[85vw] pointer-events-none">
-      {/* Mais urgente em cima: com 3 toasts subindo juntos, o olho vai no
-          primeiro — e o primeiro tem de ser o que mais importa. A lista de
-          estado continua na ordem de chegada (é ela que o auto-dismiss
-          usa); só a apresentação reordena. */}
-      {sortAlertsByUrgency(alerts).map((a) => {
-        const tone = ALERT_TONE_STYLE[a.tone];
-        // Urgência em FORMA, nunca em cor: a cor já diz o que aconteceu
-        // (bom/neutro/ruim) e um CRITICAL pode ser boa notícia.
-        const emphasis = alertEmphasis(a.priority);
-        return (
-          <div
-            key={a.id}
-            style={{ borderLeftWidth: `${emphasis.railPx}px`, opacity: emphasis.opacity }}
-            className={`animate-fade-in pointer-events-auto cyber-panel !bg-[#010308]/95 ${tone.border} rounded px-2.5 py-2 relative overflow-hidden${emphasis.ring ? " ring-1 ring-inset" : ""}`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className={`text-[0.55rem] font-black tracking-wide ${tone.text}`}>
-                  {emphasis.marker && <span className="mr-1 opacity-80">{emphasis.marker}</span>}
-                  {a.title}
-                </div>
-                <div className="text-[0.48rem] text-[#8ab4f8]/80 mt-0.5 leading-snug">{a.message}</div>
-              </div>
-              <button
-                type="button"
-                aria-label="Fechar alerta"
-                onClick={() => onDismiss(a.id)}
-                className="text-[#8ab4f8]/50 active:text-[#8ab4f8] text-[0.6rem] leading-none shrink-0"
+    <div
+      className="!fixed !z-[1200] flex flex-col gap-1.5 w-64 max-w-[85vw] pointer-events-none overflow-y-auto"
+      style={{ top: placement.top, right: placement.right, maxHeight: placement.maxHeight }}
+    >
+      {placement.compact
+        ? visible.map((a) => {
+            const tone = ALERT_TONE_STYLE[a.tone];
+            return (
+              <div
+                key={a.id}
+                className={`animate-fade-in pointer-events-auto cyber-panel !bg-[#010308]/95 ${tone.border} border-l-2 rounded px-2 py-0.5 text-[0.5rem] font-bold ${tone.text} truncate`}
               >
-                ✕
-              </button>
-            </div>
-            <div className="alert-toast-progress absolute left-0 bottom-0 h-[2px]" style={{ backgroundColor: tone.hex }} />
-          </div>
-        );
-      })}
+                {a.title}
+              </div>
+            );
+          })
+        : visible.map((a) => {
+            const tone = ALERT_TONE_STYLE[a.tone];
+            // Urgência em FORMA, nunca em cor: a cor já diz o que aconteceu
+            // (bom/neutro/ruim) e um CRITICAL pode ser boa notícia.
+            const emphasis = alertEmphasis(a.priority);
+            return (
+              <div
+                key={a.id}
+                style={{ borderLeftWidth: `${emphasis.railPx}px`, opacity: emphasis.opacity }}
+                className={`animate-fade-in pointer-events-auto cyber-panel !bg-[#010308]/95 ${tone.border} rounded px-2.5 py-2 relative overflow-hidden${emphasis.ring ? " ring-1 ring-inset" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className={`text-[0.55rem] font-black tracking-wide ${tone.text}`}>
+                      {emphasis.marker && <span className="mr-1 opacity-80">{emphasis.marker}</span>}
+                      {a.title}
+                    </div>
+                    <div className="text-[0.48rem] text-[#8ab4f8]/80 mt-0.5 leading-snug">{a.message}</div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Fechar alerta"
+                    onClick={() => onDismiss(a.id)}
+                    className="text-[#8ab4f8]/50 active:text-[#8ab4f8] text-[0.6rem] leading-none shrink-0"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="alert-toast-progress absolute left-0 bottom-0 h-[2px]" style={{ backgroundColor: tone.hex }} />
+              </div>
+            );
+          })}
     </div>
   );
 }
@@ -10837,7 +10913,14 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
           símbolo, necessário quando o gráfico está maximizado cobrindo a
           barra; a tag de último preço no eixo é parte intrínseca do gráfico
           (lightweight-charts desenha o próprio last-price label). */}
-      <div className="flex-1 mt-1 relative min-h-0">
+      {/* data-chart-region: ORDEM 2A ("Chart Spatial Safety") — âncora real
+          para AlertToastStack medir o topo do gráfico via
+          getBoundingClientRect (viewport, não coordenada interna do
+          canvas) e nunca desenhar por cima dele. Só um atributo de
+          medição — nenhuma lógica de Decision/Trade Plan/Structure
+          tocada; o wrapper já existia, este data- não muda layout nem
+          comportamento nenhum por si só. */}
+      <div className="flex-1 mt-1 relative min-h-0" data-chart-region="true">
         {chartData && chartData.length > 0 ? (
           <EnhancedChart_110_Percent
             data={chartData}

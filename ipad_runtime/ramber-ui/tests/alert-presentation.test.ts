@@ -103,7 +103,13 @@ describe("fiação — a tela realmente consome a urgência", () => {
   const app = readFileSync(resolve(__dirname, "../src/App.tsx"), "utf-8");
 
   it("AlertToastStack ordena por urgência antes de renderizar", () => {
-    expect(app).toContain("sortAlertsByUrgency(alerts).map");
+    // ORDEM 2A (Chart Spatial Safety): entre ordenar e desenhar agora entra
+    // um corte real por espaço livre (`.slice(0, placement.maxVisible)`,
+    // ver chart-safe-zone.ts) — a ordenação por urgência continua sendo o
+    // primeiro passo (decide QUEM sobrevive ao corte), só não encadeia mais
+    // direto com `.map`.
+    expect(app).toContain("sortAlertsByUrgency(alerts).slice(0, placement.maxVisible)");
+    expect(app).toContain("visible.map");
   });
 
   it("o trilho e a opacidade vêm dos tokens, não de números soltos no JSX", () => {
