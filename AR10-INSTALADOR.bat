@@ -6,8 +6,9 @@ REM   1. confere o Node;
 REM   2. pergunta onde guardar o sistema;
 REM   3. BAIXA TUDO do GitHub sozinho (git clone, ou ZIP via PowerShell se
 REM      nao houver git);
-REM   4. entrega para o INSTALAR-E-RODAR.bat de dentro da pasta, que prepara
-REM      a senha, instala as pecas e liga o painel.
+REM   4. entrega para o INSTALAR-E-RODAR.bat de dentro da pasta, que instala
+REM      as pecas e liga o painel (sem senha desde a ordem "remover password
+REM      gate temporario", 2026-09-07).
 REM
 REM NAO duplica a logica de instalacao de proposito: resolve UM problema --
 REM trazer os arquivos -- e entrega o resto para o instalador ja testado.

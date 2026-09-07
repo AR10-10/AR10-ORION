@@ -8,7 +8,8 @@
 #   2. pergunta onde guardar o sistema;
 #   3. BAIXA TUDO do GitHub sozinho (git clone, ou ZIP se não houver git);
 #   4. entrega o trabalho para o INSTALAR-E-RODAR.command de dentro da pasta,
-#      que prepara a senha, instala as peças e liga o painel.
+#      que instala as peças e liga o painel (sem senha desde a ordem
+#      "remover password gate temporário", 2026-09-07).
 #
 # Pedido do Operador: "tu gera um arquivo, executa ele, abaixa tudo que tem
 # de baixar, arruma tudo no meu computador e faz todo processo tudinho, e

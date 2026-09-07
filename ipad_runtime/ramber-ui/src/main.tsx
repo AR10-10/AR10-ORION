@@ -1,9 +1,21 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
-import { AccessGate } from './access-gate';
 import { GlobalErrorBoundary } from './global-error-boundary';
 import './index.css';
+
+// ORDEM "REMOVER PASSWORD GATE TEMPORÁRIO" (2026-09-07): a cortina de senha
+// global (AccessGate, ver access-gate.tsx) saiu do caminho crítico de
+// build/deploy/runtime — ela estava bloqueando o próprio ciclo de
+// publicação (VITE_ACCESS_HASH nunca cadastrado como secret) sem proteger
+// nada de verdade (o próprio access-gate.tsx já documentava isso: hash
+// inline no bundle publicado, contornável por localStorage). O painel volta
+// a abrir direto — READ_ONLY/FAIL_CLOSED/sem execução real continuam
+// intactos, porque nunca dependeram desta cortina. `access-gate.tsx`/
+// `access-gate-crypto.ts` continuam no repositório (Zero Delete Rule) para
+// reaproveitamento futuro; só pararam de ser montados aqui. Autenticação
+// real (identidade individual, login, sessão, papéis) é arquitetura
+// futura — ver docs/ACESSO_PRIVADO.md.
 
 // Fase L (diretriz 2 — Homologação Offline): service worker REAL com
 // precache do shell do build + stale-while-revalidate (sw.js, gerado pelo
@@ -29,9 +41,7 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <GlobalErrorBoundary>
-      <AccessGate>
-        <App />
-      </AccessGate>
+      <App />
     </GlobalErrorBoundary>
   </StrictMode>,
 );

@@ -18,8 +18,9 @@
 #
 # Liga com `--host` para o painel ficar acessível do iPad e do celular na
 # MESMA rede. O endereço aparece na tela. Isso é o que o Operador pediu — e
-# significa que qualquer aparelho na rede alcança o painel, com a senha como
-# única barreira. Está dito na tela, não escondido aqui.
+# significa que qualquer aparelho na rede alcança o painel (sem senha desde
+# a ordem "remover password gate temporário", 2026-09-07 — ver
+# docs/ACESSO_PRIVADO.md). Está dito na tela, não escondido aqui.
 
 cd "$(dirname "$0")" || exit 1
 
@@ -42,7 +43,7 @@ parar() {
 }
 
 # ── 1. Node ────────────────────────────────────────────────────────────────
-echo -e "  ${FORTE}[1/5]${FIM} Procurando o Node..."
+echo -e "  ${FORTE}[1/4]${FIM} Procurando o Node..."
 if ! command -v node >/dev/null 2>&1; then
   parar "o Node não está instalado nesta máquina." \
     "Baixe a versão LTS em https://nodejs.org , instale (é só avançar), e clique neste arquivo de novo."
@@ -56,7 +57,7 @@ echo -e "      ${VERDE}✓${FIM} Node $(node --version)"
 
 # ── 2. Atualização automática ──────────────────────────────────────────────
 echo ""
-echo -e "  ${FORTE}[2/5]${FIM} Buscando atualizações"
+echo -e "  ${FORTE}[2/4]${FIM} Buscando atualizações"
 ATUALIZOU="nao"
 if [ -d .git ] && command -v git >/dev/null 2>&1; then
   ANTES="$(git rev-parse HEAD 2>/dev/null)"
@@ -89,45 +90,9 @@ else
   echo "        sozinho toda vez."
 fi
 
-# ── 3. Senha ───────────────────────────────────────────────────────────────
+# ── 3. Dependências ────────────────────────────────────────────────────────
 echo ""
-echo -e "  ${FORTE}[3/5]${FIM} Senha do painel"
-if [ -f ipad_runtime/ramber-ui/.env.local ] && grep -q '^VITE_ACCESS_HASH=[0-9a-fA-F]\{64\}$' ipad_runtime/ramber-ui/.env.local 2>/dev/null; then
-  # Já configurada: não pergunta de novo. Perguntar toda vez transformaria
-  # o uso diário num formulário.
-  echo -e "      ${VERDE}✓${FIM} já configurada (para trocar, apague o arquivo"
-  echo "        ipad_runtime/ramber-ui/.env.local e rode de novo)"
-else
-  echo "      Ela só vale nesta máquina. Nunca é gravada — só o código"
-  echo "      embaralhado dela (hash) vai para um arquivo local."
-  echo ""
-  SENHA=""
-  TENTATIVAS=0
-  while [ ${#SENHA} -lt 4 ]; do
-    # `|| break` é essencial: sem ele, uma entrada fechada (EOF) faz `read`
-    # devolver vazio para sempre e o laço gira infinitamente. Pego por teste
-    # real — um instalador que congela é pior do que um que recusa.
-    read -r -s -p "      Escolha uma senha (mínimo 4 caracteres): " SENHA || break
-    echo ""
-    TENTATIVAS=$((TENTATIVAS + 1))
-    if [ ${#SENHA} -lt 4 ]; then
-      echo -e "      ${AMARELO}muito curta, tente de novo${FIM}"
-      [ "$TENTATIVAS" -ge 5 ] && break
-    fi
-  done
-  if [ ${#SENHA} -lt 4 ]; then
-    parar "não recebi uma senha válida." \
-      "Se você clicou duas vezes e a janela não deixou digitar, abra o Terminal nesta pasta e rode: ./INSTALAR-E-RODAR.command"
-  fi
-  node ipad_runtime/tools/setup-local.mjs "$SENHA" >/dev/null 2>&1 \
-    || parar "não consegui preparar a senha." "Rode manualmente: node ipad_runtime/tools/setup-local.mjs \"sua-senha\""
-  SENHA=""
-  echo -e "      ${VERDE}✓${FIM} senha preparada"
-fi
-
-# ── 4. Dependências ────────────────────────────────────────────────────────
-echo ""
-echo -e "  ${FORTE}[4/5]${FIM} Peças do sistema"
+echo -e "  ${FORTE}[3/4]${FIM} Peças do sistema"
 cd ipad_runtime/ramber-ui || parar "não encontrei a pasta do painel." "O download pode ter vindo pela metade."
 # `--include=dev` NÃO é enfeite. Pego rodando o instalador de ponta a ponta:
 # numa máquina com a variável NODE_ENV valendo "production", o `npm ci` pula
@@ -161,9 +126,9 @@ if [ ! -x node_modules/.bin/vite ]; then
     Saída: apague a pasta ipad_runtime/ramber-ui/node_modules e rode este arquivo de novo."
 fi
 
-# ── 5. Ligar ───────────────────────────────────────────────────────────────
+# ── 4. Ligar ───────────────────────────────────────────────────────────────
 echo ""
-echo -e "  ${FORTE}[5/5]${FIM} Ligando o painel..."
+echo -e "  ${FORTE}[4/4]${FIM} Ligando o painel..."
 
 IP_LOCAL="$(node -e '
 const os = require("os");
@@ -180,9 +145,9 @@ echo -e "      Neste computador:  ${FORTE}http://localhost:5173${FIM}"
 if [ -n "$IP_LOCAL" ]; then
   echo -e "      No iPad/celular:   ${FORTE}http://${IP_LOCAL}:5173${FIM}"
   echo ""
-  echo -e "      ${AMARELO}Atenção:${FIM} qualquer aparelho na SUA rede alcança esse endereço."
-  echo "      A senha é a única barreira. Numa rede de casa está ok; numa rede"
-  echo "      pública ou compartilhada, não use."
+  echo -e "      ${AMARELO}Atenção:${FIM} qualquer aparelho na SUA rede alcança esse endereço,"
+  echo "      sem senha nenhuma. Numa rede de casa está ok; numa rede pública ou"
+  echo "      compartilhada, não use."
 else
   echo "      (não consegui descobrir o endereço da rede local)"
 fi

@@ -1,12 +1,19 @@
 // instalador-local.test.ts — os dois instaladores de clique duplo.
 //
 // Eles são a porta de entrada do projeto para alguém que declarou não saber
-// instalar. Um instalador que trava ou que vaza a senha é pior do que
-// nenhum, então o que não pode regredir fica travado aqui.
+// instalar. Um instalador que trava é pior do que nenhum, então o que não
+// pode regredir fica travado aqui.
 //
 // O .bat não pode ser EXECUTADO nesta máquina (não há Windows). O que dá
 // para garantir por teste é a estrutura e as invariantes de segurança; a
 // execução real dele depende do Operador, e isso está dito na resposta.
+//
+// ORDEM "REMOVER PASSWORD GATE TEMPORÁRIO" (2026-09-07): a etapa de senha
+// (perguntar, gerar hash, chamar setup-local.mjs com ela) saiu dos dois
+// instaladores — o portão em si saiu do caminho crítico (main.tsx não monta
+// mais AccessGate). Os testes que travavam aquela etapa foram substituídos
+// por testes que travam a AUSÊNCIA dela, mesma disciplina de sempre: provar
+// a realidade nova, nunca só apagar a cobertura.
 import { describe, it, expect } from "vitest";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
@@ -42,52 +49,26 @@ const semComentariosTs = (src: string) =>
     .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
     .join("\n");
 
-describe("instaladores: a senha nunca é gravada nem exposta", () => {
-  it("os dois passam a senha para setup-local.mjs e limpam a variável depois", () => {
+describe("instaladores: a etapa de senha foi removida por completo", () => {
+  it("nenhum dos dois pergunta, gera hash, ou passa senha para setup-local.mjs", () => {
     for (const [nome, src] of [["unix", unix()], ["win", win()]] as const) {
-      expect(src, `${nome}: não chama o preparador`).toMatch(/setup-local\.mjs/);
-      // a variável é esvaziada logo após o uso — não fica no ambiente do
-      // processo que segue rodando (o servidor de dev).
-      expect(src, `${nome}: não limpa a senha`).toMatch(/SENHA=""|set "SENHA="/);
+      expect(src, `${nome}: ainda menciona SENHA`).not.toMatch(/SENHA/);
+      expect(src, `${nome}: ainda chama setup-local.mjs`).not.toContain("setup-local.mjs");
+      expect(src, `${nome}: ainda menciona VITE_ACCESS_HASH`).not.toContain("VITE_ACCESS_HASH");
     }
   });
 
-  it("nenhum dos dois escreve a senha em arquivo ou a imprime na tela", () => {
-    // A primeira versão desta asserção era um FALSO POSITIVO do próprio
-    // teste: `/\$SENHA["']?\s*>/` casava com
-    // `setup-local.mjs "$SENHA" >/dev/null`, que redireciona a SAÍDA DO
-    // COMANDO, não a senha. Oitava vez nesta trilha que uma asserção casa
-    // com algo que não é o alvo. A checagem certa é linha a linha,
-    // ignorando redirecionamento para /dev/null e nul.
-    for (const [nome, src] of [["unix", unix()], ["win", win()]] as const) {
-      const linhas = src.split("\n").filter((l) => /SENHA/.test(l));
-      expect(linhas.length, `${nome}: nenhuma linha usa SENHA`).toBeGreaterThan(0);
-      for (const l of linhas) {
-        const semDevNull = l.replace(/>\s*(\/dev\/null|nul)\b/g, "").replace(/2>&1/g, "");
-        expect(semDevNull, `${nome}: grava a senha em arquivo -> ${l.trim()}`).not.toMatch(/>\s*\S/);
-        expect(l, `${nome}: ecoa a senha -> ${l.trim()}`).not.toMatch(/^\s*echo\s+.*(\$\{?SENHA|!SENHA!)/);
-      }
-    }
-  });
-
-  it("no Unix a digitação é silenciosa (-s) — a senha não aparece na tela", () => {
-    expect(unix()).toMatch(/read -r -s -p/);
+  it("os passos foram renumerados para 4 (a etapa 3, senha, saiu)", () => {
+    expect(unix()).toContain("[1/4]");
+    expect(unix()).toContain("[4/4]");
+    expect(unix()).not.toMatch(/\[\d\/5\]/);
+    expect(win()).toContain("[1/4]");
+    expect(win()).toContain("[4/4]");
+    expect(win()).not.toMatch(/\[\d\/5\]/);
   });
 });
 
 describe("instaladores: nunca travam", () => {
-  it("o laço da senha no Unix sai no EOF — o bug real que o teste pegou", () => {
-    // Sem `|| break`, uma entrada fechada faz `read` devolver vazio para
-    // sempre e o instalador gira infinitamente. Foi exatamente o que
-    // aconteceu no primeiro teste real.
-    const src = unix();
-    expect(src).toMatch(/read -r -s -p .* SENHA \|\| break/);
-    // e há um teto de tentativas, para não girar mesmo com entrada viva
-    expect(src).toContain('[ "$TENTATIVAS" -ge 5 ] && break');
-    // e depois do laço, uma senha inválida PARA com explicação
-    expect(src).toContain('parar "não recebi uma senha válida."');
-  });
-
   it("o Unix é sintaticamente válido (bash -n passou na construção)", () => {
     // Guarda de forma: um `fi`/`done` faltando derrubaria o instalador na
     // cara do Operador. Aqui checamos o balanceamento dos blocos.
@@ -263,20 +244,17 @@ describe("instaladores: rede local com o aviso junto", () => {
     }
   });
 
-  it("o aviso de quem alcança o painel é OBRIGATÓRIO, não uma nota de rodapé", () => {
+  it("o aviso de quem alcança o painel é OBRIGATÓRIO, não uma nota de rodapé — e não finge mais que existe uma senha protegendo", () => {
     // Expor na rede sem dizer quem alcança seria a mesma classe de erro do
-    // portão de senha que fingia ser segurança.
+    // antigo portão de senha que fingia ser segurança. Desde a remoção do
+    // gate (2026-09-07) o aviso é ainda mais direto: NENHUMA barreira, não
+    // "a senha é a única barreira".
     expect(unix()).toContain("qualquer aparelho na SUA rede alcança esse endereço");
-    expect(unix()).toContain("A senha é a única barreira");
+    expect(unix()).toContain("sem senha nenhuma");
+    expect(unix()).not.toContain("A senha é a única barreira");
     expect(win()).toContain("qualquer aparelho na SUA rede alcanca esse endereco");
-    expect(win()).toContain("A senha e a unica barreira");
-  });
-
-  it("não pergunta a senha de novo quando já está configurada", () => {
-    // Perguntar a cada execução transformaria o uso diário num formulário.
-    expect(unix()).toContain("já configurada");
-    expect(win()).toContain("ja configurada");
-    expect(unix()).toMatch(/VITE_ACCESS_HASH=\[0-9a-fA-F\]/);
+    expect(win()).toContain("sem senha nenhuma");
+    expect(win()).not.toContain("A senha e a unica barreira");
   });
 });
 

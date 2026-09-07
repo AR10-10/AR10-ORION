@@ -44,17 +44,24 @@ Esta é a parte que **só você pode fazer**, e é a única que realmente fecha 
 acesso. Eu já desliguei a publicação automática (nenhum push publica mais
 nada), mas **o site que já foi publicado continua no ar até você desativar**.
 
-São três coisas, em ordem de importância:
+São duas coisas, em ordem de importância:
 
 | # | O quê | Onde | Efeito |
 |---|---|---|---|
 | 1 | **Desativar o Pages** | `Settings` → `Pages` → Build and deployment → Source: **None** | **Tira o site do ar.** É este que fecha o acesso de quem tem o link |
 | 2 | **Tornar o repositório privado** | `Settings` → Danger Zone → **Change repository visibility** → Make private | Esconde o código-fonte |
-| 3 | **Trocar a senha do portão** | `node ipad_runtime/tools/setup-local.mjs "nova-senha"` | A antiga esteve pública em repositório aberto |
 
 > **O que isso não desfaz:** o repositório foi público até agora. Quem já
 > clonou ou forkou continua com aquela cópia. Fechar agora impede acesso
-> *futuro* — por isso o passo 3 não é opcional.
+> *futuro*, não desfaz o passado.
+>
+> **Nota (2026-09-07):** o portão de senha do painel (o "digite a senha"
+> que aparecia antes de abrir) foi removido do caminho crítico — ele nunca
+> foi segurança real (era só JavaScript, contornável por qualquer pessoa
+> com DevTools) e virou, na prática, o único motivo de o painel público
+> nunca ser republicado (`VITE_ACCESS_HASH` bloqueando o deploy inteiro).
+> A trava real, se algum dia for necessária, é a autenticação de verdade —
+> ver `docs/ACESSO_PRIVADO.md`.
 
 Depois disso, o painel existe **só na sua máquina**.
 
@@ -82,18 +89,7 @@ Se não tem: abra o repositório no navegador, botão verde **Code** →
 > Se você já tornou o repositório privado, o `git clone` vai pedir login —
 > é o esperado, e é sinal de que a privacidade funcionou.
 
-### 3. Preparar
-
-Dentro da pasta do projeto:
-
-```sh
-node ipad_runtime/tools/setup-local.mjs "escolha-uma-senha-aqui"
-```
-
-Isso confere a versão do Node e cria o `.env.local` com o **hash** da senha
-(a senha em si nunca é gravada, e o arquivo está no `.gitignore`).
-
-### 4. Instalar as dependências — uma vez só
+### 3. Instalar as dependências — uma vez só
 
 ```sh
 cd ipad_runtime/ramber-ui
@@ -102,14 +98,14 @@ npm ci
 
 Demora alguns minutos na primeira vez.
 
-### 5. Ligar
+### 4. Ligar
 
 ```sh
 npm run dev
 ```
 
-Abra o endereço que aparecer — normalmente <http://localhost:5173> — e use a
-senha do passo 3.
+Abra o endereço que aparecer — normalmente <http://localhost:5173>. O painel
+abre direto, sem senha.
 
 > Para abrir do iPad na mesma rede de casa: `npm run dev -- --host`, e use o
 > endereço "Network" que aparecer. Aí o painel fica visível para quem está na
@@ -189,7 +185,6 @@ para não fazer.
 
 | Sintoma | Causa provável |
 |---|---|
-| "Acesso não configurado" na tela | O `.env.local` não foi criado — rode o passo 3 e ligue o servidor de novo |
 | `npm ci` falha | Node antigo demais — confira com `node --version`, precisa ser 20+ |
 | Gráfico vazio | Sem internet, ou a exchange bloqueou o IP; confira abrindo <https://api.binance.com/api/v3/ping> no navegador |
 | Backtest aborta com `BLOCKED_BY_POLICY` | A máquina não alcança a Binance (rede corporativa, VPN, firewall) |
