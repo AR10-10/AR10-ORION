@@ -237,7 +237,7 @@ import { detectInstitutionalTraps } from "./nexus/trap-detection";
 // Ordem A2.1 (Microstructure Event Engine, escopo "consolidar sob 1
 // contrato tipado"): organiza cvd/orderflowSignals/trapSignals/orderBooks
 // já reais sob um schema único — zero segundo motor, ver header do arquivo.
-import { composeMicrostructureSnapshot } from "./nexus/microstructure-snapshot";
+import { composeMicrostructureSnapshot, DEPTH_STALE_THRESHOLD_MS } from "./nexus/microstructure-snapshot";
 // Phase Ω Priority 2 ("Probability Engine" no pedido original do Operador —
 // entregue honestamente como Confluence/Conviction Engine, ver o cabeçalho
 // de confluence-engine.ts para o racional completo). Reaplica o MESMO pool
@@ -1688,6 +1688,29 @@ export default function App() {
 
     const depthManager = new ConnectionManager({
       connect: () => new WebSocket(depthUrl),
+      // Pedido do Operador ("reconexão mais agressiva quando a rede cai"),
+      // parte 2/3 do plano confirmado. Os defaults do ConnectionManager
+      // (staleAfterMs 10s / heartbeatMs 20s) foram calibrados de forma
+      // genérica — mas microstructure-snapshot.ts JÁ tinha medido e
+      // declarado o limiar real certo pra ESTE stream específico
+      // (depth10@100ms): DEPTH_STALE_THRESHOLD_MS = 2s = 20x a cadência
+      // real, "reaproveitar um número calibrado pra cadência 10x mais
+      // lenta deixaria uma queda de book passar por 'fresco' por quase
+      // 1 min". Reaplicando o MESMO número aqui (nunca um novo valor
+      // inventado), com a mesma razão 2x staleAfterMs→heartbeatMs que o
+      // próprio ConnectionManager já usa nos seus defaults (10s→20s).
+      // O ticker (~1000ms de cadência real, stream @ticker da Binance)
+      // não entra nesta mudança: os defaults genéricos (10s/20s) já
+      // equivalem a 10x/20x a cadência REAL dele — nenhuma evidência de
+      // que estejam soltos demais.
+      staleAfterMs: DEPTH_STALE_THRESHOLD_MS,
+      heartbeatMs: DEPTH_STALE_THRESHOLD_MS * 2,
+      // connection-manager.ts documenta a invariante "só precisa ser mais
+      // curto que staleAfterMs" — o default (2000ms) empataria exatamente
+      // com o novo staleAfterMs (2000ms) e atrasaria a detecção em até um
+      // ciclo inteiro. Mesma proporção do default (check 5x mais fino que
+      // staleAfterMs: 2000/10000).
+      heartbeatCheckIntervalMs: 400,
       onStateChange: (state) => {
         depthState = state;
         recomputeWsLive();
