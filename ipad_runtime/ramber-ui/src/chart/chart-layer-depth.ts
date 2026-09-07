@@ -243,11 +243,9 @@ export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
 /** Camadas cujo desenho inteiro é LINHA de 1px — verificado lendo o código
  *  de cada uma nesta sessão, nunca presumido pelo nome:
  *
- *    premium_discount ..... 3x createPriceLine (topo/equilíbrio/fundo)
- *    scenario_projection .. createPriceLine por alvo projetado
  *    cvd .................. série de linha própria no seu painel
  *    supertrend ........... 2 séries de linha (up/down)
- *    pivot_points ......... até 7 createPriceLine (PP + R1-3 + S1-3)
+ *    andrews_pitchfork .... 3 retas de 1px
  *
  *  A REGRA que esta lista trava é a regra 4 no topo deste arquivo, dita como
  *  predicado testável: nenhuma delas pode ficar num nível que PINTA ÁREA
@@ -260,15 +258,20 @@ export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
  *  z=35 nativo compartilhado — a regra 4 não se aplica mais a ela aqui,
  *  ela já tem seu próprio z=50 real via `getChartLayerZIndex`.
  *
+ *  GRADUAÇÃO (2026-09-07, "resíduo honesto"): `premium_discount`,
+ *  `scenario_projection` e `pivot_points` SAÍRAM desta lista também —
+ *  migraram para `HorizontalLevelLinesPlugin.tsx` (canvas próprio
+ *  compartilhado, z=40 real via `getChartLayerZIndex`, mesmo motivo de
+ *  `liquidity_sweep` acima). `cvd`/`supertrend` continuam pendentes —
+ *  natureza diferente (série que segue o preço/painel próprio, não reta
+ *  fixa), migração própria ainda não feita.
+ *
  *  A lista é o conjunto VERIFICADO, não um censo do arquivo inteiro: para
  *  somar uma camada aqui, confirme antes que o desenho dela não tem
  *  `fillRect`/faixa — e que ela não ganhou um plugin de canvas depois. */
 export const CHART_LINE_ONLY_LAYER_IDS: readonly string[] = [
-  "premium_discount",
-  "scenario_projection",
   "cvd",
   "supertrend",
-  "pivot_points",
   "andrews_pitchfork",
 ];
 
@@ -279,13 +282,13 @@ export const CHART_FILL_TIERS: readonly ChartDepthTier[] = ["field", "zone", "pr
  *  e por isso presas todas ao mesmo z. Exportado para o teste provar que a
  *  lista bate com a realidade — se alguém migrar uma delas para canvas
  *  próprio, tem de sair daqui no mesmo commit (pendência #6: `liquidity_
- *  sweep` foi a primeira a sair, 6→5 restantes). */
+ *  sweep` foi a primeira a sair, 6→5; GRADUAÇÃO 2026-09-07: `premium_
+ *  discount`/`scenario_projection`/`pivot_points` migraram pra
+ *  HorizontalLevelLinesPlugin.tsx no mesmo commit, 5→2 restantes: só
+ *  `cvd`/`supertrend` seguem nativas). */
 export const CHART_NATIVE_LAYER_IDS: readonly string[] = [
   "cvd",
   "supertrend",
-  "pivot_points",
-  "premium_discount",
-  "scenario_projection",
 ];
 
 /** z-index das etiquetas de preço. Constante própria porque o

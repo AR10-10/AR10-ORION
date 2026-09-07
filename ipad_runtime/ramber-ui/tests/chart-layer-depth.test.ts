@@ -154,9 +154,13 @@ describe('Canvas nativo da lib: as velas e as 7 camadas nativas também obedecem
   // (HarmonicConfluenceArrowPlugin), mesmo que o zigue-zague/PRZ continuem
   // nativos — "sem canvas próprio nenhum" deixou de ser verdade pra ela.
   // `liquidity_sweep` saiu da lista também (pendência #6): migrou por
-  // completo pra LiquiditySweepLinesPlugin.tsx — 7→6→5 restantes.
-  it('as 5 nativas restantes realmente não têm canvas próprio montado por `visibility.X &&`', () => {
-    expect(CHART_NATIVE_LAYER_IDS.length).toBe(5);
+  // completo pra LiquiditySweepLinesPlugin.tsx — 7→6→5. GRADUAÇÃO
+  // (2026-09-07): `premium_discount`/`scenario_projection`/`pivot_points`
+  // saíram juntas — migraram pra HorizontalLevelLinesPlugin.tsx (canvas
+  // compartilhado) — 5→2 restantes: só `cvd`/`supertrend` seguem nativas
+  // (natureza diferente: série que segue o preço/painel próprio).
+  it('as 2 nativas restantes realmente não têm canvas próprio montado por `visibility.X &&`', () => {
+    expect(CHART_NATIVE_LAYER_IDS.length).toBe(2);
     for (const id of CHART_NATIVE_LAYER_IDS) {
       expect(layerIds, `${id} precisa existir em CHART_LAYER_IDS`).toContain(id);
       expect(
@@ -204,8 +208,12 @@ describe('Regra 4: camada que so desenha linha de 1px nunca fica num nivel que p
   });
 
   // Guarda anti-vacuidade: uma lista que encolhe para zero passaria calada.
+  // GRADUAÇÃO (2026-09-07): a lista encolheu de 6 para 3 de propósito
+  // (premium_discount/scenario_projection/pivot_points saíram — migraram
+  // pra canvas próprio, não competem mais pelo z=35 nativo) — o piso
+  // desce junto, mas nunca pra zero.
   it('a lista e real e aponta para camadas que existem', () => {
-    expect(CHART_LINE_ONLY_LAYER_IDS.length).toBeGreaterThanOrEqual(6);
+    expect(CHART_LINE_ONLY_LAYER_IDS.length).toBeGreaterThanOrEqual(3);
     expect(CHART_FILL_TIERS.length).toBe(3);
     for (const id of CHART_LINE_ONLY_LAYER_IDS) {
       expect(layerIds, `${id} precisa existir em CHART_LAYER_IDS`).toContain(id);
@@ -214,17 +222,20 @@ describe('Regra 4: camada que so desenha linha de 1px nunca fica num nivel que p
 
   // O caso concreto que originou tudo isto — travado pelo nome, para que uma
   // reversao acidental falhe com a mensagem certa em vez de passar.
-  it('premium_discount e scenario_projection sao "line" (eram "zone", e nao pintam nada)', () => {
+  // GRADUAÇÃO (2026-09-07): premium_discount/scenario_projection MIGRARAM
+  // (mesmo padrão de `harmonics`/`liquidity_sweep` acima) — o teste agora
+  // prova o oposto do original: as duas TÊM canvas próprio real
+  // (HorizontalLevelLinesPlugin, montado via JSX condicional), continuam
+  // "line" (nunca voltaram a "zone").
+  it('premium_discount e scenario_projection sao "line" e GRADUARAM pra canvas próprio (HorizontalLevelLinesPlugin)', () => {
     expect(getChartLayerTier('premium_discount')).toBe('line');
     expect(getChartLayerTier('scenario_projection')).toBe('line');
-    // prova de que a premissa continua valendo: nenhuma das duas tem plugin
-    // de canvas, e o desenho delas no chart e' createPriceLine.
     for (const id of ['premium_discount', 'scenario_projection']) {
       expect(chartSrc).toContain(`visibility.${id}`);
       expect(
         chartSrc.includes(`{visibility.${id} && (`),
-        `${id} ganhou um overlay proprio — reveja o nivel declarado e esta lista`,
-      ).toBe(false);
+        `${id} deveria ter um overlay próprio (HorizontalLevelLinesPlugin) — graduação revertida?`,
+      ).toBe(true);
     }
   });
 });

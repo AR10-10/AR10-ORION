@@ -365,15 +365,39 @@ describe('Auditoria de pendências: os 7 elementos nativos do gráfico ainda sem
     expect(depsIdx).toBeGreaterThan(-1);
   });
 
-  it('Premium/Discount: fail-closed real — sem visibility.premium_discount (E sem leitura real), zero price line desenhada', () => {
+  it('Premium/Discount: fail-closed real — sem leitura real, zero nível calculado; sem visibility.premium_discount, HorizontalLevelLinesPlugin nem monta (GRADUAÇÃO 2026-09-07: migrou de createPriceLine nativo pra canvas próprio, mesmo padrão do Harmônico abaixo — gate de visibilidade agora é JSX condicional, não early-return dentro do useEffect)', () => {
     const c = chart();
-    expect(c).toContain('if (!premiumDiscount || !visibility.premium_discount) return;');
+    expect(c).toContain('if (!premiumDiscount) return [];');
     // Achado 2.1-bis (Visual Cleanup & Rendering Audit): a dependência
     // ganhou visibility.fibonacci/fibonacciLevels — o dedup real de
     // Equilibrium×FIB 50% (refinamento-final-wiring.test.ts) precisa
-    // redesenhar quando só o toggle Fibonacci muda, senão fica stale.
-    const depsIdx = c.indexOf('}, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);');
+    // recalcular quando só o toggle Fibonacci muda, senão fica stale.
+    const depsIdx = c.indexOf('}, [premiumDiscount, visibility.fibonacci, fibonacciLevels]);');
     expect(depsIdx).toBeGreaterThan(-1);
+    const mountIdx = c.indexOf('levels={premiumDiscountLevels}');
+    expect(mountIdx, 'HorizontalLevelLinesPlugin com levels={premiumDiscountLevels} não montado').toBeGreaterThan(-1);
+    const before = c.slice(Math.max(0, mountIdx - 200), mountIdx);
+    expect(before).toContain('visibility.premium_discount && (');
+  });
+
+  it('Pivot Points: fail-closed real — sem leitura OK, zero nível calculado; sem visibility.pivot_points, HorizontalLevelLinesPlugin nem monta (GRADUAÇÃO 2026-09-07: migrou de createPriceLine nativo pra canvas próprio)', () => {
+    const c = chart();
+    const idx = c.indexOf('const pivotPointLevels = useMemo<HorizontalLevel[]>(() => {');
+    expect(idx, 'useMemo de pivotPointLevels não encontrado').toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 700);
+    expect(block).toContain('if (pivotPoints?.status !== "OK") return [];');
+    const mountIdx = c.indexOf('levels={pivotPointLevels}');
+    expect(mountIdx, 'HorizontalLevelLinesPlugin com levels={pivotPointLevels} não montado').toBeGreaterThan(-1);
+    const before = c.slice(Math.max(0, mountIdx - 200), mountIdx);
+    expect(before).toContain('visibility.pivot_points && (');
+  });
+
+  it('Scenario Projection: sem visibility.scenario_projection, HorizontalLevelLinesPlugin nem monta (GRADUAÇÃO 2026-09-07, mesmo padrão dos irmãos acima)', () => {
+    const c = chart();
+    const mountIdx = c.indexOf('levels={scenarioProjectionLevels}');
+    expect(mountIdx, 'HorizontalLevelLinesPlugin com levels={scenarioProjectionLevels} não montado').toBeGreaterThan(-1);
+    const before = c.slice(Math.max(0, mountIdx - 200), mountIdx);
+    expect(before).toContain('visibility.scenario_projection && (');
   });
 
   it('Harmônico: fail-closed real — sem visibility.harmonics, HarmonicGeometryPlugin nem monta (pendência #6: migrou de createPriceLine/addSeries nativo pra canvas próprio, gate agora é JSX condicional em vez de early-return dentro de um useEffect)', () => {

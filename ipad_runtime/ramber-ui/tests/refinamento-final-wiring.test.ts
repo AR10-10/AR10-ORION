@@ -140,22 +140,23 @@ describe('Header §1: TF + LIVE + latência + sessão — todas leituras REAIS j
 });
 
 describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 24)', () => {
-  it('EnhancedChart: prop fail-closed + 3 linhas fio-de-seda (1px sólida, sem rótulo de eixo)', () => {
+  it('EnhancedChart: prop fail-closed + 3 níveis fio-de-seda via HorizontalLevelLinesPlugin (canvas próprio, GRADUAÇÃO 2026-09-07 — migrou de createPriceLine nativo, mesma geometria/cor, sem rótulo de eixo desde sempre)', () => {
     const c = chart();
     expect(c).toContain('premiumDiscount?: PremiumDiscountReading | null;');
-    const idx = c.indexOf('premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));');
+    const idx = c.indexOf('const premiumDiscountLevels = useMemo<HorizontalLevel[]>(() => {');
     expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 1500);
-    expect(block).toContain('if (!premiumDiscount || !visibility.premium_discount) return;');
-    expect(block).toContain('lineWidth: 1,');
-    expect(block).toContain('lineStyle: LineStyle.Solid,');
-    expect(block).toContain('axisLabelVisible: false,');
-    expect(block).toContain('"Premium · topo do range"');
-    expect(block).toContain('"Equilibrium · 50%"');
-    expect(block).toContain('"Discount · fundo do range"');
-    // ref limpa no unmount, mesma disciplina das outras
-    const cleanupIdx = c.indexOf('chart.remove();');
-    expect(c.slice(cleanupIdx, cleanupIdx + 600)).toContain('premiumDiscountLinesRef.current = [];');
+    const block = c.slice(idx, idx + 900);
+    expect(block).toContain('if (!premiumDiscount) return [];');
+    expect(block).toContain('"rgba(242, 54, 69, 0.30)"); // Premium · topo do range');
+    expect(block).toContain('"rgba(138, 180, 248, 0.30)"); // Equilibrium · 50%');
+    expect(block).toContain('"rgba(8, 153, 129, 0.30)"); // Discount · fundo do range');
+    // 1px sólida + sem rótulo de eixo agora são contrato do PRÓPRIO
+    // HorizontalLevelLinesPlugin (travado em horizontal-level-lines-plugin.test.ts),
+    // não mais reimplementado aqui — mesma disciplina de zero-segunda-fonte.
+    const mountIdx = c.indexOf('levels={premiumDiscountLevels}');
+    expect(mountIdx, 'HorizontalLevelLinesPlugin com levels={premiumDiscountLevels} não montado').toBeGreaterThan(-1);
+    const before = c.slice(Math.max(0, mountIdx - 200), mountIdx);
+    expect(before).toContain('visibility.premium_discount && (');
   });
 
   // Achado real (Visual Cleanup & Rendering Audit, "ORDEM DEFINITIVA..."):
@@ -170,16 +171,18 @@ describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 2
   // sempre reais.
   it('Achado 2.1-bis: Equilibrium não desenha quando FIB 50% já cobre o mesmo preço — rangeHigh/rangeLow sempre desenham', () => {
     const c = chart();
-    const idx = c.indexOf('premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));');
-    const block = c.slice(idx, idx + 1500);
+    const idx = c.indexOf('const premiumDiscountLevels = useMemo<HorizontalLevel[]>(() => {');
+    const block = c.slice(idx, idx + 900);
     expect(block).toContain('const fibAlreadyDrawsEquilibrium =');
     expect(block).toContain('visibility.fibonacci && (fibonacciLevels ?? []).some((l) => l.ratio === 0.5 && Number.isFinite(l.price));');
-    expect(block).toContain('mkPd(premiumDiscount.rangeHigh.price, "rgba(242, 54, 69, 0.30)", "Premium · topo do range");');
+    expect(block).toContain('mkPd(premiumDiscount.rangeHigh.price, "rgba(242, 54, 69, 0.30)"); // Premium · topo do range');
     expect(block).toMatch(/if \(!fibAlreadyDrawsEquilibrium\) \{\s*mkPd\(premiumDiscount\.equilibrium/);
-    expect(block).toContain('mkPd(premiumDiscount.rangeLow.price, "rgba(8, 153, 129, 0.30)", "Discount · fundo do range");');
-    // dependência real do efeito inclui fibonacci agora — senão o dedup
-    // ficaria stale quando só o toggle Fibonacci muda.
-    const effectIdx = c.indexOf('}, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);');
+    expect(block).toContain('mkPd(premiumDiscount.rangeLow.price, "rgba(8, 153, 129, 0.30)"); // Discount · fundo do range');
+    // dependência real do cálculo inclui fibonacci agora — senão o dedup
+    // ficaria stale quando só o toggle Fibonacci muda. visibility.premium_discount
+    // saiu da lista: virou o gate JSX externo (visibility.premium_discount && (...)),
+    // não mais uma dependência de recálculo do NÍVEL em si.
+    const effectIdx = c.indexOf('}, [premiumDiscount, visibility.fibonacci, fibonacciLevels]);');
     expect(effectIdx).toBeGreaterThan(idx);
   });
 

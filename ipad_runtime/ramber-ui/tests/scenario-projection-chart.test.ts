@@ -23,16 +23,12 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     expect(src()).toContain('scenario?: ScenarioProjection | null;');
   });
 
-  it('sem scenario real => nada desenhado (early return, nunca um caminho de exemplo)', () => {
+  it('sem scenario real => zero níveis calculados (early return, nunca um caminho de exemplo)', () => {
     const s = src();
-    const idx = s.indexOf('scenarioLinesRef.current.forEach((line) => series.removePriceLine(line));');
-    expect(idx, 'efeito de scenario não encontrado').toBeGreaterThan(-1);
+    const idx = s.indexOf('const scenarioProjectionLevels = useMemo<HorizontalLevel[]>(() => {');
+    expect(idx, 'useMemo de scenario não encontrado').toBeGreaterThan(-1);
     const block = s.slice(idx, idx + 200);
-    expect(block).toContain('scenarioLinesRef.current = [];');
-    // Achado 2.5 (Visual Cleanup & Rendering Audit): mesmo early-return de
-    // sempre, agora TAMBÉM fail-closed por visibilidade — scenario_projection
-    // ganhou o mesmo toggle manual/AUTO que toda outra camada real já tinha.
-    expect(block).toContain('if (!scenario || !visibility.scenario_projection) return;');
+    expect(block).toContain('if (!scenario) return [];');
   });
 
   it('Achado 2.5: scenario_projection existe em CHART_LAYER_IDS (toggle manual real) — era a única camada sem nenhum', () => {
@@ -41,20 +37,17 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     expect(s).toContain('scenario_projection: true,');
   });
 
-  it('Achado 2.5: o efeito recomputa quando visibility.scenario_projection muda — senão desligar a camada no painel não desenharia/limparia nada até o próximo tick de scenario', () => {
+  it('GRADUAÇÃO (2026-09-07): visibilidade agora é gate JSX (mesmo padrão do Harmônico) — sem visibility.scenario_projection, HorizontalLevelLinesPlugin nem monta; migrou de createPriceLine nativo pra canvas próprio', () => {
     const s = src();
-    expect(s).toContain('}, [scenario, visibility.scenario_projection]);');
+    const mountIdx = s.indexOf('levels={scenarioProjectionLevels}');
+    expect(mountIdx, 'HorizontalLevelLinesPlugin com levels={scenarioProjectionLevels} não montado').toBeGreaterThan(-1);
+    const before = s.slice(Math.max(0, mountIdx - 200), mountIdx);
+    expect(before).toContain('visibility.scenario_projection && (');
   });
 
-  it('Fio de Seda: LineStyle.Solid sempre, zero setLineDash em qualquer lugar do arquivo', () => {
+  it('Fio de Seda: zero setLineDash em qualquer lugar do arquivo — 1px sólido é contrato do próprio HorizontalLevelLinesPlugin (travado em horizontal-level-lines-plugin.test.ts), não reimplementado aqui', () => {
     const s = src();
     expect(s).not.toMatch(/\.setLineDash\(/);
-    // a linha de scenario específica usa lineWidth 1 + LineStyle.Solid, mesma disciplina das outras.
-    const idx = s.indexOf('scenarioLinesRef.current.push(');
-    expect(idx).toBeGreaterThan(-1);
-    const block = s.slice(idx, idx + 400);
-    expect(block).toContain('lineWidth: 1,');
-    expect(block).toContain('lineStyle: LineStyle.Solid,');
   });
 
   it('v2 (Future Path Map): desenha até MAX_SCENARIO_TARGETS por caminho — path.targets.forEach, nunca só o primeiro; lado sem nível real (targets=[]) desenha zero linhas naturalmente (fail-closed por construção, não por um if extra)', () => {
@@ -77,7 +70,7 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
   it('Diretriz Restauração/Inteligência Visual §3: cor dedicada (lavanda), NUNCA a mesma do LONG/SHORT real — achado real via harness Playwright: title só aparece via axisLabelVisible/hover, que esta linha não tem, então cor é o ÚNICO sinal que o operador vê', () => {
     const s = src();
     expect(s).toContain('const PROJECTION_RGB = "186, 168, 255";');
-    expect(s).toContain('color: `rgba(${PROJECTION_RGB}, ${alpha.toFixed(2)})`,');
+    expect(s).toContain('color: `rgba(${PROJECTION_RGB}, ${alpha.toFixed(2)})` });');
   });
 
   it('regressão: a cor da projeção nunca volta a ser rgba(0,255,170,...)/rgba(255,0,85,...) — a mesma cor de um nível LONG/SHORT já confirmado tornaria a projeção indistinguível de estrutura real', () => {
@@ -105,45 +98,16 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     expect(s).toContain('rgba(242, 54, 69, 0.75)'); // linha real do Stop do Trade Plan, referência do teto
   });
 
-  it('axisLabelVisible false (mais discreto que o Trade Plan, que usa true) e título carrega direção + rank real (TP1/TP2/TP3) + fonte real + tipo de reação real + confiança real', () => {
-    const s = src();
-    const idx = s.indexOf('scenarioLinesRef.current.push(');
-    const block = s.slice(idx, idx + 1100);
-    expect(block).toContain('axisLabelVisible: false,');
-    expect(block).toContain('title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} (${reaction}) · ${weightLabel}`,');
-  });
-
-  it('Diretriz Final — Camada de Cenários Inteligentes §3: reaction real (describeScenarioReaction) computado por alvo, derivado só do sourceKind já real — zero motor novo', () => {
-    const s = src();
-    expect(s).toContain('import { describeScenarioConfidence, describeScenarioReaction } from "../nexus/scenario-engine";');
-    const idx = s.indexOf('const reaction = describeScenarioReaction(target.sourceKind);');
-    expect(idx).toBeGreaterThan(-1);
-  });
-
-  it('Diretriz Final — Camada de Cenários Inteligentes §4: weightLabel usa describeScenarioConfidence (qualitativo), nunca mais Math.round(...*100)', () => {
-    const s = src();
-    expect(s).toContain('const confidence = describeScenarioConfidence(path.opinionWeight);');
-    expect(s).toContain('const weightLabel = confidence !== null ? `opinion ${confidence}` : "opinion n/a";');
-    expect(s).not.toContain('Math.round(path.opinionWeight * 100)');
-  });
-
-  it('Diretriz Restauração/Inteligência Visual §3: título começa explicitamente com "PROJEÇÃO" — passado/presente/projeção nunca se confundem só pela cor/opacidade', () => {
-    const s = src();
-    const idx = s.indexOf('scenarioLinesRef.current.push(');
-    const block = s.slice(idx, idx + 1100);
-    expect(block).toMatch(/title: `PROJEÇÃO · /);
-  });
-
-  it('peso null vira "opinion n/a" honesto no título — nunca uma porcentagem fabricada', () => {
-    expect(src()).toContain('"opinion n/a"');
-  });
-
-  it('ref limpa no unmount (mesma disciplina de fibLinesRef/tradePlanLinesRef)', () => {
-    const s = src();
-    const cleanupIdx = s.indexOf('chart.remove();');
-    const cleanupBlock = s.slice(cleanupIdx, cleanupIdx + 400);
-    expect(cleanupBlock).toContain('scenarioLinesRef.current = [];');
-  });
+  // GRADUAÇÃO (2026-09-07): os testes que travavam axisLabelVisible/title/
+  // reaction/weightLabel/"opinion n/a" e a limpeza de scenarioLinesRef
+  // foram removidos — esse metadado (título nativo da lib) nunca chegava à
+  // tela (mesma classe de achado já documentada para harmônicos/EQH-EQL:
+  // axisLabelVisible:false silencia o title por completo) e a ref deixou
+  // de existir (HorizontalLevelLinesPlugin gerencia seu próprio canvas,
+  // sem refs de IPriceLine). describeScenarioConfidence/describeScenarioReaction
+  // saíram do import junto — zero motor/cálculo perdido: a INFORMAÇÃO real
+  // (reação/confiança) nunca foi apagada de lugar nenhum, só nunca chegou a
+  // ser exibida aqui (Regra de Ouro 4 — nada que já era observável se perde).
 });
 
 describe('App.tsx: ChartWidget lê o Motor de Cenários real e passa ao gráfico — zero segunda fonte', () => {
