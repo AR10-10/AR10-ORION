@@ -65,6 +65,12 @@ export interface DirectionalSource {
    *  "liquidez parada no livro" com "viés de tendência". É a explicação que
    *  faltava na tela e que gerava a dúvida. */
   measures: string;
+  /** ORDEM DE SERVIÇO (Frente 1, §2.2): motivo REAL de `side` estar `null`
+   *  — só preenchido quando o motor de origem já computa essa razão hoje
+   *  (nunca fabricado aqui). `undefined`/`null` quando nenhum motivo mais
+   *  específico existe ainda (o `measures` genérico continua sendo o
+   *  único texto disponível nesse caso). */
+  reason?: string | null;
 }
 
 export interface DirectionalSourceVerdict extends DirectionalSource {

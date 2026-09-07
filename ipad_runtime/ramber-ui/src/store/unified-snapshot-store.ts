@@ -347,6 +347,15 @@ export interface UnifiedSnapshotState {
   // validado em outro lugar. Lista vazia é o estado honesto comum
   // (nenhum candidato qualificado agora), não um erro.
   radarCandidates: RadarQualificationResult[];
+  // ORDEM DE SERVIÇO (Frente 1, §2.3 — "conflitos de CPU/RAM entre
+  // agentes"): achado real de auditoria — o Radar (scanRadarCandidate,
+  // App.tsx) roda análise técnica síncrona real para até ~60 ativos NÃO
+  // selecionados a cada ciclo, na main thread, sem NENHUMA instrumentação
+  // de custo real até esta rodada (cycleLatencyMs só mede o ciclo do
+  // ativo selecionado). Espelha, no mesmo padrão de core.cycleLatencyMs,
+  // o tempo de parede REAL do último ciclo completo do Radar (Binance +
+  // MEXC) — null antes do primeiro ciclo terminar nesta sessão.
+  radarScanLatencyMs: number | null;
   // Diretriz Complementar §18/§4 ("tendência de convicção" / "Conviction
   // Engine"): série real do Score Geral (institutional-score.ts) ao longo
   // do tempo — só amostras REAIS entram (WAIT/DADOS_INSUFICIENTES nunca,
@@ -482,6 +491,7 @@ interface UnifiedSnapshotActions {
   setTradePlan: (plan: TradePlan | null) => void;
   setMultiTimeframeContext: (matrix: MultiTimeframeMatrix | null) => void;
   setRadarCandidates: (candidates: RadarQualificationResult[]) => void;
+  setRadarScanLatency: (ms: number) => void;
   // Diretriz Complementar §18/§4: registra uma amostra REAL do Score Geral
   // (nunca chamado com null/WAIT — o efeito que chama já filtra isso).
   recordInstitutionalScore: (score: number) => void;
@@ -573,6 +583,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     tradePlan: null,
     multiTimeframeContext: null,
     radarCandidates: [],
+    radarScanLatencyMs: null,
     institutionalScoreHistory: [],
     nexusDecision: null,
     institutionalScoreReading: null,
@@ -651,6 +662,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setTradePlan: (plan) => set((s) => { s.tradePlan = plan; }),
     setMultiTimeframeContext: (matrix) => set((s) => { s.multiTimeframeContext = matrix; }),
     setRadarCandidates: (candidates) => set((s) => { s.radarCandidates = candidates; }),
+    setRadarScanLatency: (ms) => set((s) => { s.radarScanLatencyMs = ms; }),
     recordInstitutionalScore: (score) => set((s) => {
       s.institutionalScoreHistory = pushConvictionHistory(s.institutionalScoreHistory as ConvictionScoreSample[], { score, at: Date.now() });
     }),
@@ -815,6 +827,8 @@ export const useMultiTimeframeSnapshot = (): MultiTimeframeMatrix | null =>
 const EMPTY_RADAR_CANDIDATES: RadarQualificationResult[] = [];
 export const useRadarCandidatesSnapshot = (): RadarQualificationResult[] =>
   useUnifiedSnapshotStore((s) => s.radarCandidates ?? EMPTY_RADAR_CANDIDATES);
+export const useRadarScanLatencySnapshot = (): number | null =>
+  useUnifiedSnapshotStore((s) => s.radarScanLatencyMs);
 export const useInstitutionalScoreHistory = (): ConvictionScoreSample[] =>
   useUnifiedSnapshotStore((s) => s.institutionalScoreHistory ?? EMPTY_CONVICTION_HISTORY);
 export const useNexusDecisionSnapshot = (): NexusDecision | null =>
