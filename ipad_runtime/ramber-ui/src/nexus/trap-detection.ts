@@ -151,10 +151,15 @@ export function detectInstitutionalTraps(inputs: TrapInputs): TrapSignal[] {
 // fvg-order-block-engine.js) que ficam PRÓXIMAS entre si sem serem a
 // MESMA zona; se todas forem varridas na mesma janela, cada preço vira
 // um rótulo próprio no canvas. Mesmo idioma de clusterização por âncora
-// FIXA (nunca média rodante) de clusterEqualLevels, reimplementado aqui
-// porque ramber-ui e o engine .js legado vivem em pacotes/runtimes
-// diferentes (nunca um import cross-package). Puro: zero rede/estado,
-// testável por execução real.
+// FIXA (nunca média rodante) de clusterEqualLevels — mesma fonte única
+// (research/engines/price-clustering.js), importada cross-package abaixo
+// (mesmo padrão real já usado por institutional-zones.ts e
+// multi-timeframe-engine.ts). CORREÇÃO DE HONESTIDADE [Frente 2, auditoria
+// de duplicidade]: este comentário dizia "reimplementado aqui... nunca um
+// import cross-package" — falso, o código abaixo sempre importou a função
+// compartilhada; a frase sobreviveu de antes da extração de
+// price-clustering.js (2026-08-24, QUARANTINE.md) sem ser atualizada.
+// Puro: zero rede/estado, testável por execução real.
 //
 // v2 (achado real de captura de tela — decaimento por idade): cada
 // cluster agora carrega `latestIndex` (o MAIOR índice real entre seus

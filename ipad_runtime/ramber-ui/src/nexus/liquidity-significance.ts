@@ -43,9 +43,15 @@
 // Aplicar o filtro a Voids não removeria zona nenhuma — só duplicaria uma
 // regra que já vive, mais forte, dentro do próprio motor. (Os dois ATR não
 // são o mesmo cálculo — o motor usa computeAtrPercent de
-// lorentzian-classifier.js sobre a própria janela, este módulo recebe o
-// atrPercent de regime-engine.js — mas ambos são Wilder 14, e a margem de
-// 8x absorve com folga qualquer diferença de janela entre eles.)
+// lorentzian-classifier.js sobre a própria janela (suavização recursiva de
+// Wilder/RMA, série completa); este módulo recebe o atrPercent de
+// regime-engine.js, que é média SIMPLES [SMA] dos True Ranges, escalar —
+// CORREÇÃO DE HONESTIDADE [Frente 2, auditoria de duplicidade]: esta linha
+// dizia "mas ambos são Wilder 14", o que é falso; regime-engine.js's
+// próprio cabeçalho (`meanTrueRangePercent`) documenta a diferença. São
+// duas definições legítimas de ATR%, não uma duplicação — a margem de 8x
+// absorve com folga a diferença de fórmula entre elas, então a conclusão
+// prática deste módulo [voids nunca ficam abaixo do piso] continua válida.)
 //
 // A invariante fica travada por teste (liquidity-significance.test.ts):
 // se alguém baixar o piso do motor de voids para perto de 0.12x ATR, a
