@@ -51,7 +51,7 @@ export function buildLiveAnnouncement(
   }
 
   if (previous.direction !== current.direction) {
-    parts.push(`Núcleo: ${current.direction ?? "AWAITING"}`);
+    parts.push(`Núcleo: ${current.direction ?? "AGUARDANDO"}`);
   }
 
   return parts.length > 0 ? parts.join(". ") : null;

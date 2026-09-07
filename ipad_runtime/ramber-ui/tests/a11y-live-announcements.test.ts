@@ -2,7 +2,7 @@
 // decide o texto de uma região aria-live (mudança de direção do Núcleo /
 // estado LIVE-OFF da conexão). Achado de auditoria desta rodada: zero
 // aria-live em toda a base — o dado mais crítico da tela (LONG/SHORT/
-// AWAITING, LIVE/OFF) nunca era anunciado pra quem usa leitor de tela.
+// AGUARDANDO, LIVE/OFF) nunca era anunciado pra quem usa leitor de tela.
 import { describe, it, expect } from 'vitest';
 import { buildLiveAnnouncement, type LiveAnnouncementState } from '../src/nexus/a11y-live-announcements';
 
@@ -22,7 +22,7 @@ describe('buildLiveAnnouncement — fail-closed, nunca anuncia o que não mudou 
     expect(buildLiveAnnouncement(s, state('LONG', true))).toBeNull();
   });
 
-  it('direção AWAITING → LONG anuncia "Núcleo: LONG"', () => {
+  it('direção AGUARDANDO → LONG anuncia "Núcleo: LONG"', () => {
     expect(buildLiveAnnouncement(state(null, true), state('LONG', true))).toBe('Núcleo: LONG');
   });
 
@@ -30,8 +30,8 @@ describe('buildLiveAnnouncement — fail-closed, nunca anuncia o que não mudou 
     expect(buildLiveAnnouncement(state('LONG', true), state('SHORT', true))).toBe('Núcleo: SHORT');
   });
 
-  it('direção LONG → null (WAIT real ou suprimido por LEI 24) anuncia "Núcleo: AWAITING" — nunca uma palavra nova', () => {
-    expect(buildLiveAnnouncement(state('LONG', true), state(null, true))).toBe('Núcleo: AWAITING');
+  it('direção LONG → null (WAIT real ou suprimido por LEI 24) anuncia "Núcleo: AGUARDANDO" — nunca uma palavra nova', () => {
+    expect(buildLiveAnnouncement(state('LONG', true), state(null, true))).toBe('Núcleo: AGUARDANDO');
   });
 
   it('conexão LIVE → OFF anuncia perda + instrução de reconexão', () => {
@@ -47,8 +47,8 @@ describe('buildLiveAnnouncement — fail-closed, nunca anuncia o que não mudou 
     expect(text).toBe('Conexão: LIVE. Núcleo: SHORT');
   });
 
-  it('nunca fala um valor de direção fabricado — só LONG/SHORT/AWAITING, o mesmo vocabulário do badge visível', () => {
+  it('nunca fala um valor de direção fabricado — só LONG/SHORT/AGUARDANDO, o mesmo vocabulário do badge visível', () => {
     const text = buildLiveAnnouncement(state('SHORT', true), state('LONG', true));
-    expect(text).toMatch(/^Núcleo: (LONG|SHORT|AWAITING)$/);
+    expect(text).toMatch(/^Núcleo: (LONG|SHORT|AGUARDANDO)$/);
   });
 });
