@@ -19,6 +19,7 @@ const RESET = {
   health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, lastUpdatedAt: 0 },
   offline: false,
   isDataFresh: false,
+  dataFreshSince: null,
   uiFps: null,
   l2History: {},
   orderflowHistory: [],
@@ -229,6 +230,17 @@ describe('unified-snapshot-store (V-MAX Fase 0.4): health/offline honestos, nunc
     expect(useUnifiedSnapshotStore.getState().uiFps).toBeNull();
     useUnifiedSnapshotStore.getState().setUiFps(58);
     expect(useUnifiedSnapshotStore.getState().uiFps).toBe(58);
+  });
+
+  // DataFreshnessBanner (App.tsx): dataFreshSince é o timestamp REAL por
+  // trás de isDataFresh, não um segundo booleano — health-monitor.ts é o
+  // único escritor real (Date.now() do price/orderBook mais recente).
+  it('setDataFreshSince grava o timestamp real e useDataFreshSinceSnapshot o lê de volta — null honesto por padrão', () => {
+    expect(useUnifiedSnapshotStore.getState().dataFreshSince).toBeNull();
+    useUnifiedSnapshotStore.getState().setDataFreshSince(1700000000000);
+    expect(useUnifiedSnapshotStore.getState().dataFreshSince).toBe(1700000000000);
+    useUnifiedSnapshotStore.getState().setDataFreshSince(null);
+    expect(useUnifiedSnapshotStore.getState().dataFreshSince).toBeNull();
   });
 });
 

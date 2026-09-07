@@ -40,6 +40,7 @@ const STORE_RESET = {
   health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, lastUpdatedAt: 0 },
   offline: false,
   isDataFresh: false,
+  dataFreshSince: null,
   uiFps: null,
   l2History: {},
   orderflowHistory: [],
@@ -230,6 +231,79 @@ describe('HealthMonitor: isDataFresh (Blueprint §7.2) — freshness real a part
     expect(useUnifiedSnapshotStore.getState().isDataFresh).toBe(true);
     vi.advanceTimersByTime(61_000);
     expect(useUnifiedSnapshotStore.getState().isDataFresh).toBe(false);
+    monitor.stop();
+  });
+
+  it('dataFreshSince fica null honesto antes do primeiro dado real chegar', () => {
+    const bus = new TypedEventBus();
+    const monitor = new HealthMonitor(bus);
+    monitor.start();
+    expect(useUnifiedSnapshotStore.getState().dataFreshSince).toBeNull();
+    monitor.stop();
+  });
+
+  it('dataFreshSince é o timestamp REAL do dado mais recente — não um booleano (DataFreshnessBanner precisa dele pra "há X segundos")', () => {
+    useUnifiedSnapshotStore.getState().setPrice({
+      price: 65000, delta: 0, deltaPct: 0, high: 65100, low: 64900, volume: 10, direction: 'LONG',
+    });
+    const expectedTs = useUnifiedSnapshotStore.getState().price.updatedAt;
+    const bus = new TypedEventBus();
+    const monitor = new HealthMonitor(bus);
+    monitor.start();
+    expect(useUnifiedSnapshotStore.getState().dataFreshSince).toBe(expectedTs);
+    monitor.stop();
+  });
+
+  it('dataFreshSince NÃO volta a null quando o dado fica obsoleto — precisa continuar marcando o instante real do último dado, não só "está obsoleto agora"', () => {
+    useUnifiedSnapshotStore.getState().setPrice({
+      price: 65000, delta: 0, deltaPct: 0, high: 65100, low: 64900, volume: 10, direction: 'LONG',
+    });
+    const expectedTs = useUnifiedSnapshotStore.getState().price.updatedAt;
+    const bus = new TypedEventBus();
+    const monitor = new HealthMonitor(bus);
+    monitor.start();
+    vi.advanceTimersByTime(61_000);
+    expect(useUnifiedSnapshotStore.getState().isDataFresh).toBe(false);
+    expect(useUnifiedSnapshotStore.getState().dataFreshSince).toBe(expectedTs);
+    monitor.stop();
+  });
+
+  // Achado real (Playwright ao vivo, sandbox zero-egress, 2026-09-07):
+  // setPrice/setOrderBook (unified-snapshot-store.ts) SEMPRE estampam
+  // Date.now(), mesmo escrevendo o reset honesto pra vazio (App.tsx troca
+  // de ativo, ou o próprio boot). Sem esta guarda, isDataFresh reportava
+  // `true` com price.price/orderBook.bids vazios — exatamente o oposto do
+  // que "sistema sentir que não tá rodando dado real" pede.
+  it('um preço VAZIO recém-escrito (reset honesto, ex.: troca de ativo) NUNCA conta como fresco — só o timestamp de um valor REAL', () => {
+    useUnifiedSnapshotStore.getState().setPrice({
+      price: null, delta: null, deltaPct: null, high: null, low: null, volume: null, direction: null,
+    });
+    const bus = new TypedEventBus();
+    const monitor = new HealthMonitor(bus);
+    monitor.start();
+    expect(useUnifiedSnapshotStore.getState().isDataFresh).toBe(false);
+    expect(useUnifiedSnapshotStore.getState().dataFreshSince).toBeNull();
+    monitor.stop();
+  });
+
+  it('um livro de ofertas VAZIO recém-escrito (reset honesto) NUNCA conta como fresco', () => {
+    useUnifiedSnapshotStore.getState().setOrderBook({ bids: [], asks: [] });
+    const bus = new TypedEventBus();
+    const monitor = new HealthMonitor(bus);
+    monitor.start();
+    expect(useUnifiedSnapshotStore.getState().isDataFresh).toBe(false);
+    expect(useUnifiedSnapshotStore.getState().dataFreshSince).toBeNull();
+    monitor.stop();
+  });
+
+  it('um livro de ofertas REAL (pelo menos 1 bid ou ask) conta como fresco, mesmo com price ainda vazio', () => {
+    useUnifiedSnapshotStore.getState().setOrderBook({ bids: [{ price: 65000, size: 1 }], asks: [{ price: 65010, size: 1 }] });
+    const expectedTs = useUnifiedSnapshotStore.getState().orderBook.updatedAt;
+    const bus = new TypedEventBus();
+    const monitor = new HealthMonitor(bus);
+    monitor.start();
+    expect(useUnifiedSnapshotStore.getState().isDataFresh).toBe(true);
+    expect(useUnifiedSnapshotStore.getState().dataFreshSince).toBe(expectedTs);
     monitor.stop();
   });
 

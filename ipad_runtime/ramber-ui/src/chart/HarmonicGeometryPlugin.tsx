@@ -33,8 +33,7 @@
 // nunca a dúzia que motivou SessionKeyLevelsPlugin a mover a dele pro
 // eixo.
 //
-// ZERO SEGUNDA MATEMÁTICA (Regra de Ouro 4): winner-selection entre
-// HARMONIC/HEAD_SHOULDERS por fitScore, geometria do zigue-zague,
+// ZERO SEGUNDA MATEMÁTICA (Regra de Ouro 4): geometria do zigue-zague,
 // slope/intercept do triângulo e da neckline — tudo o MESMO código que já
 // vivia no useEffect nativo que este plugin substitui, só movido pra cá.
 // Nenhuma fórmula nova.
@@ -52,6 +51,28 @@
 // cai fora da janela visível (nunca extrapola através do gap) — mesma
 // convenção já usada por StructureTracePlugin para a mesma classe de
 // geometria.
+//
+// ATUALIZAÇÃO (04/09/2026, pedido direto do Operador — mensagem dictada
+// descrevendo "a linha roxa" de um padrão harmônico, provavelmente Bat,
+// que "não aparece porque está muito alta"):
+//
+// 1) FIM DO WINNER-TAKE-ALL. Antes, só `hits[0]` desenhava e HARMONIC
+//    disputava com HEAD_SHOULDERS por fitScore — o perdedor, mesmo real e
+//    já filtrado por dois pisos de qualidade (harmonic-patterns.ts's
+//    MIN_FIT_SCORE=0.75 geometria + evaluateSmcHarmonicFusion em App.tsx,
+//    confluência institucional real — os dois JÁ acima do "50%" pedido),
+//    ficava escondido. Agora desenha CADA hit do array — a mesma
+//    disciplina que o painel ANALYSIS (SecondaryModuleView) já usa pra
+//    listar `harmonicHits` inteiro, só que também no canvas.
+// 2) INDICADOR FORA DA VISTA. `drawLevelWithLabel` desenhava nada quando
+//    `priceToCoordinate` devolvia null (nível fora da faixa vertical
+//    visível AGORA) — comportamento correto (Regra de Ouro 3, nunca
+//    fabrica uma posição), mas deixava o Operador sem saber se não havia
+//    padrão, ou se havia um fora da vista. `drawOffscreenIndicator` usa
+//    `series.priceScale().getVisibleRange()` (preço real, não pixel) pra
+//    decidir ▲/▼ e ancora o MESMO texto do rótulo perto da borda
+//    superior/inferior do canvas — nunca fabrica uma posição pro nível
+//    em si, só avisa que ele existe.
 //
 // LEI 24: display only. Confluência/contexto sobre o Núcleo — nunca uma
 // segunda decisão de trading.
@@ -132,21 +153,6 @@ export function HarmonicGeometryPlugin({
       const timeScale = chart.timeScale();
       const { plotRight } = measurePlotArea(chart, cssWidth, lanes);
 
-      const harmonicTop = hits && hits.length > 0 ? hits[0] : null;
-      const harmonicValid = harmonicTop && Number.isFinite(harmonicTop.points.D.price) ? harmonicTop : null;
-
-      // MESMA disputa por fitScore do useEffect nativo original: só as 2
-      // famílias de MESMA geometria (zigue-zague por pivôs alternados)
-      // competem entre si; o Triângulo desenha sempre que o motor o
-      // encontrou, geometria diferente, nunca disputa a mesma área.
-      const candidates: Array<{ family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number }> = [];
-      if (harmonicValid) candidates.push({ family: "HARMONIC", fitScore: harmonicValid.fitScore });
-      if (hs) candidates.push({ family: "HEAD_SHOULDERS", fitScore: hs.fitScore });
-      let winner: { family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number } | null = candidates[0] ?? null;
-      for (const c of candidates.slice(1)) {
-        if (winner && c.fitScore > winner.fitScore) winner = c;
-      }
-
       const drawZigzagOutline = (points: Array<HarmonicPoint | undefined>) => {
         const polylinePoints = points
           .filter((p): p is HarmonicPoint => p !== undefined)
@@ -195,13 +201,39 @@ export function HarmonicGeometryPlugin({
         ctx.stroke();
       };
 
+      // Pedido direto do Operador ("eu queria que o sistema acusasse... a
+      // linha não aparece porque está muito alta"): quando um nível real
+      // (PRZ/EPA/NECKLINE/APEX) existe mas seu preço está fora da faixa
+      // vertical que o gráfico mostra AGORA, o comportamento anterior era
+      // simplesmente não desenhar nada — o Operador não tinha como saber
+      // se não havia padrão, ou se havia um fora da vista. series.priceScale()
+      // é o MESMO objeto de escala do candle principal (nunca uma segunda
+      // fonte de verdade sobre a faixa visível); getVisibleRange() devolve
+      // preço real, não pixel, então a comparação não depende de nenhuma
+      // suposição sobre o tamanho do canvas.
+      const drawOffscreenIndicator = (price: number, label: string) => {
+        const range = series.priceScale().getVisibleRange();
+        if (!range) return; // faixa ainda não resolvida — fail-closed, nunca chuta uma borda
+        const above = price > range.to;
+        const below = price < range.from;
+        if (!above && !below) return; // defensivo: priceToCoordinate só devolve null quando é de fato um dos dois casos
+        const text = `${above ? "▲" : "▼"} ${label} · fora da vista`;
+        const size = measureCanvasLabel(ctx, text);
+        const boxX = Math.max(0, plotRight - size.width - 6);
+        const boxY = above ? 4 : cssHeight - size.height - 4;
+        drawCanvasLabel(ctx, boxX, boxY, { fill: LABEL_FILL, text });
+      };
+
       // Linha horizontal FULL-WIDTH (0 até a fronteira real do eixo) — o
       // MESMO comportamento visual de series.createPriceLine que
       // substitui. Rótulo ancorado perto da borda direita (fronteira do
       // eixo), nunca em cima da área de candles.
       const drawLevelWithLabel = (price: number, label: string) => {
         const y = series.priceToCoordinate(price);
-        if (y === null) return; // fora da faixa de preço visível agora — fail-closed.
+        if (y === null) {
+          drawOffscreenIndicator(price, label);
+          return; // fora da faixa de preço visível agora — indicador acima, nunca a linha inteira fabricada.
+        }
         const yLine = Math.round(y) + 0.5;
         ctx.lineWidth = 1;
         ctx.strokeStyle = LEVEL_LINE_COLOR;
@@ -216,19 +248,32 @@ export function HarmonicGeometryPlugin({
         drawCanvasLabel(ctx, boxX, boxY, { fill: LABEL_FILL, text: label });
       };
 
-      if (winner?.family === "HARMONIC" && harmonicValid) {
-        const top = harmonicValid;
-        drawZigzagOutline([top.points.X, top.points.A, top.points.B, top.points.C, top.points.D]);
-        const hDirGlyph = top.direction === "BULLISH" ? "↑" : "↓";
-        drawLevelWithLabel(top.points.D.price, `${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`);
-        if (top.pattern === "WOLFE" && typeof top.epaPrice === "number" && Number.isFinite(top.epaPrice)) {
+      // Pedido direto do Operador ("mostrar tudo que passou de X%, não só
+      // um"): `hits` já chega FILTRADO duas vezes antes de chegar aqui —
+      // harmonic-patterns.ts's MIN_FIT_SCORE (0.75, geometria) e
+      // evaluateSmcHarmonicFusion em App.tsx (confluência institucional
+      // real: OB/FVG/POC/exaustão/EQL) — as duas bem acima do piso pedido.
+      // Desenhar CADA hit em vez de só hits[0] não afrouxa nenhum dos dois
+      // filtros reais, só para de descartar quem já passou nos dois.
+      // HARMONIC e HEAD_SHOULDERS não disputam mais um único "vencedor":
+      // são famílias de padrão diferentes, cada uma real quando presente —
+      // esconder uma para mostrar só a outra seria a mesma classe de "dado
+      // real escondido" que a Regra de Ouro 4 proíbe.
+      for (const hit of hits ?? []) {
+        if (!Number.isFinite(hit.points.D.price)) continue;
+        drawZigzagOutline([hit.points.X, hit.points.A, hit.points.B, hit.points.C, hit.points.D]);
+        const hDirGlyph = hit.direction === "BULLISH" ? "↑" : "↓";
+        drawLevelWithLabel(hit.points.D.price, `${hit.pattern} ${hDirGlyph} PRZ ${(hit.fitScore * 100).toFixed(0)}%`);
+        if (hit.pattern === "WOLFE" && typeof hit.epaPrice === "number" && Number.isFinite(hit.epaPrice)) {
           const barSec = candles.length >= 2 ? candles[candles.length - 1].time - candles[candles.length - 2].time : null;
-          const remainingBars = typeof top.etaIndex === "number" ? top.etaIndex - (candles.length - 1) : null;
+          const remainingBars = typeof hit.etaIndex === "number" ? hit.etaIndex - (candles.length - 1) : null;
           const etaLabel =
             barSec !== null && remainingBars !== null && remainingBars > 0 ? formatEtaDuration(remainingBars * barSec * 1000) : null;
-          drawLevelWithLabel(top.epaPrice, `WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
+          drawLevelWithLabel(hit.epaPrice, `WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
         }
-      } else if (winner?.family === "HEAD_SHOULDERS" && hs) {
+      }
+
+      if (hs) {
         drawZigzagOutline([hs.leftShoulder, hs.neckline1, hs.head, hs.neckline2, hs.rightShoulder]);
         const necklineStartCandle = candles[hs.neckline1.index];
         const lastCandle = candles[candles.length - 1];

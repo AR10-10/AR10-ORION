@@ -30,6 +30,19 @@
 // resincroniza o candle do gráfico) — folga deliberada para não marcar
 // "stale" por causa de uma única rodada atrasada, nunca um número
 // arbitrário.
+//
+// ACHADO REAL (Playwright ao vivo contra `vite` dev server real, sandbox
+// zero-egress, 2026-09-07, durante a construção do DataFreshnessBanner em
+// App.tsx): um `updatedAt` recente NÃO prova dado real. `setPrice`/
+// `setOrderBook` (unified-snapshot-store.ts) sempre estampam `Date.now()`
+// no momento da escrita, mesmo quando o valor escrito é o reset HONESTO
+// pra vazio (`EMPTY_PRICE`/`{bids:[],asks:[]}` — App.tsx troca de ativo, ou
+// o próprio boot antes do primeiro tick real chegar). Medido ao vivo: com
+// zero rede (todas as WebSocket/REST bloqueadas) e "AWAITING CANDLES" na
+// tela, `isDataFresh` reportava `true` — porque o reset-pra-vazio no boot
+// já contava como "fresco". `freshest` abaixo só conta um lado como
+// candidato quando o VALOR é real (`price !== null` / livro com pelo menos
+// um bid ou ask), nunca só porque o timestamp é recente.
 import { getQuantWorkerState } from "../engine-bridge";
 import { useUnifiedSnapshotStore } from "../store/unified-snapshot-store";
 // Ordem "Próxima Evolução do Organismo": serviços imperativos leem o
@@ -88,8 +101,16 @@ export class HealthMonitor {
     actions.setHealth(snapshot);
     this.bus.emit({ type: "HEALTH.CHANGED", payload: snapshot });
 
-    const freshest = Math.max(organism.price.updatedAt ?? 0, organism.orderBook.updatedAt ?? 0);
+    const priceIsReal = organism.price.price !== null;
+    const orderBookIsReal = organism.orderBook.bids.length > 0 || organism.orderBook.asks.length > 0;
+    const freshest = Math.max(
+      priceIsReal ? organism.price.updatedAt ?? 0 : 0,
+      orderBookIsReal ? organism.orderBook.updatedAt ?? 0 : 0,
+    );
     actions.setDataFresh(freshest > 0 && Date.now() - freshest < FRESHNESS_THRESHOLD_MS);
+    // DataFreshnessBanner (App.tsx) precisa do timestamp REAL, não só do
+    // booleano, pra mostrar "há X segundos" sem fabricar um número.
+    actions.setDataFreshSince(freshest > 0 ? freshest : null);
   }
 }
 

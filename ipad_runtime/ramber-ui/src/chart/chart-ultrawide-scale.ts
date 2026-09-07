@@ -98,3 +98,74 @@ export function resolveCanvasLabelFontPx(viewportWidth: number): number {
 export function resolveCanvasLabelFont(viewportWidth: number): string {
   return `${resolveCanvasLabelFontPx(viewportWidth)}px -apple-system, sans-serif`;
 }
+
+// ============================================================================
+// BREATHING ROOM ADAPTATIVO (Ordem A1 §19-§21, fechamento das lacunas do
+// fechamento A1) — o último candle não pode ficar colado ao price axis
+// quando há Trade Plan real ocupando a região direita.
+// ============================================================================
+//
+// `rightOffset` já era adaptativo por CLASSE DE MONITOR (resolveChartUltra
+// WideScale acima) — mas só por isso. Um Trade Plan real com Entry+
+// Invalidation+TP1+TP2+TP3 (5 níveis, cada um com rótulo próprio perto do
+// eixo) precisa de mais respiro do que um gráfico sem plano nenhum, na
+// MESMA tela. Estender a função existente (não duplicá-la): a base
+// continua vindo de resolveChartUltraWideScale — este bloco só soma um
+// ajuste real por CARGA, nunca substitui a decisão por tela.
+//
+// NÃO É MARGEM FIXA: sem plano real (WAIT/SETUP_FORMING/DADOS_INSUFICIENTES
+// — qualquer estado em que trade-plan.ts devolve null), o ajuste é ZERO —
+// exatamente "se não houver TP/Entry/Invalidation, não reservar espaço
+// desnecessário" (Ordem A1 §3). Com plano, o ajuste cresce com o número de
+// níveis REAIS que o próprio motor produziu.
+import type { TradePlan } from "../nexus/trade-plan";
+import { MAX_TARGETS } from "../nexus/trade-plan";
+
+/** Quantos níveis operacionais REAIS um Trade Plan pode desenhar perto do
+ *  eixo: Entry (1) + Invalidation/Stop (1) + até MAX_TARGETS alvos já
+ *  validados pelo motor (nunca um projetado). Teto real, não um número à
+ *  parte — é literalmente o máximo que buildTradePlan() pode devolver. */
+export const MAX_CRITICAL_RIGHT_LEVELS = MAX_TARGETS + 2;
+
+/** Conta quantos níveis críticos (Entry/Invalidation/TP1-3) o plano ATUAL
+ *  desenha perto do eixo. `null`/`undefined` (sem plano — WAIT, riskGated,
+ *  DADOS_INSUFICIENTES, qualquer motivo real de trade-plan.ts devolver
+ *  null) conta 0, nunca um valor fabricado. current price NÃO entra nesta
+ *  contagem: seu rótulo já vive NO próprio eixo nativo da lib (crosshair/
+ *  lastValue), nunca como uma etiqueta empilhada como Entry/Invalidation/
+ *  TP — não compete pelo mesmo respiro. */
+export function countCriticalRightLevels(plan: TradePlan | null | undefined): number {
+  if (!plan) return 0;
+  return 2 + plan.targets.length; // Entry + Invalidation, sempre presentes quando plan existe; targets.length é 1..MAX_TARGETS
+}
+
+/** 1 largura de barra por nível crítico ativo. Não existe um precedente
+ *  exato pra este número no resto do arquivo (nenhum outro código deste
+ *  projeto reservava respiro por CARGA antes desta rodada) — a escolha
+ *  deliberada é o menor incremento inteiro possível, com teto real
+ *  (MAX_CRITICAL_RIGHT_LEVELS) que mantém o crescimento total (no máximo
+ *  +5 larguras de barra) na mesma ordem de grandeza do salto que
+ *  resolveChartUltraWideScale já usa em produção entre suas próprias
+ *  faixas de monitor (8 → 12, um delta de 4). */
+export const RIGHT_OFFSET_PER_CRITICAL_LEVEL = 1;
+
+/**
+ * Respiro à direita (`timeScale.rightOffset`, em larguras de barra — a
+ * MESMA unidade de resolveChartUltraWideScale, nunca pixel) já somando a
+ * base por monitor com o ajuste real por carga visual do Trade Plan.
+ *
+ * MIN = a própria base por monitor (carga 0 — nunca abaixo do que já está
+ * em produção, mesma disciplina do resto deste arquivo). MAX = base +
+ * MAX_CRITICAL_RIGHT_LEVELS * RIGHT_OFFSET_PER_CRITICAL_LEVEL (protege a
+ * área útil do gráfico — Ordem A1 §4, "não sacrificar área do gráfico").
+ * PREFERRED = o que a carga real pedir, sempre dentro de [MIN, MAX].
+ *
+ * Pura e determinística: mesma viewportWidth + mesma criticalLevelCount
+ * sempre devolvem o mesmo número (Ordem A1 §8).
+ */
+export function resolveAdaptiveRightOffset(viewportWidth: number, criticalLevelCount: number): number {
+  const base = resolveChartUltraWideScale(viewportWidth).rightOffset;
+  const count = Number.isFinite(criticalLevelCount) && criticalLevelCount > 0 ? Math.floor(criticalLevelCount) : 0;
+  const capped = Math.min(count, MAX_CRITICAL_RIGHT_LEVELS);
+  return base + capped * RIGHT_OFFSET_PER_CRITICAL_LEVEL;
+}

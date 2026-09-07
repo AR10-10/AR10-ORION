@@ -25,29 +25,42 @@ const enhancedChart = read('../src/chart/EnhancedChart_110_Percent.tsx');
 const chartLayerDepth = read('../src/chart/chart-layer-depth.ts');
 
 describe('HarmonicGeometryPlugin: zero segunda matemática — mesma disputa/geometria do useEffect nativo que substitui', () => {
-  it('winner-selection real: só HARMONIC/HEAD_SHOULDERS disputam por fitScore, TRIANGLE desenha independente', () => {
-    expect(plugin).toContain('const candidates: Array<{ family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number }> = [];');
-    expect(plugin).toContain('if (harmonicValid) candidates.push({ family: "HARMONIC", fitScore: harmonicValid.fitScore });');
-    expect(plugin).toContain('if (hs) candidates.push({ family: "HEAD_SHOULDERS", fitScore: hs.fitScore });');
+  it('ATUALIZAÇÃO 04/09/2026 (pedido direto do Operador): fim do winner-take-all — CADA hit do array desenha, HEAD_SHOULDERS desenha sempre que presente (sem disputa de fitScore entre famílias), TRIANGLE continua independente', () => {
+    expect(plugin).not.toContain('const candidates: Array<{ family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number }> = [];');
+    expect(plugin).not.toContain('let winner: { family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number } | null');
+    expect(plugin).toContain('for (const hit of hits ?? []) {');
+    expect(plugin).toMatch(/^\s*if \(hs\) \{/m);
     expect(plugin).toContain('if (triangle) {');
   });
 
-  it('drawZigzagOutline: mesma técnica real de filtro/sort/dedup por tempo, reusada por HARMONIC e HEAD_SHOULDERS (zero segunda cópia)', () => {
+  it('drawZigzagOutline: mesma técnica real de filtro/sort/dedup por tempo, reusada por HARMONIC (dentro do loop, um hit por vez) e HEAD_SHOULDERS (zero segunda cópia)', () => {
     expect(plugin).toContain('const drawZigzagOutline = (points: Array<HarmonicPoint | undefined>) => {');
     expect(plugin).toContain('.filter((p): p is HarmonicPoint => p !== undefined)');
     expect(plugin).toContain('.sort((a, b) => a.time - b.time)');
     expect(plugin).toContain('.filter((p, i, arr) => i === 0 || p.time !== arr[i - 1].time)');
-    expect(plugin).toContain('drawZigzagOutline([top.points.X, top.points.A, top.points.B, top.points.C, top.points.D]);');
+    expect(plugin).toContain('drawZigzagOutline([hit.points.X, hit.points.A, hit.points.B, hit.points.C, hit.points.D]);');
     expect(plugin).toContain('drawZigzagOutline([hs.leftShoulder, hs.neckline1, hs.head, hs.neckline2, hs.rightShoulder]);');
   });
 
-  it('os 4 rótulos reais (PRZ/EPA/NECKLINE/APEX) — mesmo texto exato do mkH() nativo que substitui, nenhuma string redigitada', () => {
-    expect(plugin).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+  it('os 4 rótulos reais (PRZ/EPA/NECKLINE/APEX) — mesmo texto exato do mkH() nativo que substitui, nenhuma string redigitada (PRZ agora por hit, dentro do loop)', () => {
+    expect(plugin).toContain('`${hit.pattern} ${hDirGlyph} PRZ ${(hit.fitScore * 100).toFixed(0)}%`');
     expect(plugin).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
     expect(plugin).toContain('`${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`');
     expect(plugin).toContain(
       '`${triangle.kind} ${dirGlyph} APEX ${(triangle.fitScore * 100).toFixed(0)}%${etaLabel ? ` · ETA ${etaLabel}` : ""}`',
     );
+  });
+
+  it('múltiplos padrões harmônicos reais desenham ao mesmo tempo (achado real: hits[0] escondia qualquer segundo hit já duplamente filtrado — MIN_FIT_SCORE geométrico + confluência institucional)', () => {
+    const loopStart = plugin.indexOf('for (const hit of hits ?? []) {');
+    expect(loopStart).toBeGreaterThan(-1);
+    const loopEnd = plugin.indexOf('\n      }', loopStart);
+    const loopBody = plugin.slice(loopStart, loopEnd);
+    // dentro do loop, cada hit desenha seu próprio zigue-zague + PRZ — nenhum
+    // `hits[0]`/`hits[<índice fixo>]` sobrevivendo escondido no corpo.
+    expect(loopBody).not.toMatch(/hits\[\d+\]/);
+    expect(loopBody).toContain('drawZigzagOutline(');
+    expect(loopBody).toContain('drawLevelWithLabel(hit.points.D.price');
   });
 
   it('triângulo: slope/intercept avaliados exatamente como o motor já expõe (resistanceAtLastCandle/supportAtLastCandle/apexIndex), zero fórmula nova', () => {
@@ -86,7 +99,28 @@ describe('HarmonicGeometryPlugin: zero segunda matemática — mesma disputa/geo
 
   it('fail-closed: segmento com qualquer extremo fora da janela visível nunca desenha (zero extrapolação)', () => {
     expect(plugin).toMatch(/if\s*\(x1\s*===\s*null\s*\|\|\s*y1\s*===\s*null\s*\|\|\s*x2\s*===\s*null\s*\|\|\s*y2\s*===\s*null\)\s*return;/);
-    expect(plugin).toMatch(/if\s*\(y\s*===\s*null\)\s*return;/);
+  });
+
+  it('ATUALIZAÇÃO 04/09/2026: nível fora da faixa vertical visível nunca fabrica posição — em vez de só "return" silencioso, aciona o indicador fora-da-vista', () => {
+    expect(plugin).toMatch(/if\s*\(y\s*===\s*null\)\s*\{\s*\n\s*drawOffscreenIndicator\(price,\s*label\);\s*\n\s*return;/);
+  });
+
+  it('drawOffscreenIndicator: usa series.priceScale().getVisibleRange() (preço real, nunca pixel) para decidir ▲ (acima) ou ▼ (abaixo) — nunca fabrica a posição do nível em si', () => {
+    expect(plugin).toContain('const drawOffscreenIndicator = (price: number, label: string) => {');
+    expect(plugin).toContain('const range = series.priceScale().getVisibleRange();');
+    expect(plugin).toContain('if (!range) return;');
+    expect(plugin).toContain('const above = price > range.to;');
+    expect(plugin).toContain('const below = price < range.from;');
+    expect(plugin).toContain('if (!above && !below) return;');
+    expect(plugin).toContain('const text = `${above ? "▲" : "▼"} ${label} · fora da vista`;');
+  });
+
+  it('drawOffscreenIndicator ancora o aviso perto da borda do canvas (topo quando acima, base quando abaixo) via a mesma primitiva drawCanvasLabel — zero segunda forma de desenhar texto', () => {
+    const fnStart = plugin.indexOf('const drawOffscreenIndicator = (price: number, label: string) => {');
+    const fnEnd = plugin.indexOf('\n      };', fnStart);
+    const fnBody = plugin.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('const boxY = above ? 4 : cssHeight - size.height - 4;');
+    expect(fnBody).toContain('drawCanvasLabel(ctx, boxX, boxY, { fill: LABEL_FILL, text });');
   });
 
   it('arquitetura de canvas real: rAF + ResizeObserver + subscribeVisibleLogicalRangeChange + getChartLayerZIndex("harmonics")', () => {

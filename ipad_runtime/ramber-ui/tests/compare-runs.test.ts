@@ -99,7 +99,18 @@ describe('compareBacktestRuns — two-proportion z-test agrupado, números verif
     expect(Object.isFrozen(r)).toBe(true);
   });
 
-  it('FRONTEIRA (LEI 24): nenhum módulo de produção importa compare-runs.js — só testes', () => {
+  it('FRONTEIRA (LEI 24): só App.tsx (BacktestPanel) importa compare-runs.js — mais ninguém', () => {
+    // GRADUAÇÃO (pedido do Operador: "organiza tudo que tem no laboratório e
+    // deixa rodando"). A guarda NÃO foi afrouxada: ela ficou MAIS específica,
+    // mesmo padrão real já usado quando structural-backtest.js/
+    // history-capture.js graduaram via backtest-worker.ts
+    // (structural-backtest.test.ts). Antes dizia "ninguém"; agora nomeia o
+    // ÚNICO consumidor autorizado e continua proibindo todo o resto — um
+    // segundo importador (num motor, no Core Engine) derruba a suíte.
+    // App.tsx é o consumidor certo aqui, não um Worker novo:
+    // compareBacktestRuns é um z-test síncrono sobre dois resultados JÁ
+    // medidos, nada que justifique mais um Worker.
+    const CONSUMIDOR_AUTORIZADO = 'src/App.tsx';
     const roots = [resolve(here, '../src'), resolve(here, '../../src')];
     const offenders: string[] = [];
     const walk = (dir: string) => {
@@ -110,7 +121,7 @@ describe('compareBacktestRuns — two-proportion z-test agrupado, números verif
           walk(p);
         } else if (/\.(ts|tsx|js|mjs)$/.test(entry.name)) {
           const src = readFileSync(p, 'utf8');
-          if (src.includes('research/backtest/compare-runs')) offenders.push(p);
+          if (src.includes('research/backtest/compare-runs') && !p.replace(/\\/g, '/').endsWith(CONSUMIDOR_AUTORIZADO)) offenders.push(p);
         }
       }
     };
