@@ -20,6 +20,7 @@ const read = (p: string) => readFileSync(resolve(__dirname, p), "utf-8");
 const bridge = () => read("../src/engine-bridge.ts");
 const chart = () => read("../src/chart/EnhancedChart_110_Percent.tsx");
 const app = () => read("../src/App.tsx");
+const plugin = () => read("../src/chart/SupertrendPlugin.tsx");
 
 describe("o motor deixou de ter zero importadores", () => {
   it("engine-bridge importa o motor real, nunca uma segunda implementação", () => {
@@ -85,15 +86,22 @@ describe("fail-closed de verdade — execução real do caminho ponta a ponta", 
   });
 });
 
-describe("desenho: duas séries nativas, porque a lib não colore segmentos", () => {
-  it("existe uma série por sentido de tendência", () => {
+describe("desenho: canvas próprio (GRADUAÇÃO 2026-09-07), porque as 2 LineSeries nativas competiam pelo z=35 compartilhado", () => {
+  it("SupertrendPlugin substitui as 2 LineSeries nativas — mesma leitura (superTrendPoints), novo desenho", () => {
     const src = chart();
-    expect(src).toContain("supertrendUpRef");
-    expect(src).toContain("supertrendDownRef");
+    expect(src).not.toContain("supertrendUpRef");
+    expect(src).not.toContain("supertrendDownRef");
+    expect(src).toContain('import { SupertrendPlugin } from "./SupertrendPlugin";');
+    const mountIdx = src.indexOf("<SupertrendPlugin");
+    expect(mountIdx, "SupertrendPlugin não montado").toBeGreaterThan(-1);
+    const bloco = src.slice(mountIdx, mountIdx + 250);
+    expect(bloco).toContain("points={superTrendPoints}");
+    const before = src.slice(Math.max(0, mountIdx - 200), mountIdx);
+    expect(before).toContain("visibility.supertrend && (");
   });
 
-  it("o gráfico usa a fonte única da separação, nunca uma segunda cópia", () => {
-    const src = chart();
+  it("o plugin usa a fonte única da separação, nunca uma segunda cópia", () => {
+    const src = plugin();
     expect(src).toContain("splitSuperTrendSeries<UTCTimestamp>(");
     expect(src).toContain('from "./supertrend-series"');
   });
@@ -144,24 +152,30 @@ describe("desenho: duas séries nativas, porque a lib não colore segmentos", ()
     expect(down).toHaveLength(1);
   });
 
-  it("Fio de Seda: 1px sólida nas duas, sem rótulo de eixo novo", () => {
-    const src = chart();
-    const i = src.indexOf("const supertrendUp = chart.addSeries(LineSeries, {");
-    expect(i).toBeGreaterThan(-1);
-    const bloco = src.slice(i, i + 700);
-    expect(bloco.match(/lineWidth: 1/g)?.length).toBe(2);
-    expect(bloco.match(/lineStyle: LineStyle\.Solid/g)?.length).toBe(2);
-    expect(bloco.match(/lastValueVisible: false/g)?.length).toBe(2);
-    expect(bloco).not.toContain("LineStyle.Dashed");
+  it('"Fio de Seda": 1px sólido real no canvas, zero setLineDash em todo o arquivo', () => {
+    // Forma EXECUTÁVEL (`.setLineDash(`), nunca a string solta: o próprio
+    // comentário do arquivo cita "setLineDash" por nome (mesmo padrão de
+    // StructureTracePlugin/equal-level-span.ts) — travar a palavra
+    // reprovaria o comentário, não o desenho.
+    const src = plugin();
+    expect(src).toContain("ctx.lineWidth = 1;");
+    expect(src).not.toMatch(/\.setLineDash\(/);
   });
 
-  it("as duas séries são limpas no unmount, como toda outra ref", () => {
-    const src = chart();
-    const i = src.indexOf("chart.remove();");
-    const fim = src.indexOf("\n    };", i);
-    const cleanup = src.slice(i, fim);
-    expect(cleanup).toContain("supertrendUpRef.current = null;");
-    expect(cleanup).toContain("supertrendDownRef.current = null;");
+  it("mesma arquitetura de canvas dos irmãos: dirty-flag + rAF, ResizeObserver, subscribeVisibleLogicalRangeChange, limpeza no unmount", () => {
+    const src = plugin();
+    expect(src).toContain("requestAnimationFrame(() => {");
+    expect(src).toContain("new ResizeObserver(");
+    expect(src).toContain("chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange);");
+    expect(src).toContain("chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange);");
+    expect(src).toContain("resizeObserver.disconnect();");
+  });
+
+  it('z-index computado por getChartLayerZIndex("supertrend") DENTRO do próprio plugin — mesmo padrão de todo canvas irmão', () => {
+    const src = plugin();
+    expect(src).toContain('import { getChartLayerZIndex } from "./chart-layer-depth";');
+    expect(src).toMatch(/zIndex:\s*getChartLayerZIndex\("supertrend"\)/);
+    expect(src).not.toMatch(/zIndex:\s*\d/);
   });
 });
 
@@ -176,10 +190,12 @@ describe("camada real no gerenciador — nunca uma anotação sem controle", () 
     expect(app()).toContain('{ id: "supertrend", label: "SUPERTREND" },');
   });
 
-  it("esconder alterna visible nas séries nativas, nunca desmonta/recomputa", () => {
+  it("esconder desmonta o canvas via gate JSX (GRADUAÇÃO 2026-09-07: convenção mudou de applyOptions({visible}) em série nativa para {visibility.supertrend && (...)}, mesmo padrão do Harmônico/Premium-Discount/Pivot Points)", () => {
     const src = chart();
-    expect(src).toContain("supertrendUpRef.current.applyOptions({ visible: visibility.supertrend });");
-    expect(src).toContain("supertrendDownRef.current.applyOptions({ visible: visibility.supertrend });");
+    expect(src).not.toContain("applyOptions({ visible: visibility.supertrend })");
+    const mountIdx = src.indexOf("<SupertrendPlugin");
+    const before = src.slice(Math.max(0, mountIdx - 200), mountIdx);
+    expect(before).toContain("visibility.supertrend && (");
   });
 
   it("a relevância é por EXISTÊNCIA real, nunca por proximidade ao preço", () => {

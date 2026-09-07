@@ -1,10 +1,26 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { execSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'path';
 import { defineConfig, type Plugin } from 'vite';
 import { generateSwSource } from './sw/build-sw.mjs';
 import { APP_VERSION } from './src/version';
+
+// Ordem P0 (RUNTIME PARITY): o commit REAL por trás deste build, lido do
+// próprio HEAD no instante do build — nunca escrito à mão, nunca vindo de
+// uma variável de ambiente que poderia ficar velha. `git rev-parse HEAD`
+// funciona tanto localmente quanto em CI (actions/checkout sempre deixa
+// um `.git` real, mesmo em checkout raso). Fail-closed: sem `.git`
+// disponível (ambiente exótico), cai em 'unknown' — nunca um SHA
+// fabricado (ver build-info.ts para o consumo real).
+function resolveBuildCommit(): string {
+  try {
+    return execSync('git rev-parse HEAD', { cwd: __dirname }).toString().trim();
+  } catch {
+    return 'unknown';
+  }
+}
 
 // Fase L (diretriz 2): emite sw.js no dist com o precache REAL deste
 // build (lista de arquivos lida do próprio outDir depois da escrita —
@@ -141,6 +157,9 @@ export default defineConfig({
   // acontece depois, e assim enxerga o manifesto e os ícones.
   plugins: [react(), tailwindcss(), pwaAssetsPlugin(), siblingRuntimeAssetsPlugin(), serviceWorkerPlugin()],
   base: './',
+  define: {
+    __AR10_BUILD_COMMIT__: JSON.stringify(resolveBuildCommit()),
+  },
   build: {
     // The ~6MB llm-worker/llm-bridge chunks are the opt-in local Llama 3
     // runtime (@mlc-ai/web-llm), deliberately isolated behind dynamic

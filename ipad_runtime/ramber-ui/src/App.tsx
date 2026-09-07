@@ -400,6 +400,7 @@ import { buildRiskSuggestion } from "../../src/risk/index.js";
 // é declarado, nunca fabricado.
 import { classifyFps, classifyCycleLatency, memoryUsedMB, wasmVariantLabel } from "../../src/telemetry/index.js";
 import { APP_SEAL } from "./version";
+import { BUILD_COMMIT_SHORT } from "./build-info";
 // llm-bridge.ts (and the @mlc-ai/web-llm package it imports) is loaded via
 // dynamic import() only inside NeuralCoreWidget's activation handler below
 // — never a static top-level import here. A static import would pull
@@ -536,7 +537,12 @@ export const WidgetContext = createContext<any>(null);
 // either way) — deliberately out of Fase B's first pass, see engine-bridge.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 const DASH = "—";
-const AWAIT = "AWAITING";
+// Pedido do Operador ("o que der pra ficando em inglês põe na linguagem do
+// sistema"): rótulo puro de exibição — nunca comparado como valor de tipo
+// em nenhum lugar (auditado), só o texto que o Operador lê. Mesma palavra
+// já usada pelo resto do painel para o mesmo estado (ex.: CHART_INTEGRITY_LABEL
+// abaixo, orderflow "AGUARDANDO"/"FALHOU") — nunca uma segunda tradução.
+const AWAIT = "AGUARDANDO";
 
 const num = (v: any): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -6287,7 +6293,7 @@ function SiriformCoreCard() {
   const sinalOutcomeQualifier = sinalOutcome ? (OUTCOME_QUALIFIER[sinalOutcome] ?? null) : null;
   const sinalValue = direction ? (sinalOutcomeQualifier ? `${direction} · ${sinalOutcomeQualifier}` : direction) : AWAIT;
   const collapsed = widgets?.se_core?.collapsed ?? true;
-  const statusLabel = engineStatus === "pending" ? AWAIT : engineStatus === "ok" ? "SYNCED" : "FAILED";
+  const statusLabel = engineStatus === "pending" ? AWAIT : engineStatus === "ok" ? "SINCRONIZADO" : "FALHOU";
   const statusColor =
     engineStatus === "pending" ? "text-[#f0d06f]" : engineStatus === "ok" ? "text-[#00ffaa]" : "text-[#ff0055]";
   const dirColor =
@@ -7200,7 +7206,7 @@ function NucleoVoiceOrb() {
   // "Offline: offline=true, Orb STALE/âmbar"): honestidade além do
   // engineStatus isolado. offline (navigator.onLine real, Fase 0.4) e
   // isDataFresh (Health Monitor real, Fase 0.8) agora existem — o orb
-  // nunca mostra "SYNCED" (teal) se a conexão caiu ou se os dados
+  // nunca mostra "SINCRONIZADO" (teal) se a conexão caiu ou se os dados
   // que alimentam o ciclo pararam de chegar, mesmo que o ÚLTIMO ciclo
   // completado tenha sido "ok". "pending" (aguardando o primeiro ciclo,
   // boot) é distinto de "desatualizado" (já teve ciclo ok, mas os dados
@@ -7223,13 +7229,13 @@ function NucleoVoiceOrb() {
   if (offline) {
     coreColor = "#f0d06f"; coreLabel = "OFFLINE";
   } else if (engineStatus === "error") {
-    coreColor = "#ff0055"; coreLabel = "FAILED";
+    coreColor = "#ff0055"; coreLabel = "FALHOU";
   } else if (engineStatus === "pending") {
     coreColor = "#f0d06f"; coreLabel = AWAIT;
   } else if (stale) {
     coreColor = "#f0d06f"; coreLabel = "DESATUALIZADO";
   } else {
-    coreColor = "#00ffaa"; coreLabel = "SYNCED";
+    coreColor = "#00ffaa"; coreLabel = "SINCRONIZADO";
   }
   const ttsSupported = voiceStatus.supported;
 
@@ -9669,7 +9675,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
           <ModuleStat label="Global Context (GMIL)" value={formatConsensusScore(gmilConsensus.score)} />
           <ModuleStat
             label="System"
-            value={engineStatus === "ok" ? "OK" : engineStatus === "pending" ? "STARTING" : "FAILED"}
+            value={engineStatus === "ok" ? "OK" : engineStatus === "pending" ? "INICIANDO" : "FALHOU"}
             tone={engineStatus === "ok" ? "long" : engineStatus === "pending" ? "neutral" : "short"}
           />
           <ModuleStat label="Data Feeds" value={`${feedsUp}/4`} tone={feedsUp === 4 ? "long" : feedsUp >= 2 ? "neutral" : "short"} />
@@ -12592,6 +12598,16 @@ function TelemetryHealthWidget() {
             worker, cujo nome de cache deriva desta mesma constante).
             Aparece UMA vez em toda a UI (zero repetição). */}
         <Row label="BUILD" value={APP_SEAL} valueClass="text-[#00f0ff]" />
+        {/* Ordem P0 (RUNTIME PARITY, 2026-09-07): commit REAL do build
+            servido, ao lado do selo semântico acima — dois commits sem
+            bump de versão mostrariam o MESMO "BUILD" mas nunca o mesmo
+            "COMMIT" (ver build-info.ts). É a prova física de qual código
+            está executando, não só qual versão foi anunciada. */}
+        <Row
+          label="COMMIT"
+          value={BUILD_COMMIT_SHORT}
+          valueClass={BUILD_COMMIT_SHORT === "unknown" ? "text-[#00f0ff]/40" : "text-[#00f0ff]"}
+        />
         {/* Ordem "Ciborgue Vivo" §3 ("gerar relatórios claros para nós") +
             pedido do Operador (parte 3/3, "auto-diagnóstico... não só sob
             demanda"): síntese dos MESMOS sinais reais já mostrados acima

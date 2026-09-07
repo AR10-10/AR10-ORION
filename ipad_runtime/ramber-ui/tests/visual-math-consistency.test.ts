@@ -30,7 +30,7 @@ describe('A2: formatConsensusScore nunca produz "-0" — arredonda antes de deci
     // para provar a matemática (nenhuma segunda fonte de verdade: o teste
     // de padrão acima já trava que App.tsx usa ESTA fórmula, não outra).
     const format = (score: number | null): string => {
-      if (score === null) return 'AWAITING';
+      if (score === null) return 'AGUARDANDO';
       const rounded = Math.round(score * 100);
       return rounded > 0 ? `+${rounded}` : `${rounded}`;
     };
@@ -38,7 +38,7 @@ describe('A2: formatConsensusScore nunca produz "-0" — arredonda antes de deci
     expect(format(0)).toBe('0');
     expect(format(0.42)).toBe('+42');
     expect(format(-0.17)).toBe('-17');
-    expect(format(null)).toBe('AWAITING');
+    expect(format(null)).toBe('AGUARDANDO');
   });
 });
 

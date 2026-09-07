@@ -140,6 +140,7 @@ import { TpoProfilePlugin } from "./TpoProfilePlugin";
 import { computeTpoProfile } from "../nexus/tpo-profile";
 import { resolveChartUltraWideScale, resolveAdaptiveRightOffset, countCriticalRightLevels } from "./chart-ultrawide-scale";
 import { CHART_NATIVE_CANVAS_Z_INDEX } from "./chart-layer-depth";
+import { HorizontalLevelLinesPlugin, type HorizontalLevel } from "./HorizontalLevelLinesPlugin";
 import { ZigZagPlugin } from "./ZigZagPlugin";
 import { IchimokuPlugin } from "./IchimokuPlugin";
 import { DeltaDivergencePlugin } from "./DeltaDivergencePlugin";
@@ -175,7 +176,6 @@ import type { TradePlan } from "../nexus/trade-plan";
 import { effectiveStopForTargetsHit } from "../nexus/trade-plan";
 import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
-import { describeScenarioConfidence, describeScenarioReaction } from "../nexus/scenario-engine";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
 import type { SmcHarmonicFusionResult } from "../nexus/smc-harmonic-fusion";
@@ -229,7 +229,8 @@ import { shouldCompactLabels } from "./label-compaction";
 import { formatTickMark, chartLocale } from "./tick-mark-format";
 import { formatZoneMemberList } from "../nexus/zone-member-codes";
 import { computeSuperTrend } from "../engine-bridge";
-import { splitSuperTrendSeries } from "./supertrend-series";
+import { SupertrendPlugin } from "./SupertrendPlugin";
+import { CvdLinePlugin } from "./CvdLinePlugin";
 // Setas de entrada/saída (pedido do Operador: "com as setinhas indicando a
 // entrada e saída"). Auditoria confirmou ZERO marcadores em todo o
 // repositório antes desta rodada — as etiquetas EN/ST/TP respondem "a que
@@ -1074,11 +1075,6 @@ function EnhancedChart_110_PercentImpl({
   const supportLineRef = useRef<IPriceLine | null>(null);
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
-  // Auditoria do ecossistema de indicadores: 7 linhas reais (PP+R1-3+S1-3),
-  // ref PRÓPRIA em array — mesmo padrão de zoneLinesRef acima, ciclo de
-  // limpeza/redesenho independente de S1/R1 (fontes diferentes: candle
-  // diário fechado vs. swing fractal).
-  const pivotLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
   // EPC §5/§6 (continuação): linhas do fallback do Core Engine
@@ -1089,8 +1085,6 @@ function EnhancedChart_110_PercentImpl({
   // separadas evita acoplar dois efeitos independentes por um cleanup
   // compartilhado.
   const engineFallbackLinesRef = useRef<IPriceLine[]>([]);
-  const scenarioLinesRef = useRef<IPriceLine[]>([]);
-  const premiumDiscountLinesRef = useRef<IPriceLine[]>([]);
   // Pendência #6 (migração nativo→canvas), perna final: a figura
   // geométrica inteira do harmônico/H&S/triângulo — antes 1 LineSeries
   // (harmonicPolylineRef) + 2 séries do triângulo + 1 da neckline + 1
@@ -1130,15 +1124,7 @@ function EnhancedChart_110_PercentImpl({
   // nunca reaproveitando a paleta semântica (verde/vermelho=direção,
   // âmbar=zona de entrada, roxo=liquidez EQH/EQL).
   const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
-  // GRADUAÇÃO de supertrend-engine.js. DUAS séries nativas, não uma: a
-  // lightweight-charts não colore segmentos diferentes de uma mesma
-  // LineSeries. Uma série desenha os trechos de tendência de ALTA e a
-  // outra os de BAIXA, cada uma com buracos (whitespace) onde a outra
-  // manda — é assim que a linha muda de cor no ponto exato do flip sem
-  // perder um único candle de história.
   const planMarkersRef = useRef<ReturnType<typeof createSeriesMarkers> | null>(null);
-  const supertrendUpRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const supertrendDownRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Consolidação Final §26-§29: Nexus Line na MESMA escala de preço (é um
   // nível de equilíbrio real, como VWAP/EMA) — nunca uma segunda escala.
   const nexusLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -1158,7 +1144,7 @@ function EnhancedChart_110_PercentImpl({
   // montar assim que o chart existe de verdade — refs sozinhas não
   // disparam re-render, então o plugin ficaria esperando por uma
   // atualização de `data` não relacionada para "descobrir" o chart pronto.
-  const [chartReady, setChartReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick"> } | null>(null);
+  const [chartReady, setChartReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick">; cvdSeries: ISeriesApi<"Line"> } | null>(null);
   // Ordem A1 §19 (breathing room adaptativo por CARGA, fechamento das
   // lacunas do A1): quantos níveis reais do Trade Plan (Entry+Invalidation+
   // TP1-3) estão ativos AGORA. Ref (não state) porque o efeito de MONTAGEM
@@ -1438,16 +1424,22 @@ function EnhancedChart_110_PercentImpl({
         };
       }) as AutoscaleInfoProvider,
     });
-    // V-MAX Fase 1 (fechamento do §3.1): linha de CVD como série NATIVA em
-    // escala de preço PRÓPRIA ('cvd', overlay) — CVD é volume assinado, não
-    // preço; partilhar a escala das velas o achataria em ruído. Banda
-    // inferior (20%) via scaleMargins. Fio de seda: lineWidth 1, sólida.
-    // Cor neutra da família de texto (#8ab4f8) — o SINAL do CVD já é
-    // exibido com cor semântica no Order Flow widget; aqui a informação é
-    // a FORMA da série (fluxo acumulado), não um veredito colorido.
+    // V-MAX Fase 1 (fechamento do §3.1) + GRADUAÇÃO (2026-09-07, "resíduo
+    // honesto" de chart-layer-depth.ts): CVD é volume assinado, não preço —
+    // partilhar a escala das velas o achataria em ruído, por isso vive numa
+    // escala de preço PRÓPRIA ('cvd', overlay, banda inferior de 20% via
+    // scaleMargins). Essa escala só existe de verdade enquanto HOUVER uma
+    // série ligada a ela — não dá pra pedir `priceToCoordinate` a uma
+    // escala vazia. Esta série fica como o único elo real com a escala
+    // 'cvd' (recebe os mesmos dados de sempre via setData abaixo), mas cor
+    // TOTALMENTE transparente: o traço visível de verdade agora é
+    // CvdLinePlugin (canvas próprio, z=40 real via getChartLayerZIndex,
+    // mesmo motivo de premium_discount/scenario_projection/pivot_points/
+    // supertrend na mesma rodada) — esta série nunca mais desenha nada
+    // sozinha, só mantém a escala viva e converte preço→coordenada.
     const cvdSeries = chart.addSeries(LineSeries, {
       priceScaleId: "cvd",
-      color: "rgba(138, 180, 248, 0.85)",
+      color: "rgba(138, 180, 248, 0)",
       lineWidth: 1,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
@@ -1524,32 +1516,6 @@ function EnhancedChart_110_PercentImpl({
     });
     emaSeriesRef.current = emaSeries;
 
-    // SuperTrend: verde/vermelho da MESMA família já usada para
-    // alta/baixa em todo o gráfico (FVG/OB/sessão) — a linha diz "o stop
-    // que trilha está embaixo (alta)" ou "está em cima (baixa)", que é
-    // exatamente a mesma semântica de direção. Fio de Seda: 1px sólida.
-    // Sem rótulo de eixo (lastValueVisible false): o eixo já está disputado
-    // por VWAP/NL/EMA/CHOCH e a linha se lê pela posição.
-    const supertrendUp = chart.addSeries(LineSeries, {
-      color: "rgba(8, 153, 129, 0.70)",
-      lineWidth: 1,
-      lineStyle: LineStyle.Solid,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      title: "",
-    });
-    const supertrendDown = chart.addSeries(LineSeries, {
-      color: "rgba(242, 54, 69, 0.70)",
-      lineWidth: 1,
-      lineStyle: LineStyle.Solid,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      title: "",
-    });
-    supertrendUpRef.current = supertrendUp;
-    supertrendDownRef.current = supertrendDown;
     // Consolidação Final §29: Nexus Line — "extremamente fina, elegante,
     // suavizada" = fio de seda (1px sólida, obrigatório de qualquer forma)
     // em branco-dourado neutro mais discreto que a VWAP; a cor de estado
@@ -1606,7 +1572,7 @@ function EnhancedChart_110_PercentImpl({
     // canvas próprio, ver cabeçalho do plugin.
     chartRef.current = chart;
     seriesRef.current = series;
-    setChartReady({ chart, series });
+    setChartReady({ chart, series, cvdSeries });
     // Ordem ULTRA LED/UltraWide/4K: os 3 valores acima (fontSize/
     // minimumWidth/rightOffset) precisam se atualizar se o Operador
     // redimensionar a janela ou mover pra outro monitor DEPOIS do mount —
@@ -1657,8 +1623,6 @@ function EnhancedChart_110_PercentImpl({
       zoneLinesRef.current = [];
       fibLinesRef.current = [];
       tradePlanLinesRef.current = [];
-      scenarioLinesRef.current = [];
-      premiumDiscountLinesRef.current = [];
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
       vwapBandUpper1Ref.current = null;
@@ -1666,8 +1630,6 @@ function EnhancedChart_110_PercentImpl({
       vwapBandUpper2Ref.current = null;
       vwapBandLower2Ref.current = null;
       emaSeriesRef.current = null;
-      supertrendUpRef.current = null;
-      supertrendDownRef.current = null;
       planMarkersRef.current = null;
       nexusLineSeriesRef.current = null;
       trendChannelMidRef.current = null;
@@ -1965,25 +1927,34 @@ function EnhancedChart_110_PercentImpl({
   // correção da cor: era um rgba redigitado que já MEDIA a família
   // canônica attention, nunca precisou de um tom próprio).
 
-  // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
-  // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
-  // dois consumidores, zero segunda coleta). time real em ms → segundos da
-  // lib com dedupe manter-o-último por segundo (a cadência real do poller é
-  // ~4s, então colisões são raras; o guarda existe porque a lib exige tempos
-  // estritamente ascendentes). Histórico vazio => série vazia honesta.
+  // V-MAX Fase 1 (fechamento do §3.1): histórico REAL da store (mesmo
+  // orderflowHistory do heatmap — um dado, dois consumidores, zero segunda
+  // coleta). time real em ms → segundos da lib com dedupe manter-o-último
+  // por segundo (a cadência real do poller é ~4s, então colisões são
+  // raras; o guarda existe porque a lib exige tempos estritamente
+  // ascendentes). Histórico vazio => série vazia honesta.
+  //
+  // useMemo (não mais inline no useEffect): GRADUAÇÃO (2026-09-07) somou um
+  // SEGUNDO consumidor deste mesmo array — CvdLinePlugin (canvas), que
+  // desenha o traço visível de verdade — e a Regra de Ouro 4 proíbe
+  // recomputar a mesma agregação duas vezes.
   const orderflowHistory = useOrderflowHistory();
-  useEffect(() => {
-    if (!cvdSeriesRef.current) return;
+  const cvdPoints = useMemo(() => {
     const bySecond = new Map<number, number>();
     for (const entry of orderflowHistory) {
       bySecond.set(Math.floor(entry.time / 1000), entry.cvd);
     }
-    cvdSeriesRef.current.setData(
-      [...bySecond.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([t, cvd]) => ({ time: t as UTCTimestamp, value: cvd })),
-    );
+    return [...bySecond.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([t, cvd]) => ({ time: t as UTCTimestamp, value: cvd }));
   }, [orderflowHistory]);
+  useEffect(() => {
+    if (!cvdSeriesRef.current) return;
+    // A série nativa (agora transparente) continua recebendo os MESMOS
+    // dados: é o que mantém a escala 'cvd' viva para o priceToCoordinate
+    // que CvdLinePlugin usa — nunca um segundo cálculo do zero.
+    cvdSeriesRef.current.setData(cvdPoints);
+  }, [cvdPoints]);
 
   // Research-driven precision order: VWAP, computed straight from the
   // same real candle array driving the whole chart (chartData already
@@ -2441,41 +2412,33 @@ function EnhancedChart_110_PercentImpl({
   // redesenho independente. Títulos "PVT " prefixados de propósito — sem o
   // prefixo, "R1"/"S1" colidiria visualmente com o R1/S1 de swing já
   // desenhado acima, dois níveis DIFERENTES soando como o mesmo rótulo.
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    for (const line of pivotLinesRef.current) seriesRef.current.removePriceLine(line);
-    pivotLinesRef.current = [];
-    if (!visibility.pivot_points || pivotPoints?.status !== "OK") return;
-
-    // Família "attention" (canvas-palette.ts) — mesma cor de S1/R1: os dois
-    // são, conceitualmente, a MESMA categoria (nível de suporte/resistência
-    // a observar), só com fórmulas diferentes. PP ganha um pouco mais de
-    // peso (é a âncora); R2/R3/S2/S3 ficam mais discretos — mesmo princípio
-    // de hierarquia por opacidade já usado em todo o resto do canvas, nunca
-    // uma cor nova (travado por tests/canvas-palette.test.ts).
-    const levels: Array<[string, number | null, number]> = [
-      ["PVT R3", pivotPoints.r3, 0.22],
-      ["PVT R2", pivotPoints.r2, 0.26],
-      ["PVT R1", pivotPoints.r1, 0.32],
-      ["PVT PP", pivotPoints.pp, 0.4],
-      ["PVT S1", pivotPoints.s1, 0.32],
-      ["PVT S2", pivotPoints.s2, 0.26],
-      ["PVT S3", pivotPoints.s3, 0.22],
+  // GRADUAÇÃO (2026-09-07): mesma migração de premiumDiscountLevels/
+  // scenarioProjectionLevels acima — series.createPriceLine (z=35 nativo
+  // compartilhado) vira HorizontalLevelLinesPlugin (canvas próprio, z=40
+  // real). Títulos "PVT R1"/"PVT PP"/etc. nunca chegavam à tela
+  // (axisLabelVisible:false) — preservados como comentário, cor/opacidade/
+  // preço (o que É observável) preservados byte a byte. Família
+  // "attention" (canvas-palette.ts) — mesma cor de S1/R1: PP ganha mais
+  // peso (é a âncora); R2/R3/S2/S3 mais discretos, mesmo princípio de
+  // hierarquia por opacidade já usado em todo o resto do canvas.
+  const pivotPointLevels = useMemo<HorizontalLevel[]>(() => {
+    if (pivotPoints?.status !== "OK") return [];
+    const levels: Array<[number | null, number]> = [
+      [pivotPoints.r3, 0.22], // PVT R3
+      [pivotPoints.r2, 0.26], // PVT R2
+      [pivotPoints.r1, 0.32], // PVT R1
+      [pivotPoints.pp, 0.4], // PVT PP
+      [pivotPoints.s1, 0.32], // PVT S1
+      [pivotPoints.s2, 0.26], // PVT S2
+      [pivotPoints.s3, 0.22], // PVT S3
     ];
-    for (const [title, price, alpha] of levels) {
+    const out: HorizontalLevel[] = [];
+    for (const [price, alpha] of levels) {
       if (!Number.isFinite(price)) continue;
-      pivotLinesRef.current.push(
-        seriesRef.current.createPriceLine({
-          price: price as number,
-          color: chartPaletteRgba("attention", alpha),
-          lineWidth: 1,
-          lineStyle: LineStyle.Solid,
-          axisLabelVisible: false,
-          title,
-        }),
-      );
+      out.push({ price: price as number, color: chartPaletteRgba("attention", alpha) });
     }
-  }, [pivotPoints, visibility.pivot_points]);
+    return out;
+  }, [pivotPoints]);
 
   const mainLiquidityVisualWeights = useMemo(() => {
     const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));
@@ -2523,42 +2486,6 @@ function EnhancedChart_110_PercentImpl({
     setTrendChannelInfo(reading && midTail !== null ? { direction: reading.direction, windowSize: reading.windowSize, midPrice: midTail } : null);
   }, [data]);
 
-  // SuperTrend real sobre o MESMO array de candles do gráfico (zero segunda
-  // fonte de dado, mesmo padrão da EMA acima). A leitura é recomputada
-  // inteira a cada mudança de `data` — o motor é O(n) e o travamento das
-  // bandas é recursivo desde o início da série, então não existe versão
-  // incremental honesta que dê o mesmo resultado.
-  //
-  // As DUAS séries recebem a série COMPLETA de tempos; onde a tendência é
-  // a outra, o ponto entra como whitespace (`{ time }` sem `value`). Sem
-  // isso a lib interpolaria uma reta ligando os trechos e desenharia um
-  // stop que nunca existiu.
-  //
-  // O ponto do FLIP entra nas DUAS séries de propósito: é o mesmo preço, e
-  // sem ele haveria um buraco de 1 candle exatamente no instante que mais
-  // importa ler.
-  useEffect(() => {
-    if (!supertrendUpRef.current || !supertrendDownRef.current) return;
-    const pontos = superTrendPoints;
-    if (pontos.length === 0) {
-      // Fail-closed: sem aquecimento real de Wilder, nada é desenhado —
-      // nunca uma linha extrapolada sobre janela insuficiente.
-      supertrendUpRef.current.setData([]);
-      supertrendDownRef.current.setData([]);
-      return;
-    }
-    // A separação em duas séries com whitespace é a única parte não-óbvia
-    // deste desenho — vive em supertrend-series.ts, com execução real de
-    // teste, e é a MESMA função que o harness de verificação visual usa
-    // (nunca uma cópia que pudesse divergir do app).
-    const { up, down } = splitSuperTrendSeries<UTCTimestamp>(
-      pontos,
-      (i) => (data[i] ? (data[i].time as UTCTimestamp) : undefined),
-    );
-    supertrendUpRef.current.setData(up);
-    supertrendDownRef.current.setData(down);
-  }, [data, superTrendPoints]);
-
   // SETAS DE ENTRADA E SAÍDA — pedido direto do Operador ("com as setinhas
   // indicando a entrada e saída, todo no gráfico").
   //
@@ -2582,14 +2509,6 @@ function EnhancedChart_110_PercentImpl({
     if (markers.length === 0) return;
     planMarkersRef.current = createSeriesMarkers(seriesRef.current, markers);
   }, [planMarkers, data, visibility.trade_plan_zone]);
-
-  // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
-  // nas séries nativas, nunca desmonta/recomputa.
-  useEffect(() => {
-    if (!supertrendUpRef.current || !supertrendDownRef.current) return;
-    supertrendUpRef.current.applyOptions({ visible: visibility.supertrend });
-    supertrendDownRef.current.applyOptions({ visible: visibility.supertrend });
-  }, [visibility.supertrend]);
 
   // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
   // nas três séries nativas, nunca desmonta/recomputa.
@@ -2681,12 +2600,17 @@ function EnhancedChart_110_PercentImpl({
   // diretriz pede para nunca criar. A informação continua real e
   // auditável (contrato + formatScenarioPathLabel, "· inv NNNN" nos
   // painéis de texto), só não duplica geometria já desenhada.
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    const series = seriesRef.current;
-    scenarioLinesRef.current.forEach((line) => series.removePriceLine(line));
-    scenarioLinesRef.current = [];
-    if (!scenario || !visibility.scenario_projection) return;
+  // GRADUAÇÃO (2026-09-07): mesma migração de premiumDiscountLevels acima
+  // — series.createPriceLine (z=35 nativo compartilhado) vira
+  // HorizontalLevelLinesPlugin (canvas próprio, z=40 real). O `title`
+  // "PROJEÇÃO · SCENARIO A · ..." nunca aparecia na tela (axisLabelVisible:
+  // false, mesmo comentário original já dizia isso — "a diferenciação que
+  // o Operador realmente vê é a cor lavanda + a opacidade, não este
+  // texto") — cor/opacidade/preço, o que de fato é observável, preservados
+  // byte a byte.
+  const scenarioProjectionLevels = useMemo<HorizontalLevel[]>(() => {
+    if (!scenario) return [];
+    const out: HorizontalLevel[] = [];
 
     const alphaOf = (weight: number | null): number => {
       const floor = 0.12;
@@ -2705,42 +2629,15 @@ function EnhancedChart_110_PercentImpl({
     // direção já é legível pela posição real acima/abaixo do preço.
     const PROJECTION_RGB = "186, 168, 255";
 
-    ([
-      { path: scenario.pathA, label: "SCENARIO A" },
-      { path: scenario.pathB, label: "SCENARIO B" },
-    ] as const).forEach(({ path, label }) => {
-      // Diretriz Final — Camada de Cenários Inteligentes §4: confiança
-      // qualitativa real (describeScenarioConfidence), nunca mais a
-      // porcentagem bruta — mesmo motivo de heatTier (ver header de
-      // scenario-engine.ts).
-      const confidence = describeScenarioConfidence(path.opinionWeight);
-      const weightLabel = confidence !== null ? `opinion ${confidence}` : "opinion n/a";
+    ([scenario.pathA, scenario.pathB] as const).forEach((path) => {
       path.targets.forEach((target, i) => {
         if (!Number.isFinite(target.price)) return;
         const alpha = alphaOf(path.opinionWeight) * (TARGET_ALPHA_FALLOFF[i] ?? TARGET_ALPHA_FALLOFF[TARGET_ALPHA_FALLOFF.length - 1]);
-        // §3 ("Pontos de Reteste... sempre derivados de cálculos reais"):
-        // classificação honesta do tipo de reação esperada, derivada só
-        // do sourceKind que este nível já carrega — zero motor novo.
-        const reaction = describeScenarioReaction(target.sourceKind);
-        scenarioLinesRef.current.push(
-          series.createPriceLine({
-            price: target.price,
-            color: `rgba(${PROJECTION_RGB}, ${alpha.toFixed(2)})`,
-            lineWidth: 1,
-            lineStyle: LineStyle.Solid,
-            axisLabelVisible: false,
-            // Prefixo explícito "PROJEÇÃO": metadado real (title da
-            // própria lib), correto e auditável mesmo hoje sem UI de
-            // hover/legenda que o exiba — a diferenciação que o OPERADOR
-            // realmente vê é a cor lavanda dedicada + a opacidade
-            // decrescente por rank, não este texto (ver comentário no
-            // topo do efeito).
-            title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} (${reaction}) · ${weightLabel}`,
-          }),
-        );
+        out.push({ price: target.price, color: `rgba(${PROJECTION_RGB}, ${alpha.toFixed(2)})` });
       });
     });
-  }, [scenario, visibility.scenario_projection]);
+    return out;
+  }, [scenario]);
 
   // Refinamento Final §7 (Premium/Discount zones): as 3 fronteiras REAIS do
   // dealing range atual (último swing high confirmado, equilíbrio 50%,
@@ -2773,33 +2670,31 @@ function EnhancedChart_110_PercentImpl({
   // continuam sempre desenhados por este motor: Fibonacci nunca traça uma
   // linha em 0%/100% (FIB_RETRACEMENT_RATIOS não inclui os extremos), então
   // não há sobreposição real nesses dois pontos.
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    const series = seriesRef.current;
-    premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));
-    premiumDiscountLinesRef.current = [];
-    if (!premiumDiscount || !visibility.premium_discount) return;
-    const mkPd = (price: number, color: string, title: string) => {
+  // GRADUAÇÃO (2026-09-07, "resíduo honesto" de chart-layer-depth.ts):
+  // migrado de series.createPriceLine (nativo, preso ao z=35 compartilhado)
+  // para HorizontalLevelLinesPlugin (canvas próprio, z=40 real via
+  // getChartLayerZIndex). Zero mudança de dado/cor/largura — só a
+  // primitiva de desenho. Os títulos antigos ("Premium · topo do range" /
+  // "Equilibrium · 50%" / "Discount · fundo do range") nunca chegavam à
+  // tela (axisLabelVisible:false, mesma classe de achado já documentada
+  // para harmônicos antes da correção deles) — preservados aqui só como
+  // comentário, Regra de Ouro 4: nada que já era observável se perde.
+  const premiumDiscountLevels = useMemo<HorizontalLevel[]>(() => {
+    if (!premiumDiscount) return [];
+    const out: HorizontalLevel[] = [];
+    const mkPd = (price: number, color: string) => {
       if (!Number.isFinite(price)) return;
-      premiumDiscountLinesRef.current.push(
-        series.createPriceLine({
-          price,
-          color,
-          lineWidth: 1,
-          lineStyle: LineStyle.Solid,
-          axisLabelVisible: false,
-          title,
-        }),
-      );
+      out.push({ price, color });
     };
     const fibAlreadyDrawsEquilibrium =
       visibility.fibonacci && (fibonacciLevels ?? []).some((l) => l.ratio === 0.5 && Number.isFinite(l.price));
-    mkPd(premiumDiscount.rangeHigh.price, "rgba(242, 54, 69, 0.30)", "Premium · topo do range");
+    mkPd(premiumDiscount.rangeHigh.price, "rgba(242, 54, 69, 0.30)"); // Premium · topo do range
     if (!fibAlreadyDrawsEquilibrium) {
-      mkPd(premiumDiscount.equilibrium, "rgba(138, 180, 248, 0.30)", "Equilibrium · 50%");
+      mkPd(premiumDiscount.equilibrium, "rgba(138, 180, 248, 0.30)"); // Equilibrium · 50%
     }
-    mkPd(premiumDiscount.rangeLow.price, "rgba(8, 153, 129, 0.30)", "Discount · fundo do range");
-  }, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);
+    mkPd(premiumDiscount.rangeLow.price, "rgba(8, 153, 129, 0.30)"); // Discount · fundo do range
+    return out;
+  }, [premiumDiscount, visibility.fibonacci, fibonacciLevels]);
 
   // Pendência #6 (migração nativo→canvas), perna final: a disputa de
   // vencedor entre harmônico/H&S/triângulo, o desenho do zigue-zague, das
@@ -3997,6 +3892,64 @@ function EnhancedChart_110_PercentImpl({
           trianglePattern={trianglePattern}
           headShouldersPattern={headShouldersPattern}
           activeLanes={activeProfileLanes}
+        />
+      )}
+      {/* GRADUAÇÃO (2026-09-07, "resíduo honesto" de chart-layer-depth.ts):
+         premium_discount/scenario_projection/pivot_points migrados de
+         series.createPriceLine (nativo, z=35 compartilhado) para o MESMO
+         HorizontalLevelLinesPlugin reusável — os 3 desenhavam exatamente a
+         mesma geometria (reta horizontal 1px, largura total, sem rótulo).
+         z real via getChartLayerZIndex(layerId), computado DENTRO do
+         próprio plugin (mesmo padrão de todo canvas irmão neste diretório —
+         travado por chart-layer-depth.test.ts). */}
+      {visibility.premium_discount && (
+        <HorizontalLevelLinesPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          levels={premiumDiscountLevels}
+          layerId="premium_discount"
+        />
+      )}
+      {visibility.scenario_projection && (
+        <HorizontalLevelLinesPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          levels={scenarioProjectionLevels}
+          layerId="scenario_projection"
+        />
+      )}
+      {visibility.pivot_points && (
+        <HorizontalLevelLinesPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          levels={pivotPointLevels}
+          layerId="pivot_points"
+        />
+      )}
+      {/* GRADUAÇÃO (2026-09-07, mesmo "resíduo honesto"): SuperTrend
+         migrado das 2 LineSeries nativas (chart.addSeries(LineSeries),
+         z=35 compartilhado) para canvas próprio — SupertrendPlugin reusa
+         splitSuperTrendSeries (supertrend-series.ts) byte a byte, só troca
+         COMO o resultado é desenhado. `superTrendPoints` é a MESMA leitura
+         já usada por superTrendLastLine acima — zero segunda fonte. */}
+      {visibility.supertrend && (
+        <SupertrendPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          points={superTrendPoints}
+        />
+      )}
+      {/* GRADUAÇÃO (2026-09-07): CVD é a ÚLTIMA das 5 camadas nativas —
+         `scaleSeries` é a MESMA LineSeries nativa de sempre (agora
+         transparente), só mantida viva para dar a conversão de coordenada
+         da escala PRÓPRIA 'cvd' (volume assinado, não preço). Ver
+         cabeçalho de CvdLinePlugin.tsx para o raciocínio completo. */}
+      {visibility.cvd && (
+        <CvdLinePlugin
+          chart={chartReady?.chart ?? null}
+          scaleSeries={chartReady?.cvdSeries ?? null}
+          points={cvdPoints}
         />
       )}
       {/* MD-7 (Visual Confidence Trace, pedido direto do Operador):
