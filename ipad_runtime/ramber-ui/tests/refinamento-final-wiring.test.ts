@@ -898,6 +898,12 @@ describe('Lapidação institucional (diretiva com imagem de referência): Liquid
     expect(heatmap).not.toContain('rgba(255, 162, 0');
   });
 
+  it('Frente 2 §14.2 (auditoria de paleta): a etiqueta de eixo do SWEEP (EnhancedChart_110_Percent.tsx) também migrou para o canônico — a linha irmã já tinha migrado no Achado 3.1, a etiqueta ficou pra trás sem ser notada até esta auditoria', () => {
+    const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    expect(chart).not.toContain('rgba(255, 162, 0');
+    expect(chart).toContain('color: chartPaletteRgba("attention", 0.85),');
+  });
+
   it('Kill Zones NÃO entra nesta diferenciação — o TOM âmbar (255,176,32) segue o mesmo. Achado 2.6: os alphas base foram recalibrados (0.06/0.22 → 0.38/0.55) porque a geometria deixou de ser lavagem de altura total e virou faixa de 6px; LABEL_ALPHA sumiu junto com o rótulo (duplicação do badge do header)', () => {
     const killZones = read('../src/chart/KillZoneBandsPlugin.tsx');
     expect(killZones).toContain('const FILL_ALPHA = 0.38;');

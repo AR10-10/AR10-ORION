@@ -30,6 +30,7 @@ import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeDeltaDivergence, type DeltaDivergenceReading } from "../engine-bridge";
 import { useOrderflowHistory } from "../store/unified-snapshot-store";
 import { chartPaletteRgba } from "./canvas-palette";
+import { activeCanvasLabelFont } from "../nexus/canvas-label";
 
 const RAIO_PONTO = 3;
 
@@ -130,8 +131,14 @@ export function DeltaDivergencePlugin({ chart, series, data }: DeltaDivergencePl
       // Rótulo curto no swing mais recente. Diz o que É (exaustão de um
       // lado), nunca o que fazer — a divergência marca um LOCAL, não um
       // gatilho, e é essa a própria definição pesquisada do motor.
-      const texto = baixista ? "DIV · EXAUSTÃO COMPRADORA" : "DIV · EXAUSTÃO VENDEDORA";
-      ctx.font = "10px ui-monospace, monospace";
+      //
+      // Frente 2 §17/§14 (auditoria de labels): texto traduzido pra English
+      // Technical, e a fonte deixou de ser um "10px ui-monospace" congelado
+      // (o único ctx.font desta família que não acompanhava a tela — todo
+      // o resto de chart/*.tsx já usa activeCanvasLabelFont(),
+      // nexus/canvas-label.ts, 9-11px conforme largura real do viewport).
+      const texto = baixista ? "DIV · BUYER EXHAUSTION" : "DIV · SELLER EXHAUSTION";
+      ctx.font = activeCanvasLabelFont();
       ctx.textBaseline = "middle";
       ctx.textAlign = x2 >= cssWidth / 2 ? "right" : "left";
       const dx = x2 >= cssWidth / 2 ? -(RAIO_PONTO + 4) : RAIO_PONTO + 4;

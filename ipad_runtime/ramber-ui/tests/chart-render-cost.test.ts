@@ -106,15 +106,16 @@ describe('painel que flutua sobre o gráfico é opaco', () => {
    * className real da casca do dropdown de camadas.
    *
    * ANCORAGEM DELIBERADA (a primeira versão deste helper estava errada e o
-   * teste ficou vermelho por isso): "CAMADAS DO GRÁFICO" aparece DUAS vezes
-   * em App.tsx — num comentário de seção ~340 linhas antes, e no JSX real.
+   * teste ficou vermelho por isso): "CHART LAYERS" aparece DUAS vezes em
+   * App.tsx — num comentário de seção ~340 linhas antes, e no JSX real
+   * (título traduzido pra English Technical na Frente 2 §17, mesmo caso).
    * `indexOf` pegava o comentário e a janela caía no meio de outro
-   * componente. Ancorar em `>CAMADAS DO GRÁFICO<` só casa o nó de texto JSX,
-   * e daí subimos até o className da casca em vez de contar caracteres.
+   * componente. Ancorar em `>CHART LAYERS<` só casa o nó de texto JSX, e
+   * daí subimos até o className da casca em vez de contar caracteres.
    */
   const cascaDoPainel = (): string => {
     const src = app();
-    const i = src.indexOf(">CAMADAS DO GRÁFICO<");
+    const i = src.indexOf(">CHART LAYERS<");
     expect(i, "título do painel de camadas não encontrado no JSX").toBeGreaterThan(-1);
     const antes = src.slice(0, i);
     const j = antes.lastIndexOf('className="!fixed !z-[1001]');

@@ -50,19 +50,35 @@ export const MAX_PATTERN_MARKERS = 4;
 // horizontal é o recurso escasso, e o nome inteiro ("Engolfo de Alta")
 // roubaria a faixa das velas. O nome completo continua real e visível nas
 // peças publicáveis e no tooltip do painel.
+//
+// Frente 2 §17/§14 (auditoria de labels): as 6 siglas abaixo (DARK_CLOUD/
+// MORNING_STAR/EVENING_STAR/HAMMER/HANGING_MAN/SHOOTING_STAR/
+// INVERTED_HAMMER) derivavam do NOME EM PORTUGUÊS do padrão ("Nuvem",
+// "Estrela", "Martelo", "Enforcado", "Estrela cadente", "Martelo
+// invertido") em vez da constante em inglês acima, ao contrário de toda
+// sigla irmã nesta mesma tabela — inconsistência achada na auditoria,
+// nunca notada porque o resultado (3 letras maiúsculas no canvas) parece
+// igualmente "técnico" nos dois casos. Corrigido para derivar do MESMO
+// nome em inglês que todo o resto da tabela já usa. Isso também fecha um
+// segundo achado real da mesma auditoria: MORNING_STAR e EVENING_STAR
+// (dois padrões de viés OPOSTO) colapsavam para a mesma sigla "EST" — só
+// distinguíveis por cor/posição no chart, nunca pelo texto do rótulo em
+// si. MST/EVS resolve isso sem quebrar o padrão bull/bear-mesma-sigla
+// deliberado de ENG/HAR/MBZ (esses são o MESMO padrão nos dois sentidos,
+// não dois padrões diferentes — por isso continuam iguais).
 const SHORT_LABEL: Record<string, string> = {
   BULLISH_ENGULFING: "ENG",
   BEARISH_ENGULFING: "ENG",
   BULLISH_HARAMI: "HAR",
   BEARISH_HARAMI: "HAR",
   PIERCING_LINE: "PRC",
-  DARK_CLOUD: "NUV",
-  MORNING_STAR: "EST",
-  EVENING_STAR: "EST",
-  HAMMER: "MAR",
-  HANGING_MAN: "ENF",
-  SHOOTING_STAR: "ESC",
-  INVERTED_HAMMER: "MRI",
+  DARK_CLOUD: "DCC",
+  MORNING_STAR: "MST",
+  EVENING_STAR: "EVS",
+  HAMMER: "HMR",
+  HANGING_MAN: "HNM",
+  SHOOTING_STAR: "SST",
+  INVERTED_HAMMER: "IHM",
   MARUBOZU_BULL: "MBZ",
   MARUBOZU_BEAR: "MBZ",
   DOJI: "DOJ",

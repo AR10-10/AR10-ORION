@@ -47,7 +47,14 @@ const CODIGOS: Record<string, string> = {
   // Graduações desta rodada. "SuperTrend" (10 caracteres) e "Mitigation"
   // (10) eram, de longe, os nomes mais longos que podiam entrar nesta
   // linha — exatamente o que o pedido "o tamanho das etiquetas" combate.
-  SuperTrend: "ST",
+  //
+  // Frente 2 §14 (auditoria de labels): "ST" colidia com o "ST" = Stop já
+  // usado pelo sistema de etiquetas do eixo de preço
+  // (EnhancedChart_110_Percent.tsx) — mesmo par de caracteres, dois
+  // significados sem relação nenhuma, no mesmo sistema visual (chip de
+  // Zona Institucional adjacente ao eixo). "STR" resolve a colisão sem
+  // alongar a etiqueta de forma perceptível.
+  SuperTrend: "STR",
   Breaker: "BRK",
   Mitigation: "MIT",
   "Swing H": "SW↑",

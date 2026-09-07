@@ -4723,7 +4723,7 @@ function ConfigPanel() {
   return (
     <div className="flex-1 overflow-auto p-4 flex flex-col gap-4 max-w-4xl mx-auto w-full">
       <div className="text-2xl font-black text-[#00f0ff] drop-shadow-[0_0_10px_#00f0ff] tracking-[0.2em] mb-4">
-        CONFIGURAÇÃO DO SISTEMA
+        SYSTEM SETTINGS
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Object.entries(widgets).map(([id, state]: [string, any]) => (
@@ -4735,21 +4735,21 @@ function ConfigPanel() {
               {WIDGET_LABELS[id] ?? id}
             </span>
             <div className="flex justify-between items-center bg-[#010308] p-2 rounded border border-[#00f0ff20]">
-              <span className="text-xs text-[#8ab4f8]">VISIBILIDADE</span>
+              <span className="text-xs text-[#8ab4f8]">VISIBILITY</span>
               <button
                 onClick={() => toggleWidget(id, "visible")}
                 className={`text-xs px-3 py-1 font-bold rounded ${state.visible ? "bg-[#00ffaa20] text-[#00ffaa] border border-[#00ffaa50]" : "bg-[#ff005520] text-[#ff0055] border border-[#ff005550]"}`}
               >
-                {state.visible ? "VISÍVEL" : "OCULTO"}
+                {state.visible ? "VISIBLE" : "HIDDEN"}
               </button>
             </div>
             <div className="flex justify-between items-center bg-[#010308] p-2 rounded border border-[#00f0ff20]">
-              <span className="text-xs text-[#8ab4f8]">MODO FLUTUANTE (REDIMENSIONÁVEL)</span>
+              <span className="text-xs text-[#8ab4f8]">FLOATING MODE (RESIZABLE)</span>
               <button
                 onClick={() => toggleWidget(id, "floating")}
                 className={`text-xs px-3 py-1 font-bold rounded ${state.floating ? "bg-[#00f0ff20] text-[#00f0ff] border border-[#00f0ff50]" : "bg-transparent text-[#8ab4f8]/50 border border-[#8ab4f8]/30 hover:text-white"}`}
               >
-                {state.floating ? "ATIVO" : "INATIVO"}
+                {state.floating ? "ON" : "OFF"}
               </button>
             </div>
           </div>
@@ -4860,7 +4860,7 @@ function WorkspaceManagerPanel() {
   );
 }
 
-// --- CAMADAS DO GRÁFICO (Finding M, FASE Ω Priority 3) — painel novo e
+// --- CHART LAYERS (Finding M, FASE Ω Priority 3) — painel novo e
 // aditivo, mesmo padrão exato do Workspace Manager acima (mesmo overlay
 // modal, mesma lista de linhas com um controle por item), só que para os 6
 // overlays do CANVAS do gráfico em vez dos widgets do layout. Toggle
@@ -5027,16 +5027,16 @@ function ChartLayersPanelContent() {
       <button
         type="button"
         onClick={() => restoreChartLayersToAuto?.()}
-        title="Cada camada aparece só quando tem relevância estatística real agora (Relevance Engine) + competição real de destaque entre camadas (Visual Budget) — nunca precisa ser administrado manualmente."
+        title="Each layer appears only when it has real statistical relevance now (Relevance Engine) + real competition for emphasis between layers (Visual Budget) — never needs to be managed manually."
         className={`w-full flex flex-col items-center gap-0.5 py-2.5 rounded border-2 font-bold uppercase tracking-wider transition-colors ${
           emEstadoAutomatico
             ? "border-[#00ffaa] bg-[#00ffaa15] text-[#00ffaa]"
             : "border-[#8ab4f8]/30 text-[#8ab4f8]/70 hover:text-[#8ab4f8] hover:border-[#8ab4f8]/50"
         }`}
       >
-        <span className="text-[0.55rem] tracking-[0.2em]">AR10 CYBORG · Estado Inteligente Adaptativo</span>
+        <span className="text-[0.55rem] tracking-[0.2em]">AR10 CYBORG · Adaptive Intelligent State</span>
         <span className="text-[0.38rem] font-normal normal-case tracking-normal opacity-80">
-          {emEstadoAutomatico ? "ativo agora — leitura pronta, sem modo pra administrar" : "clique para voltar ao estado adaptativo padrão"}
+          {emEstadoAutomatico ? "active now — reading ready, nothing to manage" : "click to return to the default adaptive state"}
         </span>
       </button>
       {/* A LEITURA que substitui a parede de interruptores no estado padrão.
@@ -5061,12 +5061,12 @@ function ChartLayersPanelContent() {
           </div>
         ) : (
           <span className="text-[0.4rem] text-[#8ab4f8]/50 normal-case tracking-normal">
-            nenhuma camada com leitura real ainda neste ciclo
+            no layer has a real reading yet this cycle
           </span>
         )}
         {resumo.manuais.length > 0 && (
           <div className="flex flex-wrap gap-1 items-center">
-            <span className="text-[0.38rem] text-[#8ab4f8]/50 uppercase tracking-wider">fixadas por você</span>
+            <span className="text-[0.38rem] text-[#8ab4f8]/50 uppercase tracking-wider">pinned by you</span>
             {resumo.manuais.map((m) => (
               <span
                 key={m.id}
@@ -5084,11 +5084,11 @@ function ChartLayersPanelContent() {
         className="text-[0.4rem] text-[#8ab4f8]/50 hover:text-[#8ab4f8] tracking-[0.15em] uppercase text-left flex items-center gap-1"
       >
         <span>{habilitarManualAberto ? "▾" : "▸"}</span>
-        <span>Habilitar camada a camada, se quiser</span>
+        <span>Enable layer by layer, if you want</span>
       </button>
       {habilitarManualAberto && (
         <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
-          Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
+          Real canvas overlays — hiding a layer never changes the data, only the display
         </span>
       )}
       {habilitarManualAberto && CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
@@ -5124,9 +5124,9 @@ function ChartLayersPanelContent() {
                         ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
                         : "border-[#00ffaa]/40 text-[#00ffaa]/80"
                     }`}
-                    title={relevance?.reason ?? "Relevance Engine ainda sem leitura real neste ciclo."}
+                    title={relevance?.reason ?? "Relevance Engine has no real reading yet this cycle."}
                   >
-                    auto{relevance?.emphasis === "highlight" ? " · destaque" : ""}
+                    auto{relevance?.emphasis === "highlight" ? " · highlight" : ""}
                   </span>
                 )}
                 <button
@@ -5134,10 +5134,10 @@ function ChartLayersPanelContent() {
                   onClick={() => toggleChartLayer?.(id)}
                   title={
                     cedeuEspaco
-                      ? `Tem leitura real agora, mas cedeu espaço para camadas mais precisas: ${decisao?.reason ?? ""}. Clicar fixa esta camada na tela.`
+                      ? `Has a real reading now, but yielded space to more precise layers: ${decisao?.reason ?? ""}. Click to pin this layer on screen.`
                       : isAuto
-                        ? `Clicar assume controle manual desta camada (override real). ${decisao?.reason ?? ""}`
-                        : "Override manual ativo."
+                        ? `Click to take manual control of this layer (real override). ${decisao?.reason ?? ""}`
+                        : "Manual override active."
                   }
                   className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
                     on
@@ -5145,13 +5145,13 @@ function ChartLayersPanelContent() {
                       : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
                   }`}
                 >
-                  {on ? "visível" : cedeuEspaco ? "cedeu espaço" : "oculta"}
+                  {on ? "visible" : cedeuEspaco ? "yielded space" : "hidden"}
                 </button>
                 {!isAuto && (
                   <button
                     type="button"
                     onClick={() => resetChartLayerToAuto?.(id)}
-                    title="Devolver esta camada ao comportamento automático (Relevance Engine decide)."
+                    title="Return this layer to automatic behavior (Relevance Engine decides)."
                     className="text-[0.38rem] px-1.5 py-1 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#00ffaa] hover:border-[#00ffaa]/40 font-bold uppercase tracking-wider"
                   >
                     ⟲ auto
@@ -5205,7 +5205,7 @@ function ChartLayersPanel() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="cyber-header flex items-center justify-between">
-          <span className="font-bold tracking-[0.2em]">CAMADAS DO GRÁFICO</span>
+          <span className="font-bold tracking-[0.2em]">CHART LAYERS</span>
           <div
             className="text-[#8ab4f8]/50 hover:text-[#00f0ff] px-1 py-0.5 rounded cursor-pointer"
             onClick={() => setChartLayersOpen?.(false)}
@@ -5231,10 +5231,10 @@ function PropertiesPanelBody({ onOpenSettings }: { onOpenSettings: () => void })
       <button
         type="button"
         onClick={onOpenSettings}
-        title="Ir para Configurações do Sistema (aba SETTINGS)"
+        title="Go to System Settings (SETTINGS tab)"
         className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/70 hover:text-[#00f0ff] hover:border-[#00f0ff]/40 text-[0.45rem] font-bold uppercase tracking-wider transition-colors"
       >
-        <span>Configurações do Sistema</span>
+        <span>System Settings</span>
         <Settings size={12} />
       </button>
     </>

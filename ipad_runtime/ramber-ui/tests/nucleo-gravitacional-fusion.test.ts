@@ -172,7 +172,8 @@ describe('Painel: badge AUTO real + reset por camada + 4º preset — nunca um s
     const a = app();
     expect(a).toContain('const isAuto = autoMode[id];');
     expect(a).toContain('const relevance = layerRelevance?.[id] ?? null;');
-    expect(a).toContain('title={relevance?.reason ?? "Relevance Engine ainda sem leitura real neste ciclo."}');
+    // Frente 2 §17: tooltip traduzido pra English Technical.
+    expect(a).toContain('title={relevance?.reason ?? "Relevance Engine has no real reading yet this cycle."}');
     expect(a).toContain('onClick={() => resetChartLayerToAuto?.(id)}');
   });
 
@@ -186,11 +187,13 @@ describe('Painel: badge AUTO real + reset por camada + 4º preset — nunca um s
 });
 
 describe('EPC FINAL §3/§12 ("quando destacar"): badge auto do painel mostra o emphasis real, nunca um efeito sem motivo', () => {
-  it('badge acende (borda/fundo sólidos) e mostra "· destaque" só quando relevance.emphasis === "highlight" — nunca decorativo', () => {
+  it('badge acende (borda/fundo sólidos) e mostra "· highlight" só quando relevance.emphasis === "highlight" — nunca decorativo', () => {
+    // Frente 2 §17: "· destaque" traduzido pra "· highlight" (English
+    // Technical) — mesma lógica, mesmo dado real, só o rótulo mudou.
     const a = app();
     const idx = a.indexOf('{isAuto && (');
-    const block = a.slice(idx, a.indexOf(')}', a.indexOf('destaque', idx)) + 2);
+    const block = a.slice(idx, a.indexOf(')}', a.indexOf('· highlight', idx)) + 2);
     expect(block).toContain('relevance?.emphasis === "highlight"');
-    expect(block).toContain('auto{relevance?.emphasis === "highlight" ? " · destaque" : ""}');
+    expect(block).toContain('auto{relevance?.emphasis === "highlight" ? " · highlight" : ""}');
   });
 });

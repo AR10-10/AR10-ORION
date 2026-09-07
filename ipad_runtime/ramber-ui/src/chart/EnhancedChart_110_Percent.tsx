@@ -3601,7 +3601,13 @@ function EnhancedChart_110_PercentImpl({
               // dizendo exatamente o que "(3x)" dizia antes.
               text: `⚡ SWEEP ${arrow}`,
               secondaryText: cluster.count > 1 ? `ZONE ${cluster.count}x` : undefined,
-              color: "rgba(255, 162, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima) — alpha real abaixo controla a opacidade final.
+              // Frente 2 §14.2 (paleta consolidada): a price line irmã deste
+              // rótulo já usa chartPaletteRgba("attention", ...) desde a
+              // migração pra LiquiditySweepLinesPlugin.tsx (Achado 3.1,
+              // refinamento-final-wiring.test.ts) — este literal redigitado
+              // sobreviveu à parte, fora daquele arquivo, sem ser migrado
+              // junto. Mesmo matiz canônico (38°), agora pela mesma chamada.
+              color: chartPaletteRgba("attention", 0.85),
               alpha,
               side: "left",
             },

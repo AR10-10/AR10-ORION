@@ -148,8 +148,9 @@ describe("Voids: o filtro seria redundante — e a redundância é uma INVARIANT
     const pisoDoMotorEmAtr = 1; // VOID_MIN_DISPLACEMENT_RATIO
     expect(MIN_ZONE_ATR_FRACTION).toBeLessThan(pisoDoMotorEmAtr);
     // A margem é o que torna o argumento robusto mesmo com os dois ATR
-    // vindo de janelas diferentes (motor: lorentzian-classifier.js;
-    // este módulo: regime-engine.js — ambos Wilder 14).
+    // vindo de fórmulas diferentes (motor: lorentzian-classifier.js,
+    // Wilder/RMA série; este módulo: regime-engine.js, SMA escalar — ver
+    // correção de honestidade no cabeçalho de liquidity-significance.ts).
     expect(pisoDoMotorEmAtr / MIN_ZONE_ATR_FRACTION).toBeGreaterThan(8);
     // Prova executável de que o filtro é no-op nesta faixa: uma zona no
     // MENOR tamanho que o motor de voids consegue produzir já é significativa.

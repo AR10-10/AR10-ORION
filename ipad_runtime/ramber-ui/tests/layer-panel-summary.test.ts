@@ -142,7 +142,7 @@ describe("a frase de estado diz a verdade, de relance", () => {
       todosAuto(["a", "b"]),
       nadaManual(["a", "b"]),
     );
-    expect(describeLayerPanel(s)).toBe("2 no gráfico");
+    expect(describeLayerPanel(s)).toBe("2 on chart");
   });
 
   it("menciona fixadas e cedidas só quando existem", () => {
@@ -153,9 +153,9 @@ describe("a frase de estado diz a verdade, de relance", () => {
       { a: false, fixa: true, cedeu: false },
     );
     const frase = describeLayerPanel(s);
-    expect(frase).toContain("1 no gráfico");
-    expect(frase).toContain("1 fixada por você");
-    expect(frase).toContain("1 cedeu espaço");
+    expect(frase).toContain("1 on chart");
+    expect(frase).toContain("1 pinned by you");
+    expect(frase).toContain("1 yielded space");
   });
 });
 
@@ -188,7 +188,7 @@ describe("o painel virou UMA leitura, não uma parede de interruptores", () => {
     expect(src.match(/resolveAutoLayerVisibility\(/g)).toHaveLength(1);
   });
 
-  it("o rótulo distingue 'cedeu espaço' de 'oculta' na própria tela", () => {
-    expect(app()).toContain('{on ? "visível" : cedeuEspaco ? "cedeu espaço" : "oculta"}');
+  it("o rótulo distingue 'yielded space' de 'hidden' na própria tela", () => {
+    expect(app()).toContain('{on ? "visible" : cedeuEspaco ? "yielded space" : "hidden"}');
   });
 });

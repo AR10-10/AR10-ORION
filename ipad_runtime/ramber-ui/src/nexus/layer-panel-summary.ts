@@ -89,10 +89,13 @@ export function summarizeLayerPanel(
   return out;
 }
 
-/** Frase única de estado, para o Operador ler de relance sem contar chips. */
+/** Frase única de estado, para o Operador ler de relance sem contar chips.
+ *  [Frente 2 §17, padronização de idioma]: texto visível traduzido para
+ *  English Technical — este arquivo permanece 100% funcional/comentado em
+ *  português (código interno, nunca lido pelo Operador). */
 export function describeLayerPanel(s: LayerPanelSummary): string {
-  const partes = [`${s.ativas.length} no gráfico`];
-  if (s.manuais.length > 0) partes.push(`${s.manuais.length} fixada${s.manuais.length > 1 ? "s" : ""} por você`);
-  if (s.cederam.length > 0) partes.push(`${s.cederam.length} cedeu espaço`);
+  const partes = [`${s.ativas.length} on chart`];
+  if (s.manuais.length > 0) partes.push(`${s.manuais.length} pinned by you`);
+  if (s.cederam.length > 0) partes.push(`${s.cederam.length} yielded space`);
   return partes.join(" · ");
 }

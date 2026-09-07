@@ -131,7 +131,11 @@ describe("fiação — o gráfico usa a fonte única, não uma segunda régua", 
 // ---------------------------------------------------------------------------
 describe("as fontes graduadas nesta rodada também têm código curto", () => {
   it("SuperTrend, Breaker e Mitigation encurtam", () => {
-    expect(zoneMemberCode("SuperTrend")).toBe("ST");
+    // Frente 2 §14 (auditoria): era "ST" até esta rodada — colidia com o
+    // "ST" = Stop do sistema de etiquetas de eixo
+    // (EnhancedChart_110_Percent.tsx), fora deste arquivo, por isso o teste
+    // de colisão abaixo (interno a este módulo) nunca pegou o problema.
+    expect(zoneMemberCode("SuperTrend")).toBe("STR");
     expect(zoneMemberCode("Breaker")).toBe("BRK");
     expect(zoneMemberCode("Mitigation")).toBe("MIT");
   });
@@ -150,8 +154,12 @@ describe("as fontes graduadas nesta rodada também têm código curto", () => {
   it("uma zona com as fontes novas continua curta", () => {
     const antes = "VWAP + SuperTrend + Breaker + Mitigation";
     const depois = formatZoneMemberList(["VWAP", "SuperTrend", "Breaker", "Mitigation"]);
-    expect(depois).toBe("VWAP + ST + BRK + MIT");
+    expect(depois).toBe("VWAP + STR + BRK + MIT");
     expect(depois.length).toBeLessThan(antes.length * 0.6);
+  });
+
+  it("Frente 2 §14: 'STR' nunca pode voltar a ser 'ST' — colidiria de novo com Stop no eixo de preço", () => {
+    expect(zoneMemberCode("SuperTrend")).not.toBe("ST");
   });
 
   it("TODO label que o motor de zonas produz tem código — nenhum escapa por extenso", () => {
