@@ -400,6 +400,7 @@ import { buildRiskSuggestion } from "../../src/risk/index.js";
 // é declarado, nunca fabricado.
 import { classifyFps, classifyCycleLatency, memoryUsedMB, wasmVariantLabel } from "../../src/telemetry/index.js";
 import { APP_SEAL } from "./version";
+import { BUILD_COMMIT_SHORT } from "./build-info";
 // llm-bridge.ts (and the @mlc-ai/web-llm package it imports) is loaded via
 // dynamic import() only inside NeuralCoreWidget's activation handler below
 // — never a static top-level import here. A static import would pull
@@ -12597,6 +12598,16 @@ function TelemetryHealthWidget() {
             worker, cujo nome de cache deriva desta mesma constante).
             Aparece UMA vez em toda a UI (zero repetição). */}
         <Row label="BUILD" value={APP_SEAL} valueClass="text-[#00f0ff]" />
+        {/* Ordem P0 (RUNTIME PARITY, 2026-09-07): commit REAL do build
+            servido, ao lado do selo semântico acima — dois commits sem
+            bump de versão mostrariam o MESMO "BUILD" mas nunca o mesmo
+            "COMMIT" (ver build-info.ts). É a prova física de qual código
+            está executando, não só qual versão foi anunciada. */}
+        <Row
+          label="COMMIT"
+          value={BUILD_COMMIT_SHORT}
+          valueClass={BUILD_COMMIT_SHORT === "unknown" ? "text-[#00f0ff]/40" : "text-[#00f0ff]"}
+        />
         {/* Ordem "Ciborgue Vivo" §3 ("gerar relatórios claros para nós") +
             pedido do Operador (parte 3/3, "auto-diagnóstico... não só sob
             demanda"): síntese dos MESMOS sinais reais já mostrados acima
