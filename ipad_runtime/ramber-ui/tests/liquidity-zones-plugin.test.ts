@@ -248,7 +248,11 @@ describe('EnhancedChart_110_Percent: LiquidityZonesPlugin substitui as price lin
 
   it('setChartReady dispara junto da criação real do chart (o plugin nunca depende de um re-render incidental para começar a desenhar)', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
-    expect(chart).toMatch(/setChartReady\(\{ chart, series \}\);/);
+    // GRADUAÇÃO (2026-09-07): chartReady ganhou um 3º campo (cvdSeries) —
+    // a série nativa transparente que CvdLinePlugin usa só pela conversão
+    // de coordenada da escala 'cvd'. O contrato que este teste protege não
+    // mudou: ainda dispara na mesma criação do chart, nunca depois.
+    expect(chart).toMatch(/setChartReady\(\{ chart, series, cvdSeries \}\);/);
     expect(chart).toMatch(/setChartReady\(null\);/);
   });
 });

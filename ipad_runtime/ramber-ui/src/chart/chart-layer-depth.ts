@@ -228,23 +228,28 @@ export function getChartLayerTier(layerId: string): ChartDepthTier {
  *  (mesmo dado, mesma clusterização, mesmo decaimento) em canvas próprio,
  *  `getChartLayerZIndex("liquidity_sweep")` = 50 (event).
  *
- *  RESÍDUO HONESTO, declarado em vez de escondido: as 5 nativas restantes
- *  (CHART_NATIVE_LAYER_IDS abaixo) dividem UM canvas só, então só podem
- *  ter UM z — cvd/supertrend/pivot_points/premium_discount/
- *  scenario_projection. premium_discount e scenario_projection já tinham
- *  a declaração corrigida (ver CHART_LINE_ONLY_LAYER_IDS abaixo); harmonics
- *  e liquidity_sweep, as duas únicas camadas "event" que chegaram a ser
- *  nativas, já saíram por completo. Migrar as 5 restantes para canvas
- *  próprio continua sendo o passo seguinte real para fechar 35 de vez —
- *  mudança maior, cada uma sua própria rodada.
+ *  RESÍDUO FECHADO (GRADUAÇÃO 2026-09-07): as 5 nativas originais
+ *  (CHART_NATIVE_LAYER_IDS chegou a listar todas elas) migraram todas para
+ *  canvas próprio na mesma rodada — premium_discount/scenario_projection/
+ *  pivot_points para HorizontalLevelLinesPlugin.tsx, supertrend para
+ *  SupertrendPlugin.tsx, e `cvd` (a última, e a mais diferente das 5 —
+ *  série que segue o preço na sua PRÓPRIA escala, não reta fixa nem stop
+ *  de 1px na escala das velas) para CvdLinePlugin.tsx. Todas com seu
+ *  próprio z=40 real via getChartLayerZIndex, fora do canvas nativo
+ *  compartilhado. harmonics e liquidity_sweep, as duas únicas camadas
+ *  "event" que chegaram a ser nativas, já tinham saído por completo antes.
+ *
+ *  z=35 continua existindo — é o z real das VELAS (sempre nativas, sempre
+ *  vão continuar sendo: candlestick é a própria primitiva da lib) — mas
+ *  agora NENHUMA camada de linha compete mais com elas por ele.
+ *  CHART_NATIVE_LAYER_IDS abaixo está vazia de propósito: é a prova de que
+ *  o resíduo fechou, não um censo que alguém esqueceu de atualizar.
  */
 export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
 
 /** Camadas cujo desenho inteiro é LINHA de 1px — verificado lendo o código
  *  de cada uma nesta sessão, nunca presumido pelo nome:
  *
- *    cvd .................. série de linha própria no seu painel
- *    supertrend ........... 2 séries de linha (up/down)
  *    andrews_pitchfork .... 3 retas de 1px
  *
  *  A REGRA que esta lista trava é a regra 4 no topo deste arquivo, dita como
@@ -258,20 +263,21 @@ export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
  *  z=35 nativo compartilhado — a regra 4 não se aplica mais a ela aqui,
  *  ela já tem seu próprio z=50 real via `getChartLayerZIndex`.
  *
- *  GRADUAÇÃO (2026-09-07, "resíduo honesto"): `premium_discount`,
- *  `scenario_projection` e `pivot_points` SAÍRAM desta lista também —
- *  migraram para `HorizontalLevelLinesPlugin.tsx` (canvas próprio
- *  compartilhado, z=40 real via `getChartLayerZIndex`, mesmo motivo de
- *  `liquidity_sweep` acima). `cvd`/`supertrend` continuam pendentes —
- *  natureza diferente (série que segue o preço/painel próprio, não reta
- *  fixa), migração própria ainda não feita.
+ *  GRADUAÇÃO (2026-09-07, "resíduo honesto", fechada nesta rodada):
+ *  `premium_discount`, `scenario_projection` e `pivot_points` SAÍRAM desta
+ *  lista — migraram para `HorizontalLevelLinesPlugin.tsx`. `supertrend`
+ *  SAIU para `SupertrendPlugin.tsx`. `cvd` SAIU por último — migrou para
+ *  `CvdLinePlugin.tsx` (canvas próprio, z=40 real via
+ *  `getChartLayerZIndex`, mesmo motivo de `liquidity_sweep` acima; a
+ *  conversão de coordenada usa a MESMA série nativa de sempre, só agora
+ *  transparente — ver cabeçalho do plugin). Só `andrews_pitchfork` segue
+ *  nesta lista: nenhuma das outras 4 camadas de linha do gráfico ainda
+ *  compete pelo z=35 nativo.
  *
  *  A lista é o conjunto VERIFICADO, não um censo do arquivo inteiro: para
  *  somar uma camada aqui, confirme antes que o desenho dela não tem
  *  `fillRect`/faixa — e que ela não ganhou um plugin de canvas depois. */
 export const CHART_LINE_ONLY_LAYER_IDS: readonly string[] = [
-  "cvd",
-  "supertrend",
   "andrews_pitchfork",
 ];
 
@@ -284,12 +290,10 @@ export const CHART_FILL_TIERS: readonly ChartDepthTier[] = ["field", "zone", "pr
  *  próprio, tem de sair daqui no mesmo commit (pendência #6: `liquidity_
  *  sweep` foi a primeira a sair, 6→5; GRADUAÇÃO 2026-09-07: `premium_
  *  discount`/`scenario_projection`/`pivot_points` migraram pra
- *  HorizontalLevelLinesPlugin.tsx no mesmo commit, 5→2 restantes: só
- *  `cvd`/`supertrend` seguem nativas). */
-export const CHART_NATIVE_LAYER_IDS: readonly string[] = [
-  "cvd",
-  "supertrend",
-];
+ *  HorizontalLevelLinesPlugin.tsx, `supertrend` pra SupertrendPlugin.tsx e
+ *  `cvd` pra CvdLinePlugin.tsx, todas no mesmo commit — 5→0. Vazia de
+ *  propósito: resíduo fechado, não um censo esquecido). */
+export const CHART_NATIVE_LAYER_IDS: readonly string[] = [];
 
 /** z-index das etiquetas de preço. Constante própria porque o
  *  PriceLabelStackPlugin já tinha z=5 hardcoded ANTES deste módulo existir —

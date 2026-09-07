@@ -332,6 +332,11 @@ describe('Auditoria de pendências: os 7 elementos nativos do gráfico ainda sem
   const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
 
   it('VWAP/Nexus Line/CVD são séries NATIVAS (mesmo padrão de EMA/Trend Channel) — visible via applyOptions, dado real nunca recalcula ao esconder', () => {
+    // CVD (GRADUAÇÃO 2026-09-07): este applyOptions continua existindo, mas
+    // mudou de papel — a série nativa agora é transparente (quem desenha de
+    // verdade é CvdLinePlugin, gated à parte por `visibility.cvd &&`); este
+    // toggle só mantém a escala 'cvd' consistente enquanto a camada está
+    // ligada, ver CvdLinePlugin.tsx.
     const c = chart();
     expect(c).toContain('vwapSeriesRef.current.applyOptions({ visible: visibility.vwap });');
     expect(c).toContain('nexusLineSeriesRef.current.applyOptions({ visible: visibility.nexus_line });');
@@ -398,6 +403,19 @@ describe('Auditoria de pendências: os 7 elementos nativos do gráfico ainda sem
     expect(mountIdx, 'HorizontalLevelLinesPlugin com levels={scenarioProjectionLevels} não montado').toBeGreaterThan(-1);
     const before = c.slice(Math.max(0, mountIdx - 200), mountIdx);
     expect(before).toContain('visibility.scenario_projection && (');
+  });
+
+  it('CVD: sem visibility.cvd, CvdLinePlugin nem monta (GRADUAÇÃO 2026-09-07, última das 5 — natureza diferente: scaleSeries vem da MESMA série nativa transparente, nunca uma segunda série)', () => {
+    const c = chart();
+    expect(c).toContain('color: "rgba(138, 180, 248, 0)"');
+    expect(c).not.toContain('color: "rgba(138, 180, 248, 0.85)"');
+    const mountIdx = c.indexOf('<CvdLinePlugin');
+    expect(mountIdx, 'CvdLinePlugin não montado').toBeGreaterThan(-1);
+    const before = c.slice(Math.max(0, mountIdx - 200), mountIdx);
+    expect(before).toContain('visibility.cvd && (');
+    const block = c.slice(mountIdx, mountIdx + 250);
+    expect(block).toContain('scaleSeries={chartReady?.cvdSeries ?? null}');
+    expect(block).toContain('points={cvdPoints}');
   });
 
   it('Harmônico: fail-closed real — sem visibility.harmonics, HarmonicGeometryPlugin nem monta (pendência #6: migrou de createPriceLine/addSeries nativo pra canvas próprio, gate agora é JSX condicional em vez de early-return dentro de um useEffect)', () => {

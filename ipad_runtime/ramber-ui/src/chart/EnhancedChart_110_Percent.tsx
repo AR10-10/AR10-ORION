@@ -229,7 +229,8 @@ import { shouldCompactLabels } from "./label-compaction";
 import { formatTickMark, chartLocale } from "./tick-mark-format";
 import { formatZoneMemberList } from "../nexus/zone-member-codes";
 import { computeSuperTrend } from "../engine-bridge";
-import { splitSuperTrendSeries } from "./supertrend-series";
+import { SupertrendPlugin } from "./SupertrendPlugin";
+import { CvdLinePlugin } from "./CvdLinePlugin";
 // Setas de entrada/saída (pedido do Operador: "com as setinhas indicando a
 // entrada e saída"). Auditoria confirmou ZERO marcadores em todo o
 // repositório antes desta rodada — as etiquetas EN/ST/TP respondem "a que
@@ -1123,15 +1124,7 @@ function EnhancedChart_110_PercentImpl({
   // nunca reaproveitando a paleta semântica (verde/vermelho=direção,
   // âmbar=zona de entrada, roxo=liquidez EQH/EQL).
   const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
-  // GRADUAÇÃO de supertrend-engine.js. DUAS séries nativas, não uma: a
-  // lightweight-charts não colore segmentos diferentes de uma mesma
-  // LineSeries. Uma série desenha os trechos de tendência de ALTA e a
-  // outra os de BAIXA, cada uma com buracos (whitespace) onde a outra
-  // manda — é assim que a linha muda de cor no ponto exato do flip sem
-  // perder um único candle de história.
   const planMarkersRef = useRef<ReturnType<typeof createSeriesMarkers> | null>(null);
-  const supertrendUpRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const supertrendDownRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Consolidação Final §26-§29: Nexus Line na MESMA escala de preço (é um
   // nível de equilíbrio real, como VWAP/EMA) — nunca uma segunda escala.
   const nexusLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -1151,7 +1144,7 @@ function EnhancedChart_110_PercentImpl({
   // montar assim que o chart existe de verdade — refs sozinhas não
   // disparam re-render, então o plugin ficaria esperando por uma
   // atualização de `data` não relacionada para "descobrir" o chart pronto.
-  const [chartReady, setChartReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick"> } | null>(null);
+  const [chartReady, setChartReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick">; cvdSeries: ISeriesApi<"Line"> } | null>(null);
   // Ordem A1 §19 (breathing room adaptativo por CARGA, fechamento das
   // lacunas do A1): quantos níveis reais do Trade Plan (Entry+Invalidation+
   // TP1-3) estão ativos AGORA. Ref (não state) porque o efeito de MONTAGEM
@@ -1431,16 +1424,22 @@ function EnhancedChart_110_PercentImpl({
         };
       }) as AutoscaleInfoProvider,
     });
-    // V-MAX Fase 1 (fechamento do §3.1): linha de CVD como série NATIVA em
-    // escala de preço PRÓPRIA ('cvd', overlay) — CVD é volume assinado, não
-    // preço; partilhar a escala das velas o achataria em ruído. Banda
-    // inferior (20%) via scaleMargins. Fio de seda: lineWidth 1, sólida.
-    // Cor neutra da família de texto (#8ab4f8) — o SINAL do CVD já é
-    // exibido com cor semântica no Order Flow widget; aqui a informação é
-    // a FORMA da série (fluxo acumulado), não um veredito colorido.
+    // V-MAX Fase 1 (fechamento do §3.1) + GRADUAÇÃO (2026-09-07, "resíduo
+    // honesto" de chart-layer-depth.ts): CVD é volume assinado, não preço —
+    // partilhar a escala das velas o achataria em ruído, por isso vive numa
+    // escala de preço PRÓPRIA ('cvd', overlay, banda inferior de 20% via
+    // scaleMargins). Essa escala só existe de verdade enquanto HOUVER uma
+    // série ligada a ela — não dá pra pedir `priceToCoordinate` a uma
+    // escala vazia. Esta série fica como o único elo real com a escala
+    // 'cvd' (recebe os mesmos dados de sempre via setData abaixo), mas cor
+    // TOTALMENTE transparente: o traço visível de verdade agora é
+    // CvdLinePlugin (canvas próprio, z=40 real via getChartLayerZIndex,
+    // mesmo motivo de premium_discount/scenario_projection/pivot_points/
+    // supertrend na mesma rodada) — esta série nunca mais desenha nada
+    // sozinha, só mantém a escala viva e converte preço→coordenada.
     const cvdSeries = chart.addSeries(LineSeries, {
       priceScaleId: "cvd",
-      color: "rgba(138, 180, 248, 0.85)",
+      color: "rgba(138, 180, 248, 0)",
       lineWidth: 1,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
@@ -1517,32 +1516,6 @@ function EnhancedChart_110_PercentImpl({
     });
     emaSeriesRef.current = emaSeries;
 
-    // SuperTrend: verde/vermelho da MESMA família já usada para
-    // alta/baixa em todo o gráfico (FVG/OB/sessão) — a linha diz "o stop
-    // que trilha está embaixo (alta)" ou "está em cima (baixa)", que é
-    // exatamente a mesma semântica de direção. Fio de Seda: 1px sólida.
-    // Sem rótulo de eixo (lastValueVisible false): o eixo já está disputado
-    // por VWAP/NL/EMA/CHOCH e a linha se lê pela posição.
-    const supertrendUp = chart.addSeries(LineSeries, {
-      color: "rgba(8, 153, 129, 0.70)",
-      lineWidth: 1,
-      lineStyle: LineStyle.Solid,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      title: "",
-    });
-    const supertrendDown = chart.addSeries(LineSeries, {
-      color: "rgba(242, 54, 69, 0.70)",
-      lineWidth: 1,
-      lineStyle: LineStyle.Solid,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      title: "",
-    });
-    supertrendUpRef.current = supertrendUp;
-    supertrendDownRef.current = supertrendDown;
     // Consolidação Final §29: Nexus Line — "extremamente fina, elegante,
     // suavizada" = fio de seda (1px sólida, obrigatório de qualquer forma)
     // em branco-dourado neutro mais discreto que a VWAP; a cor de estado
@@ -1599,7 +1572,7 @@ function EnhancedChart_110_PercentImpl({
     // canvas próprio, ver cabeçalho do plugin.
     chartRef.current = chart;
     seriesRef.current = series;
-    setChartReady({ chart, series });
+    setChartReady({ chart, series, cvdSeries });
     // Ordem ULTRA LED/UltraWide/4K: os 3 valores acima (fontSize/
     // minimumWidth/rightOffset) precisam se atualizar se o Operador
     // redimensionar a janela ou mover pra outro monitor DEPOIS do mount —
@@ -1657,8 +1630,6 @@ function EnhancedChart_110_PercentImpl({
       vwapBandUpper2Ref.current = null;
       vwapBandLower2Ref.current = null;
       emaSeriesRef.current = null;
-      supertrendUpRef.current = null;
-      supertrendDownRef.current = null;
       planMarkersRef.current = null;
       nexusLineSeriesRef.current = null;
       trendChannelMidRef.current = null;
@@ -1956,25 +1927,34 @@ function EnhancedChart_110_PercentImpl({
   // correção da cor: era um rgba redigitado que já MEDIA a família
   // canônica attention, nunca precisou de um tom próprio).
 
-  // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
-  // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
-  // dois consumidores, zero segunda coleta). time real em ms → segundos da
-  // lib com dedupe manter-o-último por segundo (a cadência real do poller é
-  // ~4s, então colisões são raras; o guarda existe porque a lib exige tempos
-  // estritamente ascendentes). Histórico vazio => série vazia honesta.
+  // V-MAX Fase 1 (fechamento do §3.1): histórico REAL da store (mesmo
+  // orderflowHistory do heatmap — um dado, dois consumidores, zero segunda
+  // coleta). time real em ms → segundos da lib com dedupe manter-o-último
+  // por segundo (a cadência real do poller é ~4s, então colisões são
+  // raras; o guarda existe porque a lib exige tempos estritamente
+  // ascendentes). Histórico vazio => série vazia honesta.
+  //
+  // useMemo (não mais inline no useEffect): GRADUAÇÃO (2026-09-07) somou um
+  // SEGUNDO consumidor deste mesmo array — CvdLinePlugin (canvas), que
+  // desenha o traço visível de verdade — e a Regra de Ouro 4 proíbe
+  // recomputar a mesma agregação duas vezes.
   const orderflowHistory = useOrderflowHistory();
-  useEffect(() => {
-    if (!cvdSeriesRef.current) return;
+  const cvdPoints = useMemo(() => {
     const bySecond = new Map<number, number>();
     for (const entry of orderflowHistory) {
       bySecond.set(Math.floor(entry.time / 1000), entry.cvd);
     }
-    cvdSeriesRef.current.setData(
-      [...bySecond.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([t, cvd]) => ({ time: t as UTCTimestamp, value: cvd })),
-    );
+    return [...bySecond.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([t, cvd]) => ({ time: t as UTCTimestamp, value: cvd }));
   }, [orderflowHistory]);
+  useEffect(() => {
+    if (!cvdSeriesRef.current) return;
+    // A série nativa (agora transparente) continua recebendo os MESMOS
+    // dados: é o que mantém a escala 'cvd' viva para o priceToCoordinate
+    // que CvdLinePlugin usa — nunca um segundo cálculo do zero.
+    cvdSeriesRef.current.setData(cvdPoints);
+  }, [cvdPoints]);
 
   // Research-driven precision order: VWAP, computed straight from the
   // same real candle array driving the whole chart (chartData already
@@ -2506,42 +2486,6 @@ function EnhancedChart_110_PercentImpl({
     setTrendChannelInfo(reading && midTail !== null ? { direction: reading.direction, windowSize: reading.windowSize, midPrice: midTail } : null);
   }, [data]);
 
-  // SuperTrend real sobre o MESMO array de candles do gráfico (zero segunda
-  // fonte de dado, mesmo padrão da EMA acima). A leitura é recomputada
-  // inteira a cada mudança de `data` — o motor é O(n) e o travamento das
-  // bandas é recursivo desde o início da série, então não existe versão
-  // incremental honesta que dê o mesmo resultado.
-  //
-  // As DUAS séries recebem a série COMPLETA de tempos; onde a tendência é
-  // a outra, o ponto entra como whitespace (`{ time }` sem `value`). Sem
-  // isso a lib interpolaria uma reta ligando os trechos e desenharia um
-  // stop que nunca existiu.
-  //
-  // O ponto do FLIP entra nas DUAS séries de propósito: é o mesmo preço, e
-  // sem ele haveria um buraco de 1 candle exatamente no instante que mais
-  // importa ler.
-  useEffect(() => {
-    if (!supertrendUpRef.current || !supertrendDownRef.current) return;
-    const pontos = superTrendPoints;
-    if (pontos.length === 0) {
-      // Fail-closed: sem aquecimento real de Wilder, nada é desenhado —
-      // nunca uma linha extrapolada sobre janela insuficiente.
-      supertrendUpRef.current.setData([]);
-      supertrendDownRef.current.setData([]);
-      return;
-    }
-    // A separação em duas séries com whitespace é a única parte não-óbvia
-    // deste desenho — vive em supertrend-series.ts, com execução real de
-    // teste, e é a MESMA função que o harness de verificação visual usa
-    // (nunca uma cópia que pudesse divergir do app).
-    const { up, down } = splitSuperTrendSeries<UTCTimestamp>(
-      pontos,
-      (i) => (data[i] ? (data[i].time as UTCTimestamp) : undefined),
-    );
-    supertrendUpRef.current.setData(up);
-    supertrendDownRef.current.setData(down);
-  }, [data, superTrendPoints]);
-
   // SETAS DE ENTRADA E SAÍDA — pedido direto do Operador ("com as setinhas
   // indicando a entrada e saída, todo no gráfico").
   //
@@ -2565,14 +2509,6 @@ function EnhancedChart_110_PercentImpl({
     if (markers.length === 0) return;
     planMarkersRef.current = createSeriesMarkers(seriesRef.current, markers);
   }, [planMarkers, data, visibility.trade_plan_zone]);
-
-  // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
-  // nas séries nativas, nunca desmonta/recomputa.
-  useEffect(() => {
-    if (!supertrendUpRef.current || !supertrendDownRef.current) return;
-    supertrendUpRef.current.applyOptions({ visible: visibility.supertrend });
-    supertrendDownRef.current.applyOptions({ visible: visibility.supertrend });
-  }, [visibility.supertrend]);
 
   // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
   // nas três séries nativas, nunca desmonta/recomputa.
@@ -3988,6 +3924,32 @@ function EnhancedChart_110_PercentImpl({
           series={chartReady?.series ?? null}
           levels={pivotPointLevels}
           layerId="pivot_points"
+        />
+      )}
+      {/* GRADUAÇÃO (2026-09-07, mesmo "resíduo honesto"): SuperTrend
+         migrado das 2 LineSeries nativas (chart.addSeries(LineSeries),
+         z=35 compartilhado) para canvas próprio — SupertrendPlugin reusa
+         splitSuperTrendSeries (supertrend-series.ts) byte a byte, só troca
+         COMO o resultado é desenhado. `superTrendPoints` é a MESMA leitura
+         já usada por superTrendLastLine acima — zero segunda fonte. */}
+      {visibility.supertrend && (
+        <SupertrendPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          points={superTrendPoints}
+        />
+      )}
+      {/* GRADUAÇÃO (2026-09-07): CVD é a ÚLTIMA das 5 camadas nativas —
+         `scaleSeries` é a MESMA LineSeries nativa de sempre (agora
+         transparente), só mantida viva para dar a conversão de coordenada
+         da escala PRÓPRIA 'cvd' (volume assinado, não preço). Ver
+         cabeçalho de CvdLinePlugin.tsx para o raciocínio completo. */}
+      {visibility.cvd && (
+        <CvdLinePlugin
+          chart={chartReady?.chart ?? null}
+          scaleSeries={chartReady?.cvdSeries ?? null}
+          points={cvdPoints}
         />
       )}
       {/* MD-7 (Visual Confidence Trace, pedido direto do Operador):

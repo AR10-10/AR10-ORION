@@ -194,19 +194,26 @@ abertos desta auditoria + achados novos de
 8. ~~Andrews Pitchfork~~ — **feito** (revisão 2026-09-01, 2ª rodada):
    motor puro + 21 testes + plugin de canvas, projeção de 60 barras além
    do último candle pela mesma técnica que o Ichimoku introduziu. Ver §9.
-9. Migrar `harmonics`/`liquidity_sweep` para canvas próprio (novo,
-   revisão 2026-09-01, 2ª rodada) — o único resíduo real que sobra da
-   correção de profundidade acima: as duas dividem o canvas NATIVO
-   (z-index fixo, sem individualidade) com cvd/supertrend/pivot_points/
-   premium_discount/scenario_projection. Investigado nesta rodada e
-   propositalmente NÃO feito de carona: `harmonics` sozinho embute 4
-   famílias de padrão com matemática própria (XABCD, Wolfe EPA/ETA, H&S
-   com neckline extrapolada, Triângulo por mínimos quadrados) — mover para
-   plugin de canvas é reimplementar geometria fina de 4 motores, não mover
-   código. `liquidity_sweep` é simples (cluster de price lines com
-   decaimento, mesma forma já migrada para outras camadas) e pode sair
-   sozinho numa rodada pequena; `harmonics` merece sessão própria com
-   verificação visual real (impossível neste sandbox sem egress).
+9. ~~Migrar `harmonics`/`liquidity_sweep`/`cvd`/`supertrend`/`pivot_points`/
+   `premium_discount`/`scenario_projection` para canvas próprio~~ —
+   **feito** (revisão 2026-09-07, fechada em duas rodadas). `liquidity_sweep`
+   e `harmonics` graduaram primeiro (`LiquiditySweepLinesPlugin.tsx` e
+   `HarmonicGeometryPlugin.tsx`, sessões anteriores a esta). O resíduo
+   restante — as 5 que dividiam o canvas NATIVO compartilhado (z=35 fixo,
+   sem individualidade) — graduou nesta rodada: `premium_discount`/
+   `scenario_projection`/`pivot_points` para `HorizontalLevelLinesPlugin.tsx`
+   (canvas compartilhado, mesma geometria — reta horizontal 1px, largura
+   total), `supertrend` para `SupertrendPlugin.tsx` (reusa
+   `splitSuperTrendSeries` byte a byte), e `cvd` — a mais diferente das 5,
+   vive na sua PRÓPRIA escala de preço ('cvd', não a das velas) — para
+   `CvdLinePlugin.tsx`, mantendo a mesma série nativa de sempre só para a
+   conversão de coordenada (agora transparente, zero pixel desenhado por
+   ela). `CHART_NATIVE_LAYER_IDS` (`chart-layer-depth.ts`) está vazia:
+   nenhuma camada de linha compete mais pelo z=35 — ele agora serve só as
+   velas. Verificação visual real feita via harness Playwright dedicado
+   (candles/CVD/SuperTrend/pivot sintéticos, já que este sandbox não tem
+   egress para Binance) — confirmou a linha de CVD na faixa proporcional
+   correta e o mount/unmount limpo ao alternar a camada.
 10. ~~Market Regime → Relevance Engine~~ — **feito** (revisão 2026-09-01):
    `layer-relevance.ts` lê `marketRegime` e a relevância de `trend_channel`
    combina largura de banda real com regime real. Ver §4 acima.

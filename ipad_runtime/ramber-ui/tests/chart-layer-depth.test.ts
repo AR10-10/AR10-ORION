@@ -155,12 +155,15 @@ describe('Canvas nativo da lib: as velas e as 7 camadas nativas também obedecem
   // nativos — "sem canvas próprio nenhum" deixou de ser verdade pra ela.
   // `liquidity_sweep` saiu da lista também (pendência #6): migrou por
   // completo pra LiquiditySweepLinesPlugin.tsx — 7→6→5. GRADUAÇÃO
-  // (2026-09-07): `premium_discount`/`scenario_projection`/`pivot_points`
-  // saíram juntas — migraram pra HorizontalLevelLinesPlugin.tsx (canvas
-  // compartilhado) — 5→2 restantes: só `cvd`/`supertrend` seguem nativas
-  // (natureza diferente: série que segue o preço/painel próprio).
-  it('as 2 nativas restantes realmente não têm canvas próprio montado por `visibility.X &&`', () => {
-    expect(CHART_NATIVE_LAYER_IDS.length).toBe(2);
+  // (2026-09-07, fechada nesta rodada): `premium_discount`/
+  // `scenario_projection`/`pivot_points` saíram juntas — migraram pra
+  // HorizontalLevelLinesPlugin.tsx — 5→2; `supertrend` saiu na mesma
+  // rodada — migrou pra SupertrendPlugin.tsx — 2→1; `cvd` saiu por
+  // último — migrou pra CvdLinePlugin.tsx (a mais diferente das 5: usa a
+  // MESMA série nativa de sempre, agora transparente, só pela conversão de
+  // coordenada da escala PRÓPRIA 'cvd') — 1→0. Zero nativas restantes.
+  it('zero nativas restantes têm canvas próprio montado por `visibility.X &&` (resíduo fechado)', () => {
+    expect(CHART_NATIVE_LAYER_IDS.length).toBe(0);
     for (const id of CHART_NATIVE_LAYER_IDS) {
       expect(layerIds, `${id} precisa existir em CHART_LAYER_IDS`).toContain(id);
       expect(
@@ -208,12 +211,13 @@ describe('Regra 4: camada que so desenha linha de 1px nunca fica num nivel que p
   });
 
   // Guarda anti-vacuidade: uma lista que encolhe para zero passaria calada.
-  // GRADUAÇÃO (2026-09-07): a lista encolheu de 6 para 3 de propósito
-  // (premium_discount/scenario_projection/pivot_points saíram — migraram
-  // pra canvas próprio, não competem mais pelo z=35 nativo) — o piso
-  // desce junto, mas nunca pra zero.
+  // GRADUAÇÃO (2026-09-07): a lista encolheu de 6 para 1 de propósito
+  // (premium_discount/scenario_projection/pivot_points/supertrend/cvd
+  // saíram — migraram pra canvas próprio, não competem mais pelo z=35
+  // nativo) — o piso desce junto, mas nunca pra zero: `andrews_pitchfork`
+  // ainda não migrou.
   it('a lista e real e aponta para camadas que existem', () => {
-    expect(CHART_LINE_ONLY_LAYER_IDS.length).toBeGreaterThanOrEqual(3);
+    expect(CHART_LINE_ONLY_LAYER_IDS.length).toBeGreaterThanOrEqual(1);
     expect(CHART_FILL_TIERS.length).toBe(3);
     for (const id of CHART_LINE_ONLY_LAYER_IDS) {
       expect(layerIds, `${id} precisa existir em CHART_LAYER_IDS`).toContain(id);
