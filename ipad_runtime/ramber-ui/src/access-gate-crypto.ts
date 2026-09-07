@@ -4,6 +4,11 @@
 // vitest (ambiente node) sem nenhum polyfill. A senha em texto puro NUNCA
 // é comparada por igualdade de string nem persistida em lugar nenhum —
 // só o hash entra no bundle e só o hash é comparado.
+//
+// RETIRADO DO CAMINHO CRÍTICO junto com access-gate.tsx (2026-09-07, ver o
+// cabeçalho daquele arquivo) — nenhum código de produção chama estas duas
+// funções hoje. Mantido (Zero Delete Rule) por ser reaproveitável quando a
+// autenticação real for construída.
 export async function sha256Hex(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text);
   const digest = await crypto.subtle.digest('SHA-256', bytes);

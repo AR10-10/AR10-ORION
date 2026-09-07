@@ -38,23 +38,26 @@ describe('global-error-boundary.tsx: error boundary real (getDerivedStateFromErr
   });
 });
 
-describe('main.tsx: GlobalErrorBoundary envolve AccessGate+App inteiros, não só App', () => {
+describe('main.tsx: GlobalErrorBoundary envolve o App inteiro', () => {
   const main = read('../src/main.tsx');
 
   it('importa GlobalErrorBoundary', () => {
     expect(main).toContain("import { GlobalErrorBoundary } from './global-error-boundary';");
   });
 
-  it('GlobalErrorBoundary é o wrapper MAIS externo — cobre também um erro dentro do próprio AccessGate', () => {
+  it('GlobalErrorBoundary é o wrapper MAIS externo — cobre um erro em qualquer lugar do App', () => {
+    // AccessGate saiu do meio desta árvore (ordem "remover password gate
+    // temporário", 2026-09-07 — ver access-gate.tsx) — o que este teste
+    // sempre protegeu (GlobalErrorBoundary é o wrapper mais externo)
+    // continua verdadeiro, só com um nível a menos no meio.
     const renderMatch = main.match(/createRoot\([\s\S]*?\.render\(([\s\S]*?)\);/);
     expect(renderMatch, 'createRoot(...).render(...) não encontrado').not.toBeNull();
     const tree = renderMatch![1];
+    expect(tree).not.toContain('<AccessGate>');
     const boundaryIdx = tree.indexOf('<GlobalErrorBoundary>');
-    const gateIdx = tree.indexOf('<AccessGate>');
     const appIdx = tree.indexOf('<App />');
     expect(boundaryIdx).toBeGreaterThanOrEqual(0);
-    expect(gateIdx).toBeGreaterThan(boundaryIdx);
-    expect(appIdx).toBeGreaterThan(gateIdx);
+    expect(appIdx).toBeGreaterThan(boundaryIdx);
   });
 });
 

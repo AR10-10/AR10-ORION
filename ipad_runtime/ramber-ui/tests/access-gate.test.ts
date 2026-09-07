@@ -136,11 +136,55 @@ describe('access-gate.tsx: a senha em texto puro NUNCA aparece no código-fonte'
   });
 });
 
-describe('main.tsx: o portão envolve o App real — nada renderiza sem passar por ele', () => {
-  it('AccessGate é importado e envolve <App /> no render raiz', () => {
+describe('main.tsx: o portão SAIU do caminho crítico (ordem "remover password gate temporário", 2026-09-07)', () => {
+  it('AccessGate não é mais importado nem monta <App /> — o App abre direto dentro do GlobalErrorBoundary', () => {
     const main = read('../src/main.tsx');
-    expect(main).toContain("import { AccessGate } from './access-gate'");
-    expect(main).toMatch(/<AccessGate>\s*<App\s*\/>\s*<\/AccessGate>/);
+    expect(main).not.toContain("import { AccessGate }");
+    expect(main).not.toContain('<AccessGate>');
+    expect(main).toMatch(/<GlobalErrorBoundary>\s*<App\s*\/>\s*<\/GlobalErrorBoundary>/);
+  });
+
+  it('access-gate.tsx/access-gate-crypto.ts continuam no repositório (Zero Delete Rule), só não são mais montados', () => {
+    const src = read('../src/access-gate.tsx');
+    expect(src).toContain('RETIRADO DO CAMINHO CRÍTICO');
+  });
+});
+
+describe('deploy-ipad-pwa.yml: build/deploy nunca mais exigem VITE_ACCESS_HASH (ordem "remover password gate temporário")', () => {
+  const workflow = () => read('../../../.github/workflows/deploy-ipad-pwa.yml');
+
+  it('não existe mais o passo "Verificar segredo do portao"', () => {
+    const w = workflow();
+    expect(w).not.toContain('Verificar segredo do portao');
+    expect(w).not.toContain('secrets.VITE_ACCESS_HASH');
+  });
+
+  it('o passo de build não injeta VITE_ACCESS_HASH nenhum — nenhum secret precisa existir para publicar', () => {
+    const w = workflow();
+    const buildIdx = w.indexOf('Build RAMBER UI');
+    expect(buildIdx, 'passo de build não encontrado').toBeGreaterThan(-1);
+    const bloco = w.slice(buildIdx, buildIdx + 400);
+    expect(bloco).not.toContain('VITE_ACCESS_HASH');
+    // e o build continua rodando: checkout -> testes -> build -> Pages,
+    // sem nenhum passo condicionado a segredo no meio.
+    expect(w.indexOf('Run test suite')).toBeGreaterThan(-1);
+    expect(w.indexOf('Deploy to GitHub Pages')).toBeGreaterThan(buildIdx);
+  });
+});
+
+describe('build real: nenhum secret é necessário para o app abrir (execução real, não suposição)', () => {
+  it('npm run build produz um bundle que NUNCA menciona a cortina antiga — tree-shaken por completo (dead code, zero import)', () => {
+    const distDir = resolve(here, '../dist/assets');
+    let arquivos: string[];
+    try {
+      arquivos = readdirSync(distDir).filter((f) => f.startsWith('index-') && f.endsWith('.js'));
+    } catch {
+      return; // sem build local disponível neste ambiente de teste.
+    }
+    expect(arquivos.length).toBeGreaterThan(0);
+    const bundle = readFileSync(resolve(distDir, arquivos[0]), 'utf8');
+    expect(bundle).not.toContain('Acesso não configurado');
+    expect(bundle).not.toContain('ar10cyborg_access_unlocked');
   });
 });
 

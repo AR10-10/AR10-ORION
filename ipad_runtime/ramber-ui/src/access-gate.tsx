@@ -4,7 +4,21 @@ import { APP_SEAL } from "./version";
 
 // access-gate.tsx — Cortina de acesso do AR10 CYBORG.
 //
-// ═══ O QUE ESTE PORTÃO É, E O QUE ELE NÃO É ═══
+// ═══ RETIRADO DO CAMINHO CRÍTICO (2026-09-07) ═══
+//
+// Ordem direta do Operador ("remover password gate temporário e preparar
+// autenticação correta"): esta cortina virou, na prática, o único motivo de
+// o painel público nunca ter sido republicado por 2 semanas (o fail-closed
+// dela travava o deploy inteiro sem VITE_ACCESS_HASH cadastrado como
+// secret — 4 tentativas seguidas, PRs #17/#18/#19/#21, todas bloqueadas no
+// mesmo passo). `main.tsx` não monta mais `<AccessGate>` — o `<App />` abre
+// direto. Este arquivo continua no repositório (Zero Delete Rule) porque a
+// matemática de hash/verificação (access-gate-crypto.ts) é reaproveitável
+// quando a autenticação real (identidade individual, login por e-mail,
+// sessão, papéis — ver docs/ACESSO_PRIVADO.md) for construída — mas nenhum
+// componente daqui é montado hoje.
+//
+// ═══ O QUE ESTE PORTÃO ERA, E O QUE ELE NÃO ERA ═══
 //
 // Ele NÃO é a trava de acesso do sistema. A trava real é de HOSPEDAGEM
 // (Cloudflare Access — ver docs/ACESSO_PRIVADO.md): autenticação por

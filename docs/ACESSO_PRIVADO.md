@@ -1,17 +1,22 @@
-# ACESSO PRIVADO — deixar o painel só seu
+# ACESSO — histórico, estado atual, e a arquitetura de autenticação futura
 
-Pedido do Operador: *"eu quero o que eu uso só eu usar... tem uma senha, como
-que nós faz pra deixar só pra mim acessar, e pra deixar outras pessoa acessar
-só se eu autorizar."*
+Pedido original do Operador: *"eu quero o que eu uso só eu usar... tem uma
+senha, como que nós faz pra deixar só pra mim acessar, e pra deixar outras
+pessoa acessar só se eu autorizar."*
 
-Este documento é a parte que **só o Operador pode executar** (envolve contas,
-chaves e configurações fora do repositório). A parte de código já está feita.
+**Atualizado em 2026-09-07** — ordem direta do Operador: *"remover password
+gate temporário e preparar autenticação correta"*. A cortina de senha
+descrita neste documento desde 24/08 foi **removida do caminho crítico**
+(ver §2). Este documento passa a registrar três coisas: o que aconteceu com
+a tentativa anterior (§1), o estado real de hoje (§2), e o contrato de
+arquitetura para quando a autenticação de verdade for construída (§3-§5) —
+nunca uma segunda senha global.
 
 ---
 
-## 1. A situação real hoje — sem suavizar
+## 1. Histórico — a tentativa de 24/08 (mantido, nunca reescrito)
 
-Auditoria feita antes de qualquer mudança:
+Auditoria feita antes da primeira mudança, em 24/08:
 
 | O que foi verificado | Resultado |
 |---|---|
@@ -21,148 +26,155 @@ Auditoria feita antes de qualquer mudança:
 | Senha em texto puro | **estava por extenso** no arquivo de teste, no repositório público |
 | Forks | permitidos |
 
-**Conclusão honesta: o projeto inteiro está público na internet, e a senha
-não impede nada.** Qualquer pessoa podia:
+**Conclusão de então, ainda verdadeira:** o repositório esteve público, e a
+senha nunca impediu nada de verdade. Qualquer pessoa podia ler a senha em
+texto puro no arquivo de teste, rodar
+`localStorage.setItem("ar10cyborg_access_unlocked","1")` no console para
+entrar sem senha, ou clonar todo o código. O portão em JavaScript **nunca
+teve como** resolver isso — num site estático ele só roda depois de o app
+inteiro já ter sido entregue ao navegador.
 
-1. abrir o repositório e ler a senha em texto puro no arquivo de teste;
-2. abrir o site e rodar `localStorage.setItem("ar10cyborg_access_unlocked","1")`
-   no console do navegador para entrar sem senha nenhuma;
-3. clonar todo o código.
+A correção de 24/08 tirou a senha em texto puro do repositório (o hash
+passou a vir de um secret de build, `VITE_ACCESS_HASH`) e desenhou um plano
+de migração para Cloudflare Pages + Cloudflare Access (autenticação real, no
+servidor). **Esse plano nunca foi executado** — os passos 3.1 a 3.5 da
+versão anterior deste documento (tornar o repositório privado, desativar o
+Pages, criar o projeto Cloudflare, cadastrar os três segredos, ligar o
+Access) continuaram todos pendentes, e o GitHub Pages foi religado em 31/08
+para o Operador conseguir usar o painel pela URL oficial.
 
-O portão em JavaScript **nunca teve como** resolver isso — num site estático
-ele só roda depois de o app inteiro já ter sido entregue ao navegador. O
-próprio arquivo já dizia isso no cabeçalho desde que foi escrito.
-
-> **Fato desconfortável, mas necessário:** o repositório foi público até
-> agora. Quem já clonou, forkou ou leu, **continua com o código e com a
-> senha antiga**. Tornar privado agora impede acessos *futuros* — não
-> desfaz o que já saiu. Por isso o passo 4 (trocar a senha) não é opcional.
-
----
-
-## 2. O caminho escolhido: Cloudflare Pages + Cloudflare Access
-
-Por que não basta tornar o repositório privado: no plano Free/Pro do GitHub,
-**um site do GitHub Pages continua público mesmo com o repositório privado**
-(Pages de visibilidade restrita só existe no GitHub Enterprise Cloud).
-
-Com **Cloudflare Access**, a autenticação acontece **no servidor, antes de
-qualquer byte do app ser entregue**. Quem não está na lista de e-mails
-autorizados nunca recebe nem o HTML. É essa a diferença entre uma trava real
-e uma cortina.
-
-Gratuito até 50 pessoas autorizadas.
+**O que isso causou, medido:** o próprio `VITE_ACCESS_HASH` — a única coisa
+que a correção de 24/08 pediu ao Operador — nunca foi cadastrado como secret
+do repositório. O portão, fail-closed por desenho, passou a bloquear o
+próprio deploy: 4 tentativas seguidas de publicar (PRs #17/#18/#19/#21,
+07/09) falharam todas no mesmo passo, e nada chegou ao site público desde
+24/08. Uma cortina que não protegia nada de verdade virou, na prática, o
+único motivo de o painel nunca mostrar a evolução real do sistema.
 
 ---
 
-## 3. Passo a passo
+## 2. Estado atual (2026-09-07) — gate removido, sem substituto global
 
-### 3.1 Tornar o repositório privado
+Por ordem direta do Operador, a cortina de senha (`AccessGate`,
+`ipad_runtime/ramber-ui/src/access-gate.tsx`) **saiu do caminho crítico**:
 
-`Settings` → role até **Danger Zone** → **Change repository visibility** →
-**Make private**.
+- `main.tsx` não monta mais `<AccessGate>` — o painel abre direto.
+- `deploy-ipad-pwa.yml` não checa nem injeta `VITE_ACCESS_HASH` — nenhum
+  secret é necessário para publicar.
+- `tools/setup-local.mjs` e os 4 instaladores de clique duplo não pedem mais
+  senha nenhuma.
+- `access-gate.tsx`/`access-gate-crypto.ts` continuam no repositório (Zero
+  Delete Rule) — a matemática de hash é reaproveitável quando a autenticação
+  real (§3) for construída, mas nada os importa hoje.
 
-> Isso esconde o código. Não tira o site do ar (passo 3.2).
+**Isso NÃO é uma regressão de segurança real**, pelo motivo já documentado
+em §1: o portão nunca foi uma trava de verdade (era JavaScript, contornável
+por qualquer pessoa com DevTools). Removê-lo não aumenta a exposição real —
+o painel é **READ_ONLY**, sem credencial de exchange, sem execução de
+ordem, sem dado do Operador armazenado em servidor nenhum (tudo fica em
+IndexedDB, no navegador de cada máquina). O que muda é que o painel volta a
+ser publicável, e o Operador volta a ver a evolução real do sistema no link
+oficial (`https://ar10-10.github.io/AR10-ORION/`).
 
-### 3.2 Desativar o GitHub Pages
-
-`Settings` → **Pages** → em **Build and deployment**, mudar Source para
-**None**.
-
-> **Este é o passo que efetivamente tira o site público do ar.** Desligar a
-> publicação automática no workflow (já feito no código) impede *novas*
-> publicações, mas o site já publicado continua no ar até aqui.
-
-### 3.3 Criar o projeto no Cloudflare Pages
-
-1. Criar conta em `dash.cloudflare.com` (gratuita).
-2. **Workers & Pages** → **Create** → **Pages** → **Direct Upload** (o deploy
-   vem do GitHub Actions, não da integração automática).
-3. Nome do projeto: **`ar10-cyborg`** — precisa ser exatamente este, é o que
-   está em `deploy-cloudflare-pages.yml` (`--project-name=ar10-cyborg`).
-
-### 3.4 Gerar as chaves e cadastrar no GitHub
-
-No Cloudflare:
-
-- **Account ID**: aparece na barra lateral de Workers & Pages.
-- **API Token**: `My Profile` → `API Tokens` → `Create Token` → modelo
-  **Edit Cloudflare Workers**, ou um token personalizado com a permissão
-  `Account · Cloudflare Pages · Edit`.
-
-No GitHub, em `Settings` → `Secrets and variables` → `Actions` →
-**New repository secret**, criar os três:
-
-| Segredo | Valor |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | o token gerado acima |
-| `CLOUDFLARE_ACCOUNT_ID` | o Account ID |
-| `VITE_ACCESS_HASH` | o SHA-256 da senha nova (passo 4) |
-
-### 3.5 Ligar o Cloudflare Access — a trava de verdade
-
-`Zero Trust` → `Access` → `Applications` → **Add an application** →
-**Self-hosted**:
-
-- **Application domain**: o domínio do seu Pages (`ar10-cyborg.pages.dev`).
-- **Policy**: `Action: Allow`, e em **Include** escolher
-  **Emails** → adicionar **o seu e-mail**.
-
-Pronto: só quem estiver nessa lista entra. Cada pessoa recebe um código de
-uso único por e-mail — **não existe senha compartilhada**.
-
-### Autorizar alguém depois
-
-`Zero Trust` → `Access` → `Applications` → sua aplicação → `Policies` →
-adicionar o e-mail da pessoa. Para remover o acesso, apague o e-mail da
-lista. **É essa a autorização individual que você pediu.**
+O caminho **Cloudflare Pages + Cloudflare Access** (autenticação real, no
+servidor, antes de qualquer byte do app sair) continua existindo como opção
+— `deploy-cloudflare-pages.yml` está pronto, só sob demanda
+(`workflow_dispatch`). Se o Operador quiser essa camada antes da
+autenticação definitiva (§3) estar pronta, os passos são: tornar o
+repositório privado, desativar o GitHub Pages, criar o projeto Cloudflare,
+cadastrar `CLOUDFLARE_API_TOKEN`+`CLOUDFLARE_ACCOUNT_ID`, e ligar uma
+política de Access com a lista de e-mails autorizados (`Zero Trust` →
+`Access` → `Applications`). **Isso não é obrigatório nem é o passo seguinte
+default** — é uma opção registrada, para o dia em que o Operador pedir.
 
 ---
 
-## 4. Trocar a senha do portão — obrigatório
+## 3. Arquitetura de autenticação futura — o contrato, não a implementação
 
-A senha antiga esteve pública em repositório aberto. Considere-a queimada.
+Esta seção define **somente a arquitetura**, por pedido explícito do
+Operador ("não implementar um sistema complexo de login nesta ordem... a
+aplicação de trading não deve ser responsável por inventar seu próprio
+sistema criptográfico de autenticação"). Nada aqui é código ainda.
 
-Para gerar o hash da senha nova, no terminal:
-
-```sh
-printf '%s' 'SUA_SENHA_NOVA_AQUI' | shasum -a 256
+```
+AUTHENTICATION
+    ↓
+IDENTITY
+    ↓
+SESSION
+    ↓
+AUTHORIZATION
+    ↓
+AR10 APPLICATION
 ```
 
-Copie os 64 caracteres hexadecimais para o segredo `VITE_ACCESS_HASH`.
+- **AUTHENTICATION** — prova de quem a pessoa é (e-mail + senha, magic
+  link, ou OAuth de um provedor de identidade consolidado). Nunca
+  reimplementado do zero neste repositório.
+- **IDENTITY** — o registro de que aquela pessoa existe e tem uma conta.
+- **SESSION** — token/cookie de sessão, com expiração e logout reais,
+  emitido pelo provedor de identidade escolhido, nunca fabricado aqui.
+- **AUTHORIZATION** — o que aquela sessão pode fazer no AR10 (ver §4, papéis).
+- **AR10 APPLICATION** — o painel em si, que só CONSOME o resultado das 4
+  camadas acima. Nunca decide autenticação por conta própria.
 
-> **Nunca** comite a senha nem o hash. O build injeta o hash a partir do
-> segredo; o código-fonte não contém nenhum dos dois, e há teste travando
-> isso (`tests/access-gate.test.ts`).
-
----
-
-## 5. O que o portão de senha ainda NÃO faz
-
-Dito de forma direta para nenhuma sessão futura se enganar:
-
-- O Vite **inlina** variáveis `VITE_*` no bundle publicado. O hash sai do
-  código-fonte versionado, mas **continua legível no JavaScript servido**.
-  Isso é inevitável em site estático.
-- Quem já passou pelo Cloudflare Access e abriu o DevTools ainda pode pular
-  o portão pelo `localStorage`.
-
-**Isso é aceitável porque o portão não é a trava** — é a segunda camada,
-contra abertura acidental por alguém que já está autorizado. A trava real é
-o Access, no servidor.
+A escolha do provedor/serviço de identidade concreto é decisão de uma ordem
+futura própria, depois de avaliar junto: GitHub Pages (site estático, sem
+backend) vs. um backend real; domínio; banco de sessão; custo; segurança;
+comportamento de sessão no Safari/iPad (cookies de terceiro, PWA instalado);
+escala (quantas pessoas realmente vão usar). Nada disso está decidido aqui.
 
 ---
 
-## 6. Estado da configuração
+## 4. Modelo de papéis (RBAC) — preparação conceitual, não implementação
 
-- [x] Hash fora do código-fonte, vindo de segredo de build
-- [x] Senha em texto puro removida de todos os arquivos versionados
-- [x] Portão fail-closed: build sem segredo → painel fechado, com a causa dita
-- [x] Workflow do Cloudflare Pages criado
-- [x] Publicação automática do GitHub Pages desligada (reversível)
-- [ ] **Repositório tornado privado** (passo 3.1 — só o Operador)
-- [ ] **GitHub Pages desativado** (passo 3.2 — só o Operador)
-- [ ] **Projeto Cloudflare Pages criado** (passo 3.3)
-- [ ] **Três segredos cadastrados** (passo 3.4)
-- [ ] **Política do Access com sua lista de e-mails** (passo 3.5)
-- [ ] **Senha trocada** (passo 4 — a antiga esteve pública)
+| Papel | Acesso |
+|---|---|
+| **OPERATOR** | Acesso completo: painel inteiro, ferramentas avançadas, diagnóstico, Laboratório de Evolução, configuração operacional. O Operador principal deste projeto é sempre `OPERATOR`. |
+| **ADMIN** | Administração de usuários, permissões, configurações globais. |
+| **USER** | Acesso só aos módulos autorizados (a definir quando existir mais de um usuário real). |
+
+Fluxo depois de a autenticação real existir:
+
+```
+LOGIN → SESSION → ROLE=OPERATOR → AR10 FULL ACCESS
+```
+
+**Regra de Ouro desta seção:** nenhuma permissão listada aqui é aplicada
+hoje — não existe RBAC real no código ainda, e não se cria uma permissão
+artificial só para "parecer pronta". Esta tabela é o contrato que uma ordem
+futura de implementação segue, não uma feature já ligada.
+
+---
+
+## 5. O que a autenticação futura NUNCA vai controlar
+
+Separação explícita, para nenhuma sessão futura confundir as duas coisas:
+
+```
+PUBLIC MARKET DATA → CONNECTORS → MARKET DATA BUS → ANALYSIS ENGINE → AR10
+```
+
+Autenticação controla **quem pode acessar a aplicação** — nunca **se os
+dados públicos de mercado (Binance/MEXC) existem**. Os motores de análise, o
+Core Engine, o Market Data Bus e todos os conectores continuam rodando
+exatamente como hoje, independente de qualquer sistema de login. LEI 24 (o
+Core Engine é o único emissor de LONG/SHORT/WAIT) e as Regras de Ouro
+continuam valendo sem nenhuma exceção — autenticação é uma camada de acesso
+à aplicação, nunca uma camada de decisão de mercado.
+
+---
+
+## 6. Estado da configuração (2026-09-07)
+
+- [x] Cortina de senha (`AccessGate`) removida do caminho crítico de
+      build/deploy/runtime
+- [x] `deploy-ipad-pwa.yml` publica sem depender de nenhum secret
+- [x] `access-gate.tsx`/`access-gate-crypto.ts` preservados (Zero Delete
+      Rule) para reaproveitamento futuro, sem serem montados
+- [x] Nenhuma senha global nova criada em lugar da antiga (Regra de Ouro
+      desta ordem: nunca trocar uma senha global por outra)
+- [ ] **Arquitetura de autenticação real** (§3-§4) — contrato definido,
+      implementação ainda não iniciada, aguardando ordem específica
+- [ ] Cloudflare Pages + Cloudflare Access — opção registrada (§2), não
+      ativada, não é o próximo passo default

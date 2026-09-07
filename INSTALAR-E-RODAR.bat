@@ -11,8 +11,9 @@ REM conta propria, porque mexer no jeito como a pasta existe e decisao de quem
 REM instalou.
 REM
 REM REDE LOCAL: liga com --host, entao o painel fica acessivel do iPad e do
-REM celular na MESMA rede. Qualquer aparelho da rede alcanca, com a senha como
-REM unica barreira -- isso esta dito na tela, nao escondido aqui.
+REM celular na MESMA rede. Qualquer aparelho da rede alcanca (sem senha desde
+REM a ordem "remover password gate temporario", 2026-09-07 -- ver
+REM docs/ACESSO_PRIVADO.md) -- isso esta dito na tela, nao escondido aqui.
 
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
@@ -24,7 +25,7 @@ echo   ============================================
 echo.
 
 REM -- 1. Node ---------------------------------------------------------------
-echo   [1/5] Procurando o Node...
+echo   [1/4] Procurando o Node...
 where node >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -48,7 +49,7 @@ for /f "delims=" %%v in ('node --version') do echo       [OK] Node %%v
 
 REM -- 2. Atualizacao automatica --------------------------------------------
 echo.
-echo   [2/5] Buscando atualizacoes
+echo   [2/4] Buscando atualizacoes
 set "ATUALIZOU=nao"
 where git >nul 2>&1
 if errorlevel 1 goto semGit
@@ -90,49 +91,9 @@ echo           sozinho toda vez.
 
 :fimAtualizacao
 
-REM -- 3. Senha --------------------------------------------------------------
+REM -- 3. Dependencias -------------------------------------------------------
 echo.
-echo   [3/5] Senha do painel
-set "TEM_SENHA="
-if exist "ipad_runtime\ramber-ui\.env.local" (
-    findstr /R /C:"^VITE_ACCESS_HASH=[0-9a-fA-F][0-9a-fA-F]*$" "ipad_runtime\ramber-ui\.env.local" >nul 2>&1
-    if not errorlevel 1 set TEM_SENHA=1
-)
-if defined TEM_SENHA (
-    REM Ja configurada: nao pergunta de novo. Perguntar toda vez
-    REM transformaria o uso diario num formulario.
-    echo       [OK] ja configurada ^(para trocar, apague o arquivo
-    echo            ipad_runtime\ramber-ui\.env.local e rode de novo^)
-    goto fimSenha
-)
-echo       Ela so vale nesta maquina. Nunca e gravada -- so o codigo
-echo       embaralhado dela ^(hash^) vai para um arquivo local.
-echo.
-set "SENHA="
-:pedirSenha
-set /p "SENHA=      Escolha uma senha (minimo 4 caracteres): "
-if "!SENHA!"=="" goto pedirSenha
-call :tamanho "!SENHA!" TAM
-if !TAM! LSS 4 (
-    echo       muito curta, tente de novo
-    set "SENHA="
-    goto pedirSenha
-)
-node ipad_runtime\tools\setup-local.mjs "!SENHA!" >nul 2>&1
-if errorlevel 1 (
-    echo.
-    echo   [X] PAROU AQUI: nao consegui preparar a senha.
-    echo.
-    pause
-    exit /b 1
-)
-set "SENHA="
-echo       [OK] senha preparada
-:fimSenha
-
-REM -- 4. Dependencias -------------------------------------------------------
-echo.
-echo   [4/5] Pecas do sistema
+echo   [3/4] Pecas do sistema
 cd ipad_runtime\ramber-ui
 REM `--include=dev` NAO e enfeite. Pego rodando o instalador de ponta a ponta:
 REM numa maquina com a variavel NODE_ENV valendo "production", o `npm ci` pula
@@ -191,18 +152,18 @@ if not exist "node_modules\.bin\vite.cmd" (
     exit /b 1
 )
 
-REM -- 5. Ligar --------------------------------------------------------------
+REM -- 4. Ligar --------------------------------------------------------------
 echo.
-echo   [5/5] Ligando o painel...
+echo   [4/4] Ligando o painel...
 for /f "delims=" %%i in ('node -e "const n=require('os').networkInterfaces();for(const k in n)for(const i of n[k]||[])if(i.family==='IPv4'^&^&!i.internal){console.log(i.address);process.exit(0)}"') do set IP_LOCAL=%%i
 echo.
 echo       Neste computador:  http://localhost:5173
 if defined IP_LOCAL (
     echo       No iPad/celular:   http://!IP_LOCAL!:5173
     echo.
-    echo       Atencao: qualquer aparelho na SUA rede alcanca esse endereco.
-    echo       A senha e a unica barreira. Numa rede de casa esta ok; numa rede
-    echo       publica ou compartilhada, nao use.
+    echo       Atencao: qualquer aparelho na SUA rede alcanca esse endereco,
+    echo       sem senha nenhuma. Numa rede de casa esta ok; numa rede publica
+    echo       ou compartilhada, nao use.
 ) else (
     echo       ^(nao consegui descobrir o endereco da rede local^)
 )
@@ -254,16 +215,4 @@ if defined NAV (
 
 call npm run dev -- --host
 pause
-exit /b 0
-
-:tamanho
-set "s=%~1"
-set "n=0"
-:loopTamanho
-if defined s (
-    set "s=!s:~1!"
-    set /a n+=1
-    goto loopTamanho
-)
-set "%~2=!n!"
 exit /b 0

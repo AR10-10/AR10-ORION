@@ -1,21 +1,29 @@
 # AR10 CYBORG — Continuidade Operacional
 
-**Gerado em**: 2026-09-06 · **Atualizado em**: 2026-09-07 (pós-merge PR #19) ·
+**Gerado em**: 2026-09-06 · **Atualizado em**: 2026-09-07 (pós-remoção do
+password gate) ·
 **PRs [#17](https://github.com/AR10-10/AR10-ORION/pull/17),
-[#18](https://github.com/AR10-10/AR10-ORION/pull/18) e
-[#19](https://github.com/AR10-10/AR10-ORION/pull/19) mescladas em `main`**
-(merge commits `b3613d4`, `ff628f8`, `646622d`) — todo o conteúdo deste
-documento já está na linha principal.
-**Branch de trabalho atual**: `claude/localizar-arquivo-nuvem-qr0z6x`, resetada
-a partir de `main` pós-merge (nenhum commit pendente nela ainda) ·
-**Pedido de origem**: Operador — "faz saneamento, vê se está tudo em ordem, me dá
-um arquivo MD pra eu levar e continuar certinho".
+[#18](https://github.com/AR10-10/AR10-ORION/pull/18),
+[#19](https://github.com/AR10-10/AR10-ORION/pull/19),
+[#21](https://github.com/AR10-10/AR10-ORION/pull/21) e
+[#22](https://github.com/AR10-10/AR10-ORION/pull/22) mescladas em `main`** —
+todo o conteúdo deste documento já está na linha principal, exceto a
+remoção do password gate (branch de trabalho atual, ainda não mergeada no
+momento desta atualização).
+**Branch de trabalho atual**: `claude/localizar-arquivo-nuvem-qr0z6x` ·
+**Pedido de origem desta rodada**: Operador — ordem P0 de paridade
+runtime/deploy, seguida da ordem "remover password gate temporário e
+preparar autenticação correta".
 
-**⚠️ Bloqueio ativo, confirmado de novo agora (2026-09-07, 3ª vez seguida):**
-o deploy público continua falhando no mesmo passo (`Verificar segredo do
-portao antes de publicar`) nas 3 merges mais recentes (#17, #18 e #19) —
-`VITE_ACCESS_HASH` ainda não foi cadastrado como secret do repositório.
-Detalhe completo no §1.1.
+**✅ Bloqueio de deploy RESOLVIDO (2026-09-07) — não mais por secret cadastrado, e sim por remoção do gate:**
+as 4 tentativas anteriores (#17/#18/#19/#21) falharam todas no mesmo passo
+(`Verificar segredo do portao antes de publicar`, `VITE_ACCESS_HASH` nunca
+cadastrado). Em vez de esperar o Operador cadastrar o secret, a ordem
+seguinte pediu a remoção do próprio gate do caminho crítico — decisão dele,
+não workaround desta sessão. `deploy-ipad-pwa.yml` não checa mais nenhum
+secret; o próximo push em `main` publica sem depender de nada externo.
+Detalhe completo no §1.1 (mantido como histórico) e em
+`docs/ACESSO_PRIVADO.md`.
 
 ## O que este documento É e o que ele NÃO É
 
@@ -84,18 +92,38 @@ não-entregue — é um único secret nunca cadastrado.
   explicado ao Operador nesta mesma trilha (junto com o comando exato) e
   **ainda não foi resolvido do lado dele** — não é um achado novo, é o
   mesmo bloqueio, agora confirmado pela 3ª vez consecutiva.
-- **Correção é 100% do lado do Operador** (`docs/ACESSO_PRIVADO.md` §4):
-  gerar o hash (`printf '%s' 'SUA_SENHA_NOVA' | shasum -a 256`) e
-  cadastrar em `Settings → Secrets and variables → Actions` como
-  `VITE_ACCESS_HASH`. Nenhum commit resolve isso — só o secret. Assim que
-  existir, o próximo push em `main` publica sozinho, sem precisar
-  reativar nada — inclusive um push vazio/qualquer commit futuro, não
-  precisa ser um merge novo.
+- **Correção que este achado pedia originalmente** (gerar o hash e cadastrar
+  `VITE_ACCESS_HASH`) **nunca foi feita** — mas o bloqueio foi resolvido de
+  outra forma: ver §1.2.
+
+## 1.2 Resolução real (2026-09-07) — o gate foi removido, não contornado
+
+Em vez de esperar o cadastro do secret, o Operador deu a ordem direta
+"remover password gate temporário e preparar autenticação correta". A
+cortina de senha (`AccessGate`) saiu por completo do caminho crítico:
+`main.tsx` não a monta mais, `deploy-ipad-pwa.yml` não checa nem injeta
+`VITE_ACCESS_HASH` em passo nenhum. `access-gate.tsx`/`access-gate-crypto.ts`
+continuam no repositório (Zero Delete Rule), só não são mais usados.
+
+**Isso não é uma regressão de segurança**: o portão nunca foi trava real
+(era JavaScript, contornável por DevTools — o próprio código sempre disse
+isso), e o painel é READ_ONLY, sem credencial de exchange, sem execução de
+ordem. Detalhe completo, incluindo o contrato de arquitetura para a
+autenticação real futura (identidade individual, sessão, papéis — nunca uma
+segunda senha global), em `docs/ACESSO_PRIVADO.md`.
+
+**Consequência prática:** o próximo push em `main` (o merge desta mesma
+rodada) publica direto, sem depender de nenhum secret. §1.1 acima fica
+como registro histórico de por que o bloqueio existiu — nunca reescrito,
+só superado.
 
 ## 2. O que foi entregue nesta trilha (mais recente primeiro)
 
 | Entrega | Onde | Resultado |
 |---|---|---|
+| **Remoção do password gate temporário** (ordem direta do Operador) | `main.tsx`, `deploy-ipad-pwa.yml`, `tools/setup-local.mjs`, os 4 instaladores de clique duplo, `access-gate.tsx`/`access-gate-crypto.ts` (preservados, não montados) | `AccessGate` sai do caminho crítico de build/deploy/runtime — nunca foi trava real, e virou o único motivo do deploy ficar bloqueado. Nenhuma senha global nova em seu lugar; contrato de autenticação futura (identidade/sessão/papéis) documentado em `docs/ACESSO_PRIVADO.md`. |
+| **Ordem P0 — Deploy/Runtime Parity** (auditoria completa) | `docs/CONTINUIDADE_OPERACIONAL.md`, `src/build-info.ts` (novo) | Confirmado via API do GitHub (não suposição): deploy bloqueado desde 24/08 no mesmo secret ausente. Adicionado COMMIT real do build (`BUILD_COMMIT`), visível ao lado do selo de versão, fechando a lacuna "duas builds da mesma versão semântica seriam indistinguíveis". |
+| **Migração das 5 últimas camadas nativas do gráfico para canvas** (PR #22) | `HorizontalLevelLinesPlugin.tsx`, `SupertrendPlugin.tsx`, `CvdLinePlugin.tsx` (novos) | Fecha `chart-layer-depth.ts`'s `CHART_NATIVE_LAYER_IDS` (5→0) — nenhuma camada de linha compete mais pelo z=35 nativo compartilhado com as velas. |
 | **A2.2 — Cross-Venue Intelligence** (escopo ajustado pelo Operador: core Binance×MEXC, Bybit/OKX price-only) | `nexus/cross-venue-intelligence.ts` (novo), `startMexcDepthOnly()` em `cross-exchange-service.ts` | Compositor real (`VENUE_CAPABILITY`, comparação de liquidez, lead/lag honesto, `CROSS_VENUE_KNOWN_GAPS`) + card "CROSS-VENUE INTELLIGENCE" em `DecisionValidationWidget`. Gap declarado: Bybit/OKX sem order book/trades reais (conectores não existem). |
 | **Aviso de versão nova (PWA)** + **autorização permanente de merge automático** | `pwa-update-signal.ts` (novo), `App.tsx` (`UpdateAvailableBanner`), `CLAUDE.md` | Resolve a limitação real do Service Worker (código novo só troca no próximo relaunch) com um sinal visível + botão de recarregar. Operador autorizou merge automático de PRs próprias já verdes, sem perguntar de novo a cada vez. |
 | **"Sistema sentir dado obsoleto"** (3 partes, ver §8) | `data-freshness-banner.ts`, `health-monitor.ts`, `App.tsx` (depthManager + TelemetryHealthWidget) | Aviso visível sempre montado + fix real de `isDataFresh` mentindo no boot + reconexão do book 5x mais rápida numa queda + autodiagnóstico a cada 60s. |
