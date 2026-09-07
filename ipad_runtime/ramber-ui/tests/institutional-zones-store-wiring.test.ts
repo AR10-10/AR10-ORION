@@ -21,10 +21,11 @@ describe('unified-snapshot-store.ts: institutionalZones nos 4 lugares reais (§3
     expect(s).toContain('institutionalZones: InstitutionalZone[];');
   });
 
-  it('action real de escrita', () => {
+  it('action real de escrita — ORDEM 2B.1 somou uma guarda de igualdade real (institutionalZonesEqual) antes de tocar o state', () => {
     const s = read('../src/store/unified-snapshot-store.ts');
     expect(s).toContain('setInstitutionalZones: (zones: InstitutionalZone[]) => void;');
-    expect(s).toContain('setInstitutionalZones: (zones) => set((s) => { s.institutionalZones = zones; }),');
+    expect(s).toContain('import { institutionalZonesEqual } from "../nexus/institutional-zones";');
+    expect(s).toContain('setInstitutionalZones: (zones) => set((s) => {\n      if (institutionalZonesEqual(s.institutionalZones, zones)) return;\n      s.institutionalZones = zones;\n    }),');
   });
 
   it('default real: lista vazia honesta, nunca null/undefined implícito', () => {
@@ -45,9 +46,23 @@ describe('EnhancedChart_110_Percent.tsx: publica o MESMO array já computado —
     const c = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const memoIdx = c.indexOf('const institutionalZones = useMemo(() => computeInstitutionalZones(institutionalZoneInput), [institutionalZoneInput]);');
     expect(memoIdx, 'useMemo real não encontrado').toBeGreaterThan(-1);
-    const block = c.slice(memoIdx, memoIdx + 900);
-    expect(block).toContain('useUnifiedSnapshotStore.getState().setInstitutionalZones(institutionalZones);');
-    expect(block).toContain('}, [institutionalZones]);');
+    // Janela alargada (900 -> 3600): ORDEM 2B/2B.1 somaram um comentário
+    // real explicando a causa raiz do "BTC/USDT · ERRO DE RENDERIZAÇÃO"
+    // ("Maximum update depth exceeded", diagnóstico corrigido — nunca
+    // "React error #185") entre o useMemo e o useEffect — mesma
+    // proximidade lógica de sempre, só mais documentação no meio.
+    const block = c.slice(memoIdx, memoIdx + 3600);
+    // ORDEM 2B.1: a causa raiz real era instabilidade de referência em
+    // App.tsx (cadeia de .filter()/.map() nunca memoizada) + ausência de
+    // guarda de igualdade na store — não timing. `queueMicrotask` (ORDEM
+    // 2B) só adiava o loop, nunca o corrigia, e foi removido: a escrita
+    // real volta a ser síncrona dentro do efeito (sempre foi seguro —
+    // useEffect roda depois do commit, nunca durante o render).
+    expect(block).toContain('useEffect(() => {\n    useUnifiedSnapshotStore.getState().setInstitutionalZones(institutionalZones);\n  }, [institutionalZones]);');
+    // O NOME queueMicrotask ainda aparece em comentários explicando o que
+    // foi removido e por quê — o que não pode mais existir é a CHAMADA
+    // executável.
+    expect(block).not.toMatch(/queueMicrotask\(/);
   });
 
   it('importa useUnifiedSnapshotStore (zero segunda instância de store)', () => {

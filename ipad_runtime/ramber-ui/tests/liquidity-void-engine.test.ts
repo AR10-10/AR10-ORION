@@ -178,7 +178,11 @@ describe('Liquidity Void: graduação real ponta a ponta (QUARANTINE.md + bridge
     // orçamento das outras quatro famílias, por largura real em ATR — e a
     // união de obstáculos reais continua: um void que o plano ativo cruza
     // nunca fica invisível por causa do decluttering.
-    expect(app).toContain('const unmitigatedVoids = unmitigatedVoidsAll.filter(emDestaque);');
+    // ORDEM 2B.1: esta cadeia vive agora dentro de um useMemo real (achado
+    // de auditoria — causa raiz do "Maximum update depth exceeded", ver
+    // chart-render-failure-p0.test.ts) — mesmo CONTRATO, `const X = Y;`
+    // virou `X: Y,` no objeto de retorno memoizado.
+    expect(app).toContain('unmitigatedVoids: unmitigatedVoidsAll.filter(emDestaque),');
     expect(app).not.toContain('i < 3 || isRealObstacle(z)');
     expect(app).toContain('liquidityVoids={unmitigatedVoids}');
   });

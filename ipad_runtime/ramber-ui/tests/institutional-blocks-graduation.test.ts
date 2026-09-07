@@ -143,8 +143,12 @@ describe("recortes antes do canvas — declarados, nunca silenciosos", () => {
     const src = app();
     // Os dois tipos passam pelo MESMO filtro — e é ele que carrega a
     // escapatória, para as cinco famílias de uma vez.
-    expect(src).toContain("const breakerZones = breakerAll.filter(emDestaque).map(toChartZone);");
-    expect(src).toContain("const mitigationZones = mitigationAll.filter(emDestaque).map(toChartZone);");
+    // ORDEM 2B.1: esta cadeia vive agora dentro de um useMemo real (achado
+    // de auditoria — causa raiz do "Maximum update depth exceeded", ver
+    // chart-render-failure-p0.test.ts) — mesmo CONTRATO, `const X = Y;`
+    // virou `X: Y,` no objeto de retorno memoizado.
+    expect(src).toContain("breakerZones: breakerAll.filter(emDestaque).map(toChartZone),");
+    expect(src).toContain("mitigationZones: mitigationAll.filter(emDestaque).map(toChartZone),");
     expect(src).toContain("isRealObstacle(z) || zonasEmDestaque.has(z)");
     // E os dois entram na disputa — se um sumisse do array, o outro comeria
     // as vagas sozinho e este teste não veria nada errado sem esta linha.

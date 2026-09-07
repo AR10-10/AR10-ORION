@@ -506,8 +506,13 @@ describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o 
     expect(a).toContain('const zonasEmDestaque = selectSharedZoneHighlights(');
     expect(a).toContain('const emDestaque = <Z extends { top: number; bottom: number }>(z: Z) =>');
     expect(a).toContain('isRealObstacle(z) || zonasEmDestaque.has(z)');
-    expect(a).toContain('const unmitigatedFvgs = unmitigatedFvgsAll.filter(emDestaque);');
-    expect(a).toContain('const unmitigatedBlocks = unmitigatedBlocksAll.filter(emDestaque);');
+    // ORDEM 2B.1: esta cadeia inteira agora vive dentro de um useMemo real
+    // (achado real de auditoria — eram `const` soltos recomputados a cada
+    // render, causa raiz do "Maximum update depth exceeded" documentado em
+    // chart-render-failure-p0.test.ts) — mesmo CONTRATO, `const X = Y;`
+    // virou `X: Y,` no objeto de retorno memoizado.
+    expect(a).toContain('unmitigatedFvgs: unmitigatedFvgsAll.filter(emDestaque),');
+    expect(a).toContain('unmitigatedBlocks: unmitigatedBlocksAll.filter(emDestaque),');
   });
 
   it('isRealObstacle referencia chartObstacleZones (a MESMA lista sem teto que já alimenta obstacleCount/LiquidityZonesPlugin) — nunca um segundo cálculo de obstáculo', () => {

@@ -185,12 +185,16 @@ describe("Breaker/Mitigation: aqui o filtro FALTAVA de verdade — e agora está
     );
     // ...e as cinco saem pelo MESMO filtro. Se alguém devolver um teto
     // próprio a qualquer família, alguma destas cinco linhas some.
+    // ORDEM 2B.1: esta cadeia vive agora dentro de um useMemo real (achado
+    // de auditoria — causa raiz do "Maximum update depth exceeded", ver
+    // chart-render-failure-p0.test.ts) — mesmo CONTRATO, `const X = Y;`
+    // virou `X: Y,` no objeto de retorno memoizado.
     for (const trecho of [
-      "const unmitigatedFvgs = unmitigatedFvgsAll.filter(emDestaque);",
-      "const unmitigatedBlocks = unmitigatedBlocksAll.filter(emDestaque);",
-      "const unmitigatedVoids = unmitigatedVoidsAll.filter(emDestaque);",
-      "const breakerZones = breakerAll.filter(emDestaque).map(toChartZone);",
-      "const mitigationZones = mitigationAll.filter(emDestaque).map(toChartZone);",
+      "unmitigatedFvgs: unmitigatedFvgsAll.filter(emDestaque),",
+      "unmitigatedBlocks: unmitigatedBlocksAll.filter(emDestaque),",
+      "unmitigatedVoids: unmitigatedVoidsAll.filter(emDestaque),",
+      "breakerZones: breakerAll.filter(emDestaque).map(toChartZone),",
+      "mitigationZones: mitigationAll.filter(emDestaque).map(toChartZone),",
     ]) {
       expect(app).toContain(trecho);
     }

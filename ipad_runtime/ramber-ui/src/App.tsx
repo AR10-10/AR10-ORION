@@ -9065,8 +9065,17 @@ function RightRail() {
 // (e.g. an exchange response schema change) — this must never take down the
 // rest of the cockpit. Error boundaries have no hook equivalent; a class
 // component is the only way React supports catching render errors.
+//
+// ORDEM 2B (P0 CHART RENDER FAILURE): achado real de auditoria — esta
+// boundary descartava o `error` por completo (só guardava um boolean),
+// diferente da irmã GlobalErrorBoundary (global-error-boundary.tsx), que
+// já captura E mostra `error.message`. Era exatamente essa lacuna que
+// tornou o "BTC/USDT · ERRO DE RENDERIZAÇÃO" opaco — nenhuma pista do que
+// realmente quebrou. Corrigido reaproveitando o MESMO padrão já
+// comprovado da boundary global (captura + exibe + console.error real via
+// componentDidCatch), nunca uma segunda arquitetura de error boundary.
 interface WidgetErrorBoundaryState {
-  hasError: boolean;
+  error: Error | null;
 }
 class WidgetErrorBoundary extends React.Component<
   { title?: string; children: React.ReactNode },
@@ -9074,21 +9083,33 @@ class WidgetErrorBoundary extends React.Component<
 > {
   constructor(props: { title?: string; children: React.ReactNode }) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { error: null };
   }
-  static getDerivedStateFromError(): WidgetErrorBoundaryState {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): WidgetErrorBoundaryState {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // Real diagnóstico no console — a próxima vez que um painel quebrar,
+    // a causa real fica no log do navegador (DevTools/Safari remoto no
+    // iPad), nunca só o texto genérico da tela. Nunca envia rede, nunca
+    // muda estado além do já capturado por getDerivedStateFromError.
+    console.error(`[WidgetErrorBoundary] ${this.props.title || "PAINEL"}:`, error, info.componentStack);
   }
   render() {
-    if (this.state.hasError) {
+    if (this.state.error) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center gap-1 text-center px-2">
+        <div className="flex-1 flex flex-col items-center justify-center gap-1 text-center px-2 overflow-y-auto">
           <span className="text-[0.5rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
             {this.props.title || "PAINEL"} · ERRO DE RENDERIZAÇÃO
           </span>
           <span className="text-[0.45rem] text-[#8ab4f8]/50">
             Os demais painéis continuam ativos.
           </span>
+          {this.state.error.message ? (
+            <span className="text-[0.42rem] text-[#8ab4f8]/40 break-words max-w-full px-2">
+              {this.state.error.message}
+            </span>
+          ) : null}
         </div>
       );
     }
@@ -10427,102 +10448,157 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // troca de ativo. Retorna a MESMA referência de objeto entre um refresh
   // e outro (zero re-render adicional nos filhos por identidade).
   const pivotPointsSnapshot = selectedAsset ? getPivotPoints(selectedAsset) : null;
-  // Mesma assinatura estrutural de isRealObstacle logo acima, e pela MESMA
-  // razão: Breaker/Mitigation Block têm top/bottom mas não são PriceZone, e
-  // esta função só lê esses dois campos. Uma segunda cópia da chamada (ou um
-  // cast) seria duplicação sem ganho.
-  // As populacoes so sao COLETADAS aqui; quem entra na tela e' decidido uma
-  // vez so, mais abaixo, quando as cinco ja existem (orcamento compartilhado).
-  const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);
-  const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);
-  // Pools de liquidez (EQH/EQL) NÃO ganham este mesmo filtro — achado real
-  // da auditoria (ver header de liquidity-significance.ts): todo pool que
-  // chega até aqui já exige >= 2 toques reais para existir (a própria
-  // definição de "Equal High/Low" em fvg-order-block-engine.js), o mesmo
-  // piso que support-resistance-engine.js usa para rotular FORTE. Um filtro
-  // extra aqui não removeria zona nenhuma — só duplicaria uma regra que já
-  // vale em outro lugar.
-  const unsweptLiquidity = (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).slice(0, 4);
-  // Liquidity Void (liquidity-void-engine.js): MESMA disciplina real de
-  // FVG/Order Block acima — só zonas ainda NÃO mitigadas (preço nunca
-  // voltou a preencher o vazio; uma vez preenchido, o void deixou de ser
-  // uma referência real) e mesmo teto de decluttering de 3, com a mesma
-  // união de obstáculos reais do plano ativo (um void que o plano cruza
-  // nunca fica invisível por causa do teto).
-  const unmitigatedVoidsAll = (liquidityVoids ?? []).filter((z: PriceZone) => !z.mitigated);
-  // GRADUAÇÃO de institutional-blocks.js. Dois recortes deliberados antes
-  // de chegar ao canvas, ambos pela mesma razão que os Voids já têm o seu
-  // ("não ficar poluído, só as marca certeira"):
+  // ORDEM 2B.1 (VALIDAR DEFINITIVAMENTE O FIX — causa raiz real corrigida
+  // na origem, não só adiada): as 6 populações abaixo eram `const` soltos
+  // — `.filter()`/`.map()` executados a CADA render deste componente,
+  // sempre devolvendo um array NOVO por referência mesmo quando
+  // smcZones/liquidityVoids/institutionalBlocks não tinham mudado em nada.
+  // EnhancedChart_110_Percent é React.memo (ver comentário acima do seu
+  // `institutionalZoneInput`) — receber uma referência nova nessas props a
+  // cada render deste componente derrotava o memo por completo, forçando o
+  // filho a recomputar institutionalZoneInput/institutionalZones (também
+  // por referência nova, mesmo com o MESMO conteúdo), o que disparava o
+  // useEffect que publica institutionalZones na store
+  // (useUnifiedSnapshotStore). Este componente (App) é quem assina esse
+  // mesmo slice (useInstitutionalZonesSnapshot()) — a escrita
+  // re-renderizava App, que recomputava estes mesmos `.filter()` soltos de
+  // novo, produzindo outra referência nova, fechando um ciclo que nunca
+  // precisava de dado novo de mercado para se sustentar sozinho.
   //
-  //   1. só blocos AINDA NÃO RETESTADOS. Um bloco que o preço já voltou a
-  //      testar cumpriu seu papel — continua no dado real (o motor devolve
-  //      todos), só não disputa espaço no gráfico.
-  //   2. teto de contagem, com a MESMA escapatória de obstáculo real do
-  //      plano ativo que os Voids usam: um bloco que está no caminho
-  //      entrada→alvo nunca é cortado pelo teto.
-  //   3. ACHADO MEDIDO desta rodada: o teto de 3 escolhia pela ORDEM DE
-  //      CHEGADA, exatamente o defeito que liquidity-significance.ts já
-  //      corrigiu para FVG/Order Block — e que nunca chegou aqui. Medição
-  //      real sobre 2985 blocos (3 regimes de volatilidade): largura mediana
-  //      0,537 ATR, p1 = 0,105 ATR, e 1,27% abaixo do piso de 0,12 ATR. É
-  //      raro (um Breaker é o corpo+pavios de um Order Block real, então
-  //      quase nunca é ruído de pavio como um FVG pode ser), mas quando
-  //      acontece num bloco RECENTE ele desloca um bloco real de uma das 3
-  //      vagas — 1 em 288 vagas desenhadas na mesma medição. O filtro é o
-  //      mesmo, não uma segunda regra.
+  // Diagnóstico corrigido (ORDEM 2B.1 — a versão anterior deste comentário,
+  // no commit que introduziu o `queueMicrotask` abaixo em
+  // EnhancedChart_110_Percent.tsx, citava incorretamente "React error
+  // #185, Cannot update a component while rendering a different
+  // component" como causa): a mensagem real lançada
+  // (`node_modules/react-dom/cjs/react-dom-client.development.js`,
+  // `getRootForUpdatedFiber`) é **"Maximum update depth exceeded"**, jogada
+  // quando `nestedUpdateCount` de um root ultrapassa 50 — a assinatura de
+  // um LOOP real de atualizações, não uma colisão pontual entre
+  // ancestral/descendente na mesma passada. "Cannot update a component
+  // while rendering a different component" é um `console.error` distinto,
+  // não-lançável, de outro caminho de código (`scheduleUpdateOnFiber`) —
+  // nunca observado nesta investigação; as duas nunca devem ser
+  // confundidas.
   //
-  // `type` é a direção OPERACIONAL do motor (ALTA/BAIXA — já com a
-  // inversão de polaridade do Breaker aplicada), traduzida aqui para o
-  // vocabulário BULLISH/BEARISH que o canvas já usa. Zero recálculo.
-  const blocosVisiveis = (institutionalBlocks ?? []).filter((b: InstitutionalBlock) => !b.retested);
-  const toChartZone = (b: InstitutionalBlock) => ({
-    type: (b.direction === "ALTA" ? "BULLISH" : "BEARISH") as "BULLISH" | "BEARISH",
-    top: b.top,
-    bottom: b.bottom,
-    index: b.failIndex,
-  });
-  // Mesmo formato exato de unmitigatedFvgs/unmitigatedBlocks acima: as 3
-  // vagas são disputadas dentro do subconjunto SIGNIFICATIVO, e obstáculo
-  // real do plano ativo escapa do teto sempre.
-  const breakerAll = blocosVisiveis.filter((b: InstitutionalBlock) => b.kind === "BREAKER");
-  const mitigationAll = blocosVisiveis.filter((b: InstitutionalBlock) => b.kind === "MITIGATION");
+  // `queueMicrotask` (ORDEM 2B) só adiava QUANDO esse ciclo síncrono
+  // colidia com o commit de mount — o ciclo em si continuava, só de forma
+  // assíncrona, até estourar `nestedUpdateCount`. A correção real (esta
+  // rodada): memoizar esta cadeia pelas dependências REAIS (mesma
+  // disciplina que chartObstacleZones/chartCandlePatterns já usam acima),
+  // para que o resultado só ganhe uma referência nova quando o dado real
+  // por trás dele mudou — nunca a cada render por si só.
+  const {
+    unmitigatedFvgs,
+    unmitigatedBlocks,
+    unmitigatedVoids,
+    breakerZones,
+    mitigationZones,
+    unsweptLiquidity,
+  } = useMemo(() => {
+    // As populacoes so sao COLETADAS aqui; quem entra na tela e' decidido uma
+    // vez so, mais abaixo, quando as cinco ja existem (orcamento compartilhado).
+    const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);
+    const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);
+    // Pools de liquidez (EQH/EQL) NÃO ganham este mesmo filtro — achado real
+    // da auditoria (ver header de liquidity-significance.ts): todo pool que
+    // chega até aqui já exige >= 2 toques reais para existir (a própria
+    // definição de "Equal High/Low" em fvg-order-block-engine.js), o mesmo
+    // piso que support-resistance-engine.js usa para rotular FORTE. Um filtro
+    // extra aqui não removeria zona nenhuma — só duplicaria uma regra que já
+    // vale em outro lugar.
+    const unsweptLiquidityAll = (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).slice(0, 4);
+    // Liquidity Void (liquidity-void-engine.js): MESMA disciplina real de
+    // FVG/Order Block acima — só zonas ainda NÃO mitigadas (preço nunca
+    // voltou a preencher o vazio; uma vez preenchido, o void deixou de ser
+    // uma referência real) e mesmo teto de decluttering de 3, com a mesma
+    // união de obstáculos reais do plano ativo (um void que o plano cruza
+    // nunca fica invisível por causa do teto).
+    const unmitigatedVoidsAll = (liquidityVoids ?? []).filter((z: PriceZone) => !z.mitigated);
+    // GRADUAÇÃO de institutional-blocks.js. Dois recortes deliberados antes
+    // de chegar ao canvas, ambos pela mesma razão que os Voids já têm o seu
+    // ("não ficar poluído, só as marca certeira"):
+    //
+    //   1. só blocos AINDA NÃO RETESTADOS. Um bloco que o preço já voltou a
+    //      testar cumpriu seu papel — continua no dado real (o motor devolve
+    //      todos), só não disputa espaço no gráfico.
+    //   2. teto de contagem, com a MESMA escapatória de obstáculo real do
+    //      plano ativo que os Voids usam: um bloco que está no caminho
+    //      entrada→alvo nunca é cortado pelo teto.
+    //   3. ACHADO MEDIDO desta rodada: o teto de 3 escolhia pela ORDEM DE
+    //      CHEGADA, exatamente o defeito que liquidity-significance.ts já
+    //      corrigiu para FVG/Order Block — e que nunca chegou aqui. Medição
+    //      real sobre 2985 blocos (3 regimes de volatilidade): largura mediana
+    //      0,537 ATR, p1 = 0,105 ATR, e 1,27% abaixo do piso de 0,12 ATR. É
+    //      raro (um Breaker é o corpo+pavios de um Order Block real, então
+    //      quase nunca é ruído de pavio como um FVG pode ser), mas quando
+    //      acontece num bloco RECENTE ele desloca um bloco real de uma das 3
+    //      vagas — 1 em 288 vagas desenhadas na mesma medição. O filtro é o
+    //      mesmo, não uma segunda regra.
+    //
+    // `type` é a direção OPERACIONAL do motor (ALTA/BAIXA — já com a
+    // inversão de polaridade do Breaker aplicada), traduzida aqui para o
+    // vocabulário BULLISH/BEARISH que o canvas já usa. Zero recálculo.
+    const blocosVisiveis = (institutionalBlocks ?? []).filter((b: InstitutionalBlock) => !b.retested);
+    // Assinatura estreitada ao que a função REALMENTE lê (top/bottom), em vez
+    // de exigir um PriceZone inteiro: os Breaker/Mitigation Blocks têm os
+    // mesmos dois campos e um shape próprio, e um cast só para satisfazer a
+    // assinatura seria uma mentira de tipo sem nenhum ganho.
+    const toChartZone = (b: InstitutionalBlock) => ({
+      type: (b.direction === "ALTA" ? "BULLISH" : "BEARISH") as "BULLISH" | "BEARISH",
+      top: b.top,
+      bottom: b.bottom,
+      index: b.failIndex,
+    });
+    // Mesmo formato exato de unmitigatedFvgs/unmitigatedBlocks acima: as 3
+    // vagas são disputadas dentro do subconjunto SIGNIFICATIVO, e obstáculo
+    // real do plano ativo escapa do teto sempre.
+    const breakerAll = blocosVisiveis.filter((b: InstitutionalBlock) => b.kind === "BREAKER");
+    const mitigationAll = blocosVisiveis.filter((b: InstitutionalBlock) => b.kind === "MITIGATION");
 
-  // ═══ ORÇAMENTO COMPARTILHADO DAS BANDAS DE PREÇO ═══
-  //
-  // ACHADO MEDIDO desta rodada: cada uma das CINCO populações de banda
-  // tinha um teto PRÓPRIO de 3 — FVG, Order Block, Void, Breaker e
-  // Mitigation — e nenhuma sabia das outras. No pior caso a camada
-  // `liquidity_zones` punha 15 retângulos na tela enquanto DECLARAVA custo
-  // 3 em LAYER_VISUAL_COST, e o orçamento automático do canvas inteiro é
-  // 12 (AUTO_LAYER_MAX_VISUAL_COST). Uma camada só podia estourar sozinha
-  // o orçamento de todas — o mecanismo anti-poluição derrotado justamente
-  // pelo seu maior consumidor.
-  //
-  // Pior que o volume: sem comparação cruzada, "os 3 melhores de cada
-  // família" não é "os melhores da tela". Um Breaker de 0,2× ATR entrava
-  // por ser o 3º da sua família enquanto um FVG de 3× ATR ficava fora por
-  // ser o 4º da dele.
-  //
-  // Agora as cinco disputam UM orçamento, ordenado pela largura real em
-  // ATR que computeZoneSignificance já calculava — mesma disciplina que
-  // visual-budget.ts aplica às anotações. Zero matemática nova, e o custo
-  // declarado da camada passa a ser CONTÁVEL em vez de estimado.
-  //
-  // Obstáculo real do plano ativo continua SEMPRE visível, fora do teto
-  // (Regra de Ouro 4: informação estrutural, não decoração de destaque) —
-  // a mesma escapatória que cada população já tinha isoladamente.
-  const zonasEmDestaque = selectSharedZoneHighlights(
-    [unmitigatedFvgsAll, unmitigatedBlocksAll, unmitigatedVoidsAll, breakerAll, mitigationAll],
-    livePrice.price,
-    chartAtrPercent,
-  ) as ReadonlySet<unknown>;
-  const emDestaque = <Z extends { top: number; bottom: number }>(z: Z) =>
-    isRealObstacle(z) || zonasEmDestaque.has(z);
-  const unmitigatedFvgs = unmitigatedFvgsAll.filter(emDestaque);
-  const unmitigatedBlocks = unmitigatedBlocksAll.filter(emDestaque);
-  const unmitigatedVoids = unmitigatedVoidsAll.filter(emDestaque);
-  const breakerZones = breakerAll.filter(emDestaque).map(toChartZone);
-  const mitigationZones = mitigationAll.filter(emDestaque).map(toChartZone);
+    // ═══ ORÇAMENTO COMPARTILHADO DAS BANDAS DE PREÇO ═══
+    //
+    // ACHADO MEDIDO desta rodada: cada uma das CINCO populações de banda
+    // tinha um teto PRÓPRIO de 3 — FVG, Order Block, Void, Breaker e
+    // Mitigation — e nenhuma sabia das outras. No pior caso a camada
+    // `liquidity_zones` punha 15 retângulos na tela enquanto DECLARAVA custo
+    // 3 em LAYER_VISUAL_COST, e o orçamento automático do canvas inteiro é
+    // 12 (AUTO_LAYER_MAX_VISUAL_COST). Uma camada só podia estourar sozinha
+    // o orçamento de todas — o mecanismo anti-poluição derrotado justamente
+    // pelo seu maior consumidor.
+    //
+    // Pior que o volume: sem comparação cruzada, "os 3 melhores de cada
+    // família" não é "os melhores da tela". Um Breaker de 0,2× ATR entrava
+    // por ser o 3º da sua família enquanto um FVG de 3× ATR ficava fora por
+    // ser o 4º da dele.
+    //
+    // Agora as cinco disputam UM orçamento, ordenado pela largura real em
+    // ATR que computeZoneSignificance já calculava — mesma disciplina que
+    // visual-budget.ts aplica às anotações. Zero matemática nova, e o custo
+    // declarado da camada passa a ser CONTÁVEL em vez de estimado.
+    //
+    // Obstáculo real do plano ativo continua SEMPRE visível, fora do teto
+    // (Regra de Ouro 4: informação estrutural, não decoração de destaque) —
+    // a mesma escapatória que cada população já tinha isoladamente.
+    const zonasEmDestaque = selectSharedZoneHighlights(
+      [unmitigatedFvgsAll, unmitigatedBlocksAll, unmitigatedVoidsAll, breakerAll, mitigationAll],
+      livePrice.price,
+      chartAtrPercent,
+    ) as ReadonlySet<unknown>;
+    const emDestaque = <Z extends { top: number; bottom: number }>(z: Z) =>
+      isRealObstacle(z) || zonasEmDestaque.has(z);
+    return {
+      unmitigatedFvgs: unmitigatedFvgsAll.filter(emDestaque),
+      unmitigatedBlocks: unmitigatedBlocksAll.filter(emDestaque),
+      unmitigatedVoids: unmitigatedVoidsAll.filter(emDestaque),
+      breakerZones: breakerAll.filter(emDestaque).map(toChartZone),
+      mitigationZones: mitigationAll.filter(emDestaque).map(toChartZone),
+      unsweptLiquidity: unsweptLiquidityAll,
+    };
+    // `isRealObstacle` não entra nas dependências: é redefinida a cada
+    // render mas só lê `chartObstacleZones` (já listado abaixo) — mesmo
+    // comportamento, referência descartável.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [smcZones, liquidityVoids, institutionalBlocks, chartObstacleZones, livePrice.price, chartAtrPercent]);
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // (Fase 1.4) — mesma store que os agentes leem, só mapeada para o formato
   // do chart (price/ratio/score reais, nada recalculado aqui).
