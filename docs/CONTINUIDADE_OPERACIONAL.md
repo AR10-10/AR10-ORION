@@ -40,6 +40,35 @@ um arquivo MD pra eu levar e continuar certinho".
 - PR #17 aberta contra `main`, CI verde, `mergeable_state: clean`, zero
   comentário de review pendente.
 
+## 1.1 Achado crítico (2026-09-07) — a resposta real a "por que não vejo diferença visual"
+
+Auditoria direta do histórico de deploy (`Actions` do GitHub, não suposição):
+**o site público (`ar10-10.github.io/AR10-ORION`) não recebe nenhuma
+publicação nova desde 24/08.** Não é um problema de código nem de trabalho
+não-entregue — é um único secret nunca cadastrado.
+
+- `deploy-ipad-pwa.yml` dispara em todo push em `main` (branch de trabalho é
+  rejeitada pela allowlist de `Settings > Environments > github-pages`,
+  achado e documentado em 31/08).
+- Os 2 pushes em `main` mais recentes que deveriam ter publicado (merge da
+  PR #16 em 04/09 01:00 e da PR #15 em 04/09 01:05) **os dois falharam no
+  mesmo passo**: `Verificar segredo do portão antes de publicar` — aborta
+  porque `VITE_ACCESS_HASH` não existe como secret do repositório. Build e
+  deploy nem chegam a rodar (ficam `skipped`), por desenho — fail-closed
+  para nunca publicar um build que tranca o próprio Operador pra fora.
+- **Consequência real:** absolutamente nada desde o build de 24/08 chegou
+  ao site público — nem MEXC, nem o Terminal, nem a rodada de acessibilidade
+  (foco visível, ARIA live, `prefers-reduced-motion`), nem esta PR #17
+  (A1 fechamento + A2.1 + fix harmônico). Está tudo real, testado e no
+  repositório — só nunca publicado onde o Operador olha.
+- **Correção é 100% do lado do Operador** (`docs/ACESSO_PRIVADO.md` §4, já
+  documentado antes deste achado, só não conectado explicitamente a este
+  sintoma): gerar o hash (`printf '%s' 'SUA_SENHA_NOVA' | shasum -a 256`) e
+  cadastrar em `Settings → Secrets and variables → Actions` como
+  `VITE_ACCESS_HASH`. Nenhum commit resolve isso — só o secret. Assim que
+  existir, o próximo push em `main` (ex.: o merge desta própria PR #17)
+  publica sozinho, sem precisar reativar nada.
+
 ## 2. O que foi entregue nesta trilha (mais recente primeiro)
 
 | Entrega | Onde | Resultado |
