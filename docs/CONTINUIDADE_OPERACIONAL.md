@@ -1,12 +1,21 @@
 # AR10 CYBORG — Continuidade Operacional
 
-**Gerado em**: 2026-09-06 · **Atualizado em**: 2026-09-07 ·
-**PR [#17](https://github.com/AR10-10/AR10-ORION/pull/17) mesclada em `main`** (merge commit
-`b3613d4`) — todo o conteúdo deste documento já está na linha principal.
+**Gerado em**: 2026-09-06 · **Atualizado em**: 2026-09-07 (pós-merge PR #19) ·
+**PRs [#17](https://github.com/AR10-10/AR10-ORION/pull/17),
+[#18](https://github.com/AR10-10/AR10-ORION/pull/18) e
+[#19](https://github.com/AR10-10/AR10-ORION/pull/19) mescladas em `main`**
+(merge commits `b3613d4`, `ff628f8`, `646622d`) — todo o conteúdo deste
+documento já está na linha principal.
 **Branch de trabalho atual**: `claude/localizar-arquivo-nuvem-qr0z6x`, resetada
 a partir de `main` pós-merge (nenhum commit pendente nela ainda) ·
 **Pedido de origem**: Operador — "faz saneamento, vê se está tudo em ordem, me dá
 um arquivo MD pra eu levar e continuar certinho".
+
+**⚠️ Bloqueio ativo, confirmado de novo agora (2026-09-07, 3ª vez seguida):**
+o deploy público continua falhando no mesmo passo (`Verificar segredo do
+portao antes de publicar`) nas 3 merges mais recentes (#17, #18 e #19) —
+`VITE_ACCESS_HASH` ainda não foi cadastrado como secret do repositório.
+Detalhe completo no §1.1.
 
 ## O que este documento É e o que ele NÃO É
 
@@ -40,12 +49,16 @@ um arquivo MD pra eu levar e continuar certinho".
   nunca commitado) — boot limpo, zero `pageerror`, todo widget em estado
   honesto (AWAITING/DADOS INSUFICIENTES — nunca fabricado), exatamente o
   esperado neste sandbox de rede zero-egress.
-- PR #17 **mesclada em `main`** em 2026-09-07 (autorizado pelo Operador),
-  CI verde no merge commit `b3613d4`. O push do merge disparou
-  automaticamente `deploy-ipad-pwa.yml` (confirmado ao vivo) — que ainda
-  falha no mesmo passo do achado abaixo, até o secret existir.
+- PR #17, #18 e #19 **mescladas em `main`** em 2026-09-07 — #17 e #18 com
+  autorização direta do Operador (`AskUserQuestion`), #19 (A2.2) já sob a
+  autorização permanente de merge automático registrada em `CLAUDE.md`
+  ("Autorização permanente: merge automático (2026-09-07)"). CI verde nos
+  3 merge commits (`b3613d4`, `ff628f8`, `646622d`). Cada push disparou
+  `deploy-ipad-pwa.yml` automaticamente (confirmado via API do GitHub,
+  não suposição) — **as 3 vezes falhou no mesmo passo** do achado abaixo,
+  até o secret existir.
 
-## 1.1 Achado crítico (2026-09-07) — a resposta real a "por que não vejo diferença visual"
+## 1.1 Achado crítico (2026-09-07, confirmado 3x seguidas) — a resposta real a "por que não vejo diferença visual"
 
 Auditoria direta do histórico de deploy (`Actions` do GitHub, não suposição):
 **o site público (`ar10-10.github.io/AR10-ORION`) não recebe nenhuma
@@ -55,31 +68,36 @@ não-entregue — é um único secret nunca cadastrado.
 - `deploy-ipad-pwa.yml` dispara em todo push em `main` (branch de trabalho é
   rejeitada pela allowlist de `Settings > Environments > github-pages`,
   achado e documentado em 31/08).
-- Os 2 pushes em `main` mais recentes que deveriam ter publicado (merge da
-  PR #16 em 04/09 01:00 e da PR #15 em 04/09 01:05) **os dois falharam no
-  mesmo passo**: `Verificar segredo do portão antes de publicar` — aborta
-  porque `VITE_ACCESS_HASH` não existe como secret do repositório. Build e
+- Os 3 pushes em `main` mais recentes (merge da PR #17 às 02:33, da PR #18
+  às 02:59 e da PR #19 às 03:37, todos em 07/09) **falharam os 3 no mesmo
+  passo**: `Verificar segredo do portao antes de publicar` (runs
+  `34076681242`, `34078074792`, `34080275899`) — aborta porque
+  `VITE_ACCESS_HASH` não existe como secret do repositório. Build e
   deploy nem chegam a rodar (ficam `skipped`), por desenho — fail-closed
   para nunca publicar um build que tranca o próprio Operador pra fora.
 - **Consequência real:** absolutamente nada desde o build de 24/08 chegou
   ao site público — nem MEXC, nem o Terminal, nem a rodada de acessibilidade
-  (foco visível, ARIA live, `prefers-reduced-motion`), nem o conteúdo da
-  PR #17, já mesclado em `main` (A1 fechamento + A2.1 + fix harmônico +
-  as 3 partes do aviso de dado obsoleto/reconexão/autodiagnóstico). Está
-  tudo real, testado e em `main` — só nunca publicado onde o Operador
-  olha.
-- **Correção é 100% do lado do Operador** (`docs/ACESSO_PRIVADO.md` §4, já
-  documentado antes deste achado, só não conectado explicitamente a este
-  sintoma): gerar o hash (`printf '%s' 'SUA_SENHA_NOVA' | shasum -a 256`) e
+  (foco visível, ARIA live, `prefers-reduced-motion`), nem A1/A2.1 (PR #17),
+  nem o aviso de versão nova + autorização de merge automático (PR #18),
+  nem a Cross-Venue Intelligence (PR #19, A2.2). Está tudo real, testado e
+  em `main` — só nunca publicado onde o Operador olha. Isso já foi
+  explicado ao Operador nesta mesma trilha (junto com o comando exato) e
+  **ainda não foi resolvido do lado dele** — não é um achado novo, é o
+  mesmo bloqueio, agora confirmado pela 3ª vez consecutiva.
+- **Correção é 100% do lado do Operador** (`docs/ACESSO_PRIVADO.md` §4):
+  gerar o hash (`printf '%s' 'SUA_SENHA_NOVA' | shasum -a 256`) e
   cadastrar em `Settings → Secrets and variables → Actions` como
   `VITE_ACCESS_HASH`. Nenhum commit resolve isso — só o secret. Assim que
-  existir, o próximo push em `main` (ex.: o merge desta própria PR #17)
-  publica sozinho, sem precisar reativar nada.
+  existir, o próximo push em `main` publica sozinho, sem precisar
+  reativar nada — inclusive um push vazio/qualquer commit futuro, não
+  precisa ser um merge novo.
 
 ## 2. O que foi entregue nesta trilha (mais recente primeiro)
 
 | Entrega | Onde | Resultado |
 |---|---|---|
+| **A2.2 — Cross-Venue Intelligence** (escopo ajustado pelo Operador: core Binance×MEXC, Bybit/OKX price-only) | `nexus/cross-venue-intelligence.ts` (novo), `startMexcDepthOnly()` em `cross-exchange-service.ts` | Compositor real (`VENUE_CAPABILITY`, comparação de liquidez, lead/lag honesto, `CROSS_VENUE_KNOWN_GAPS`) + card "CROSS-VENUE INTELLIGENCE" em `DecisionValidationWidget`. Gap declarado: Bybit/OKX sem order book/trades reais (conectores não existem). |
+| **Aviso de versão nova (PWA)** + **autorização permanente de merge automático** | `pwa-update-signal.ts` (novo), `App.tsx` (`UpdateAvailableBanner`), `CLAUDE.md` | Resolve a limitação real do Service Worker (código novo só troca no próximo relaunch) com um sinal visível + botão de recarregar. Operador autorizou merge automático de PRs próprias já verdes, sem perguntar de novo a cada vez. |
 | **"Sistema sentir dado obsoleto"** (3 partes, ver §8) | `data-freshness-banner.ts`, `health-monitor.ts`, `App.tsx` (depthManager + TelemetryHealthWidget) | Aviso visível sempre montado + fix real de `isDataFresh` mentindo no boot + reconexão do book 5x mais rápida numa queda + autodiagnóstico a cada 60s. |
 | **Achado: deploy público parado desde 24/08** (sem código — investigação) | `docs/CONTINUIDADE_OPERACIONAL.md` §1.1 | Causa real de "não vejo diferença visual": `VITE_ACCESS_HASH` nunca foi cadastrado como secret — ação 100% do Operador, documentada com o comando exato. |
 | **A2.1 — Microstructure Event Engine** (escopo "consolidar sob 1 contrato tipado", confirmado pelo Operador) | `nexus/microstructure-snapshot.ts` (novo) | Organiza `signal-engine.js`/`trap-detection.ts`/`order-book-depth.ts` sob um `MicrostructureSnapshot` tipado, com qualidade real por fonte. Zero motor novo. Ligado à store (`unified-snapshot-store.ts` §3) e a `App.tsx`. |
@@ -111,14 +129,16 @@ duplicado aqui.
 O Operador definiu 4 fases pra Market Intelligence Next-Gen:
 
 - **A2.1 — Microstructure Event Engine** → ✅ entregue (com os 2 gaps acima).
-- **A2.2 — Cross-Venue Intelligence** → **aguardando autorização explícita**.
-- **A2.3 — Advanced Order Flow** → aguardando A2.2.
+- **A2.2 — Cross-Venue Intelligence** → ✅ entregue (PR #19, escopo Binance×MEXC
+  core + Bybit/OKX price-only, ajustado explicitamente pelo Operador; gap
+  Bybit/OKX full microstructure declarado, nunca fabricado).
+- **A2.3 — Advanced Order Flow** → **aguardando autorização explícita**.
 - **A2.4 — Regime Transition** → aguardando A2.3.
 
-**Regra explícita da própria Ordem A2.1 (§ final): "não iniciar A2.2, A2.3
-ou A2.4 sem nova autorização."** Uma sessão nova não deve assumir que
-"continuar o trabalho" significa começar A2.2 sozinha — isso exige o
-Operador pedir de novo, explicitamente.
+**Regra explícita da própria Ordem A2.1 (§ final), reafirmada no ajuste de
+escopo da A2.2: "não iniciar A2.3 (nem A2.4) sem nova autorização."** Uma
+sessão nova não deve assumir que "continuar o trabalho" significa começar
+A2.3 sozinha — isso exige o Operador pedir de novo, explicitamente.
 
 ## 5. A disciplina correta pra continuar (resumo — texto completo em `CLAUDE.md`)
 
