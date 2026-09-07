@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -203,6 +203,7 @@ import {
 // Ordem A1 §9-§14 (fechamento das lacunas do A1): instrumentação real de
 // FPS, DEV-only — ver PerformanceMonitorPanel/import.meta.env.DEV abaixo.
 import { FpsRecorder, type FpsSample } from "./nexus/fps-monitor";
+import { shouldShowFreshnessBanner, formatFreshnessBannerLabel } from "./nexus/data-freshness-banner";
 // GRADUAÇÃO (pedido do Operador: "organiza tudo que tem no laboratório"):
 // compareBacktestRuns saía do Laboratório de Evolução sem nenhum consumidor
 // de produção (fronteira travada por teste em compare-runs.test.ts, agora
@@ -4550,6 +4551,7 @@ export default function App() {
         <MarketAnalysisPanel priceData={priceData} chartData={chartData} />
         <PaperTradingPanel priceData={priceData} />
         <AlertToastStack alerts={alerts} onDismiss={(id) => setAlerts((prev) => prev.filter((a) => a.id !== id))} />
+        <DataFreshnessBanner />
         {/* Ordem A1 §9-§10 (fechamento das lacunas do A1): Laboratory-only,
             nunca ligado por padrão — ver performanceMonitorOpen acima. Um
             gate "import.meta.env.DEV" pareceria mais automático, mas
@@ -5990,6 +5992,55 @@ const ALERT_TONE_STYLE: Record<AlertEvent["tone"], { hex: string; border: string
   info: { hex: "#00f0ff", border: "border-l-[#00f0ff]", text: "text-[#00f0ff]" },
   danger: { hex: "#ff0055", border: "border-l-[#ff0055]", text: "text-[#ff0055]" },
 };
+
+// DataFreshnessBanner — pedido do Operador ("eu queria que o sistema fosse
+// inteligente... ele não sente que ele não tá rodando dado real"). Sempre
+// montado em App() (nunca atrás de um toggle de Laboratório): o objetivo é
+// aparecer sozinho quando o dado real para, sem o Operador precisar abrir
+// nada. offline/isDataFresh/dataFreshSince já eram reais (Health Monitor,
+// nexus/health-monitor.ts) — só decide SE/O QUÊ mostrar em
+// nexus/data-freshness-banner.ts (puro, testado); este componente só lê a
+// store e desenha. Fail-closed ao contrário de todo o resto do app: quando
+// nada está errado, retorna null e não ocupa espaço nenhum.
+//
+// aria-hidden="true" deliberado: a11y/LiveRegionAnnouncer.tsx já anuncia a
+// transição de wsLive pra leitor de tela ("Conexão: OFF, reconectando") —
+// uma segunda região aria-live aqui duplicaria o anúncio pra quem já está
+// coberto. Este aviso fecha a lacuna de quem VÊ a tela sem mouse (iPad
+// Safari real, onde o `title` dos indicadores existentes nunca aparece).
+function DataFreshnessBanner() {
+  const offline = useOfflineSnapshot();
+  const isDataFresh = useDataFreshSnapshot();
+  const dataFreshSince = useDataFreshSinceSnapshot();
+  const state = { offline, isDataFresh, dataFreshSince };
+  const visible = shouldShowFreshnessBanner(state);
+
+  // Tick de 1s só enquanto visível — parado (zero setInterval) no caminho
+  // saudável, que é o caso comum, pra não custar nada ao Main Thread
+  // sagrada (Regra de Ouro 6) fora do momento em que este aviso importa.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (!visible) return;
+    const id = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [visible]);
+
+  if (!visible) return null;
+
+  // top-right, nunca full-width centralizado: medido ao vivo (Playwright)
+  // que um pill centralizado na viewport inteira cai bem em cima do orb de
+  // voz/botão de energia (NucleoVoiceOrb), que fica perto do centro da
+  // barra superior, não da borda. O canto superior direito é o único ponto
+  // confirmado vazio em qualquer largura testada.
+  return (
+    <div
+      aria-hidden="true"
+      className="!fixed !z-[1260] top-1 right-2 max-w-[70vw] overflow-hidden text-ellipsis whitespace-nowrap pointer-events-none px-3 py-1 rounded-full bg-[#ff0055]/90 text-white text-[0.6rem] font-bold tracking-wider font-mono shadow-[0_0_20px_rgba(255,0,85,0.5)] backdrop-blur-sm"
+    >
+      {formatFreshnessBannerLabel(state, Date.now())}
+    </div>
+  );
+}
 
 function AlertToastStack({ alerts, onDismiss }: { alerts: AlertEvent[]; onDismiss: (id: string) => void }) {
   if (alerts.length === 0) return null;

@@ -383,6 +383,13 @@ export interface UnifiedSnapshotState {
   // §7.2), derivada de price/orderBook.updatedAt reais, nunca um segundo
   // relógio próprio.
   isDataFresh: boolean;
+  // Ordem "sistema sentir que não tá rodando dado real" (resposta ao
+  // Operador, 2026-09-07): o timestamp REAL por trás de isDataFresh — o
+  // mesmo `freshest` que health-monitor.ts já computava e descartava depois
+  // de virar boolean. Existe só para DataFreshnessBanner (App.tsx) poder
+  // mostrar "há X segundos" real, nunca fabricado; null antes do primeiro
+  // dado real chegar nesta sessão (boot).
+  dataFreshSince: number | null;
   // Fase 1.2 (dedup real): App.tsx já media FPS via requestAnimationFrame
   // desde antes da Fase 0 — o Health Monitor espelha este valor em vez de
   // amostrar de novo (zero repetição).
@@ -488,6 +495,7 @@ interface UnifiedSnapshotActions {
   setHealth: (health: HealthSnapshot) => void;
   setOffline: (offline: boolean) => void;
   setDataFresh: (fresh: boolean) => void;
+  setDataFreshSince: (ts: number | null) => void;
   setUiFps: (fps: number | null) => void;
   setTrustScore: (score: TrustScoreSnapshot | null) => void;
   // Ingestão de um evento afetivo REAL (transição operacional verdadeira,
@@ -574,6 +582,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     health: EMPTY_HEALTH,
     offline: typeof navigator === "undefined" ? false : !navigator.onLine,
     isDataFresh: false,
+    dataFreshSince: null,
     uiFps: null,
     trustScore: null,
     affectiveMemory: EMPTY_AFFECTIVE_STATE,
@@ -643,6 +652,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setHealth: (health) => set((s) => { s.health = health; }),
     setOffline: (offline) => set((s) => { s.offline = offline; }),
     setDataFresh: (fresh) => set((s) => { s.isDataFresh = fresh; }),
+    setDataFreshSince: (ts) => set((s) => { s.dataFreshSince = ts; }),
     setUiFps: (fps) => set((s) => { s.uiFps = fps; }),
     setTrustScore: (score) => set((s) => { s.trustScore = score; }),
     recordAffectiveEvent: (source) => set((s) => {
@@ -809,6 +819,7 @@ export const useCoreSnapshot = (): CoreSnapshot => useUnifiedSnapshotStore((s) =
 export const useHealthSnapshot = (): HealthSnapshot => useUnifiedSnapshotStore((s) => s.health);
 export const useOfflineSnapshot = (): boolean => useUnifiedSnapshotStore((s) => s.offline);
 export const useDataFreshSnapshot = (): boolean => useUnifiedSnapshotStore((s) => s.isDataFresh);
+export const useDataFreshSinceSnapshot = (): number | null => useUnifiedSnapshotStore((s) => s.dataFreshSince);
 export const useUiFpsSnapshot = (): number | null => useUnifiedSnapshotStore((s) => s.uiFps);
 export const useTrustScoreSnapshot = (): TrustScoreSnapshot | null =>
   useUnifiedSnapshotStore((s) => s.trustScore);
