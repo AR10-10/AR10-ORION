@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useRadarScanLatencySnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -270,6 +270,7 @@ import { simulateTradeCostsBatch } from "./nexus/trade-simulation";
 import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResult } from "./nexus/expectancy";
 import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
 import { computeDirectionalConsensus, describeDirectionalConsensus, normalizeSide, sideFromSigned, computeLiquidityMap, liquidityBias, type DirectionalSource, type DirectionalConsensusReading, type LiquidityTarget, type LiquidityMapReading } from "./nexus/directional-consensus";
+import { humanizeReasonCode } from "./nexus/reason-vocabulary";
 import { computeZoneSignificance, formatZoneAtrWidth, selectSharedZoneHighlights } from "./nexus/liquidity-significance";
 // "constrói uma bola... um só aparece, tipo longa ou short, com essa
 // porcentagem, bem profissional" (pedido direto do Operador) — geometria
@@ -712,12 +713,29 @@ const RADAR_UNIVERSE_SYMBOLS = extractRadarUniverseSymbols(assetUniverseDefault 
 // nenhum throttle ENTRE chaves diferentes (ver header do bus.js) — um
 // scan do universo inteiro sem seu próprio limite de concorrência
 // martelaria a REST da Binance ao mesmo tempo que o ciclo do ativo
-// selecionado. 3 candidatos por lote + 2s de respiro: ~35 ativos varridos
-// em ~25s, nunca competindo por throughput com o ciclo de 30s do ativo
-// ao vivo nem com o de 60s do multi-timeframe. Regra de Ouro 6: 100%
-// fetch assíncrono, zero cálculo síncrono pesado no Main Thread.
-const RADAR_SCAN_BATCH_SIZE = 3;
-const RADAR_SCAN_BATCH_DELAY_MS = 2000;
+// selecionado.
+//
+// ORDEM DE SERVIÇO (Frente 1, §2.3 — "conflitos de CPU/RAM entre
+// agentes", achado real de auditoria): a frase "Regra de Ouro 6: 100%
+// fetch assíncrono, zero cálculo síncrono pesado no Main Thread" que
+// vivia aqui estava ERRADA — scanRadarCandidate (engine-bridge.ts) roda
+// analyzeMarketStructure/analyzeSupportResistance/classifyMarketRegime
+// (x4, um por timeframe)/buildConvictionReading/computeConfluenceCorridor
+// SINCRONAMENTE por candidato, na main thread. Isto é o candidato real
+// mais forte a "múltiplos agentes competindo por CPU" — até ~60
+// candidatos (30 Binance + até 30 MEXC) por ciclo completo de 5min.
+// Migrar este cálculo para um Worker é a correção real e definitiva —
+// mas Regra de Ouro 6 exige que isso seja "sua própria iniciativa isolada
+// e cuidadosa, nunca uma mudança apressada junto de outras coisas": fica
+// para a Frente de arquitetura de bots/agentes, não para esta rodada.
+// Mitigação honesta aplicada AGORA (instrumentação real de custo via
+// radarScanLatencyMs, ver o efeito abaixo, + batch/delay mais
+// conservador): 2 candidatos por lote + 3s de respiro (era 3+2s) —
+// menos trabalho síncrono concentrado por janela, ao custo real de um
+// ciclo mais longo (~35 ativos em ~55s em vez de ~25s) — ainda bem
+// abaixo do timer de 5min que o dispara de novo.
+const RADAR_SCAN_BATCH_SIZE = 2;
+const RADAR_SCAN_BATCH_DELAY_MS = 3000;
 // Ciclo completo a cada 5min — bem mais lento que o ciclo do ativo
 // selecionado e o multi-timeframe: o Radar é contexto de descoberta em
 // segundo plano, nunca o caminho crítico do sinal (LEI 24).
@@ -1968,6 +1986,12 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const runRadarScan = async () => {
+      // ORDEM DE SERVIÇO (Frente 1, §2.3): tempo de parede REAL do ciclo
+      // inteiro (achado de auditoria — este era o único ciclo real deste
+      // app sem NENHUMA instrumentação de custo, apesar de ser o principal
+      // candidato real a "conflito de CPU entre agentes" que o Operador
+      // relatou). Zero mudança de comportamento — só medição.
+      const scanStartedAt = performance.now();
       const candidateSymbols = RADAR_UNIVERSE_SYMBOLS.filter((s) => s !== selectedAsset);
       const qualified: RadarQualificationResult[] = [];
       for (let i = 0; i < candidateSymbols.length; i += RADAR_SCAN_BATCH_SIZE) {
@@ -2018,6 +2042,7 @@ export default function App() {
       // deixa candidatos de um ciclo/prazo/ativo anterior na tela.
       if (!cancelled) {
         useUnifiedSnapshotStore.getState().setRadarCandidates(rankRadarCandidates(qualified));
+        useUnifiedSnapshotStore.getState().setRadarScanLatency(Math.round(performance.now() - scanStartedAt));
       }
     };
     void runRadarScan();
@@ -2848,6 +2873,26 @@ export default function App() {
   // (nexus/directional-consensus.ts). O Núcleo é a REFERÊNCIA, nunca um voto
   // (LEI 24). Fonte sem leitura real fica FORA do denominador.
   const directionalConsensus = useMemo(() => {
+    // ORDEM DE SERVIÇO (Frente 1, §2.2 — pedido direto do Operador):
+    // "quando não houver sinal, o sistema deve explicar claramente o que
+    // está aguardando". Achado real de auditoria: CONS/kNN/LIVR/FLUX já
+    // tinham o motivo real computado em outro motor, um campo de
+    // distância — só nunca lido aqui. ESTR/HTF NÃO têm reason: o motivo
+    // real (status_reason de market-structure-engine.js) é descartado
+    // antes de chegar a este componente (js/real-data/analysis-frame.js e
+    // engine-bridge.ts:484-486 mantêm só o rótulo ALTA/BAIXA/LATERAL/null,
+    // nunca o porquê) — corrigir isso exige nova fiação end-to-end, não
+    // uma mudança de exibição, e fica documentado aqui como pendência
+    // honesta desta rodada (CLAUDE.md, Disciplina de trabalho item 5).
+    const consReason = !councilFromSnapshot
+      ? null
+      : councilFromSnapshot.riskGated
+        ? (councilFromSnapshot.votes.find((v) => v.agent === "RISK")?.rationale ?? null)
+        : councilFromSnapshot.stance === "ABSTAIN"
+          ? `${councilFromSnapshot.quorum}/6 agentes direcionais com leitura real nesta janela`
+          : null;
+    const fluxReason =
+      councilFromSnapshot?.votes.find((v) => v.agent === "ORDERFLOW" && v.stance === "ABSTAIN")?.rationale ?? null;
     const sources: DirectionalSource[] = [
       {
         code: "ESTR",
@@ -2860,6 +2905,9 @@ export default function App() {
         name: "Regime de Mercado",
         side: normalizeSide(engine.marketRegime?.direction ?? null),
         measures: "direção do regime por ADX/DI de Wilder — só existe em tendência, nunca em consolidação",
+        reason: engine.marketRegime
+          ? `regime atual: ${engine.marketRegime.regime}${Number.isFinite(engine.marketRegime.adx) ? `, ADX ${engine.marketRegime.adx.toFixed(1)}` : ""}`
+          : null,
       },
       {
         code: "HTF",
@@ -2872,18 +2920,21 @@ export default function App() {
         name: "Conselho",
         side: normalizeSide(councilFromSnapshot?.stance ?? null),
         measures: "massa de opinião de um pool linear de agentes — nunca uma probabilidade calibrada",
+        reason: consReason,
       },
       {
         code: "kNN",
         name: "Classificador Lorentziano",
         side: normalizeSide(realCycle?.lorentzian?.classification ?? null),
         measures: "k-NN sobre a mesma janela real de candles — confluência independente",
+        reason: humanizeReasonCode(realCycle?.lorentzian?.reason),
       },
       {
         code: "FLUX",
         name: "Fluxo (CVD)",
         side: sideFromSigned(num(cvd) ? cvd : null),
         measures: "delta cumulativo real de volume: agressão compradora menos vendedora",
+        reason: fluxReason,
       },
       {
         code: "LIVR",
@@ -2892,18 +2943,21 @@ export default function App() {
         // "voto" que não carrega informação nenhuma.
         side: sideFromSigned(engine.imbalance, 0.05),
         measures: "parcela de liquidez PARADA no livro — é oferta em repouso, nunca intenção de tendência",
+        reason: engine.hasBook ? null : "aguardando a primeira leitura real do livro de ofertas (WebSocket depth)",
       },
     ];
     return computeDirectionalConsensus(normalizeSide(engine.direction), sources);
   }, [
     engine.marketStructureLabel,
-    engine.marketRegime?.direction,
+    engine.marketRegime,
     engine.htfMarketStructureLabel,
     engine.htfTimeframe,
     engine.imbalance,
+    engine.hasBook,
     engine.direction,
-    councilFromSnapshot?.stance,
+    councilFromSnapshot,
     realCycle?.lorentzian?.classification,
+    realCycle?.lorentzian?.reason,
     cvd,
   ]);
 
@@ -5773,7 +5827,12 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
   const paperTrading = usePaperTradingSnapshot();
   const [sizeInput, setSizeInput] = useState("100");
   const [leverageInput, setLeverageInput] = useState("1");
-  const { selectedAsset } = useContext(WidgetContext) || {};
+  const { selectedAsset, engine } = useContext(WidgetContext) || {};
+  // ORDEM DE SERVIÇO (Frente 1, §2.2): mesma leitura real e a mesma função
+  // (tradePlanAbsenceReason) que TradePlanTopStrip/chart canvas já usam —
+  // reaproveitada aqui, zero segunda regra de "por que não há plano".
+  const council = useCouncilSnapshot();
+  const absence = !tradePlan ? tradePlanAbsenceReason(council, engine?.direction ?? null) : null;
 
   if (!paperTradingOpen) return null;
   const close = () => setPaperTradingOpen?.(false);
@@ -5861,7 +5920,9 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
           {!position ? (
             <>
               {!tradePlan ? (
-                <div className="text-[#8ab4f8]/50 text-center py-4">DADOS INSUFICIENTES — sem Trade Plan ativo agora.</div>
+                <div className="text-[#8ab4f8]/50 text-center py-4" title={absence?.tooltip}>
+                  {absence?.reason ?? "DADOS INSUFICIENTES — sem Trade Plan ativo agora."}
+                </div>
               ) : (
                 <div className="cyber-panel bg-black/30 p-2 space-y-1">
                   <div className="flex justify-between">
@@ -8158,10 +8219,19 @@ function DirectionalSyncPanel() {
       </div>
 
       {/* Uma linha por fonte real. Fonte sem leitura aparece como "—" e NÃO
-          entra na contagem acima — silêncio nunca vira voto. */}
+          entra na contagem acima — silêncio nunca vira voto. ORDEM DE
+          SERVIÇO (Frente 1, §2.2): quando a fonte está sem leitura E existe
+          um motivo real já computado (s.reason), o tooltip mostra ESSE
+          motivo em vez do `measures` genérico — "aguardando X" nunca fica
+          sem explicação quando a explicação real já existe em algum lugar
+          do sistema. */}
       <div className="flex flex-col gap-[3px]">
         {r.sources.map((s) => (
-          <div key={s.code} title={`${s.name} — ${s.measures}`} className="flex items-center justify-between gap-2">
+          <div
+            key={s.code}
+            title={s.side === null && s.reason ? `${s.name} — ${s.reason}` : `${s.name} — ${s.measures}`}
+            className="flex items-center justify-between gap-2"
+          >
             <span className="ar10-t-micro font-bold tracking-wider text-[#8ab4f8]/70 shrink-0">{s.code}</span>
             <span className="flex items-center gap-1.5 shrink-0">
               <span className="ar10-t-micro font-bold font-mono" style={{ color: sideColor(s.side) }}>
@@ -9347,10 +9417,10 @@ function ModulePanel({ title, children }: { title: string; children: React.React
   );
 }
 
-function ModuleStat({ label, value, tone }: { label: string; value: string; tone?: "long" | "short" | "neutral" }) {
+function ModuleStat({ label, value, tone, title }: { label: string; value: string; tone?: "long" | "short" | "neutral"; title?: string | null }) {
   const color = tone === "long" ? "text-[#00ffaa]" : tone === "short" ? "text-[#ff0055]" : "text-[#8ab4f8]";
   return (
-    <div className="flex justify-between items-center gap-2">
+    <div className="flex justify-between items-center gap-2" title={title ?? undefined}>
       <span className="text-[0.45rem] text-[#8ab4f8]/60 font-bold tracking-wide uppercase">{label}</span>
       <span className={`text-[0.5rem] font-mono font-black ${color}`}>{value}</span>
     </div>
@@ -9917,8 +9987,24 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     body = (
       <>
         <ModulePanel title="Position Sizing · Risk Engine (real, advisory only)">
-          <ModuleStat label="Suggested Position" value={riskSuggestion ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% equity` : MODULE_EMPTY} />
-          <ModuleStat label="Effective Risk" value={riskSuggestion ? `${riskSuggestion.effective_risk_pct.toFixed(2)}%` : MODULE_EMPTY} />
+          {/* ORDEM DE SERVIÇO (Frente 1, §2.2) — achado real de auditoria:
+              riskSuggestion NUNCA é null/undefined (buildRiskSuggestion
+              sempre devolve um objeto, status OK ou SEM_SUGESTAO) — a
+              checagem de truthiness abaixo sempre caía no ramo numérico,
+              então "Suggested Position" chegava a mostrar "0.0% equity" sem
+              contexto algum quando o motivo real (riskSuggestion.reason)
+              já existia no mesmo objeto. Checagem corrigida para
+              status === "OK"; o motivo real vai pro tooltip. */}
+          <ModuleStat
+            label="Suggested Position"
+            value={riskSuggestion?.status === "OK" ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% equity` : MODULE_EMPTY}
+            title={riskSuggestion?.status !== "OK" ? humanizeReasonCode(riskSuggestion?.reason) : undefined}
+          />
+          <ModuleStat
+            label="Effective Risk"
+            value={riskSuggestion?.status === "OK" ? `${riskSuggestion.effective_risk_pct.toFixed(2)}%` : MODULE_EMPTY}
+            title={riskSuggestion?.status !== "OK" ? humanizeReasonCode(riskSuggestion?.reason) : undefined}
+          />
           <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
             Advisory only — order execution is permanently disabled in this terminal (read-only by design).
           </span>
@@ -11395,6 +11481,11 @@ function MarketBiasDecisionCard() {
   const riskLabel = riskOk
     ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risk ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
     : "0% · sem sugestão";
+  // ORDEM DE SERVIÇO (Frente 1, §2.2): riskSuggestion já carrega o motivo
+  // REAL do SEM_SUGESTAO (risk-engine.js's semSugestao) — só nunca tinha
+  // sido lido aqui. Vai pro tooltip (o rótulo continua curto de propósito,
+  // é um selo pequeno) — "0%" nunca mais fica sem explicação real.
+  const riskReason = !riskOk ? humanizeReasonCode(riskSuggestion?.reason) : null;
 
   // V16 §4: Decision Status (WAIT/CONFIRM/EXECUTE) — an honest confluence
   // read across two ALREADY-real, independent signals (never a new score
@@ -11521,7 +11612,10 @@ function MarketBiasDecisionCard() {
               R:R {riskRewardRatio.toFixed(2)}
             </span>
           )}
-          <span className={`text-[0.5rem] font-bold px-2 py-0.5 rounded border ${riskOk ? "text-[#00f0ff] border-[#00f0ff]/40 bg-[#00f0ff]/10" : "text-[#8ab4f8]/50 border-[#8ab4f8]/20"}`}>
+          <span
+            title={riskReason ?? undefined}
+            className={`text-[0.5rem] font-bold px-2 py-0.5 rounded border ${riskOk ? "text-[#00f0ff] border-[#00f0ff]/40 bg-[#00f0ff]/10" : "text-[#8ab4f8]/50 border-[#8ab4f8]/20"}`}
+          >
             TAMANHO SUGERIDO · {riskLabel}
           </span>
         </div>
@@ -12139,6 +12233,19 @@ const CONSENSUS_RADAR_LABEL: Record<ConsensusRadarCategory, string> = {
   GMIL: "GMIL (GLOBAL)",
 };
 
+// ORDEM DE SERVIÇO (Frente 1, §2.2): as 4 categorias que consensus-radar.ts
+// deriva DIRETO de um voto do Conselho (voteMagnitude(votes, agent) — ver
+// nexus/consensus-radar.ts:101-104) — mesmo mapeamento, usado aqui só para
+// achar o `rationale` real do voto quando o spoke correspondente é null.
+// VOLATILIDADE (regime) e GMIL não vêm de um voto do Conselho — de
+// propósito, ausentes deste mapa.
+const RADAR_SPOKE_TO_COUNCIL_AGENT: Partial<Record<ConsensusRadarCategory, string>> = {
+  ESTRUTURA: "STRUCTURE",
+  LIQUIDEZ: "LIQUIDITY",
+  FLUXO: "ORDERFLOW",
+  MOMENTUM: "MOMENTUM",
+};
+
 function CouncilWidget() {
   const council = useCouncilSnapshot();
   // Ordem Nº 04 (§4): forma única real (EngineSignal) sobre os MESMOS votos
@@ -12257,24 +12364,39 @@ function CouncilWidget() {
         <div className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
           <span className="text-[0.4rem] text-[#8ab4f8]/50 font-bold tracking-[0.2em]">RADAR DE CONSENSO</span>
           {consensusRadar ? (
-            consensusRadar.spokes.map((spoke) => (
-              <div key={spoke.category} className="flex items-center gap-1.5">
-                <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-wide w-[54px] shrink-0">
-                  {CONSENSUS_RADAR_LABEL[spoke.category]}
-                </span>
-                <div className="flex-1 h-1 bg-[#00131a] rounded-full overflow-hidden border border-[#00f0ff15]">
-                  {spoke.value !== null && (
-                    <div
-                      className="h-full bg-[#00f0ff] shadow-[0_0_4px_#00f0ff]"
-                      style={{ width: `${Math.round(spoke.value * 100)}%` }}
-                    />
-                  )}
+            consensusRadar.spokes.map((spoke) => {
+              // ORDEM DE SERVIÇO (Frente 1, §2.2): ESTRUTURA/LIQUIDEZ/FLUXO/
+              // MOMENTUM são os MESMOS 4 votos do Conselho (ver comentário
+              // acima) — quando `spoke.value` é null, o motivo real já está
+              // no `rationale` daquele MESMO voto, exibido algumas linhas
+              // abaixo neste widget. Achado de auditoria: nunca cruzado.
+              // VOLATILIDADE/GMIL não mapeiam a um voto do Conselho — sem
+              // motivo real disponível aqui ainda, continuam com AWAIT
+              // genérico (pendência honesta, não fabricação).
+              const spokeAgent = RADAR_SPOKE_TO_COUNCIL_AGENT[spoke.category];
+              const spokeReason =
+                spoke.value === null && spokeAgent
+                  ? (council?.votes.find((v) => v.agent === spokeAgent)?.rationale ?? null)
+                  : null;
+              return (
+                <div key={spoke.category} className="flex items-center gap-1.5" title={spokeReason ?? undefined}>
+                  <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-wide w-[54px] shrink-0">
+                    {CONSENSUS_RADAR_LABEL[spoke.category]}
+                  </span>
+                  <div className="flex-1 h-1 bg-[#00131a] rounded-full overflow-hidden border border-[#00f0ff15]">
+                    {spoke.value !== null && (
+                      <div
+                        className="h-full bg-[#00f0ff] shadow-[0_0_4px_#00f0ff]"
+                        style={{ width: `${Math.round(spoke.value * 100)}%` }}
+                      />
+                    )}
+                  </div>
+                  <span className="text-[0.4rem] font-mono text-[#8ab4f8]/70 w-[22px] text-right shrink-0">
+                    {spoke.value !== null ? `${Math.round(spoke.value * 100)}%` : AWAIT}
+                  </span>
                 </div>
-                <span className="text-[0.4rem] font-mono text-[#8ab4f8]/70 w-[22px] text-right shrink-0">
-                  {spoke.value !== null ? `${Math.round(spoke.value * 100)}%` : AWAIT}
-                </span>
-              </div>
-            ))
+              );
+            })
           ) : (
             <span className="text-[0.4rem] text-[#8ab4f8]/40 text-center py-1">{AWAIT}</span>
           )}
@@ -12316,8 +12438,14 @@ function CouncilWidget() {
           );
         })}
         {!council && (
-          <div className="flex items-center justify-center text-[0.5rem] tracking-[0.25em] text-[#8ab4f8]/40 font-bold py-3">
-            {AWAIT}
+          // ORDEM DE SERVIÇO (Frente 1, §2.2): não existe um `reason` real
+          // aqui (o Conselho simplesmente ainda não rodou nenhum ciclo
+          // nesta sessão — nenhum motor upstream tem mais detalhe que
+          // isso), mas um AWAIT sozinho ainda deixava o Operador sem saber
+          // SE isso é esperado. Frase estática honesta, não fabricada.
+          <div className="flex flex-col items-center justify-center gap-0.5 text-center py-3">
+            <span className="text-[0.5rem] tracking-[0.25em] text-[#8ab4f8]/40 font-bold">{AWAIT}</span>
+            <span className="text-[0.4rem] text-[#8ab4f8]/30">Conselho ainda não computou o primeiro ciclo real nesta sessão.</span>
           </div>
         )}
         {/* V-MAX Fase 2 — Path A/B: alvos são níveis REAIS dos motores;
@@ -12578,6 +12706,16 @@ function TelemetryHealthWidget() {
   const health = useHealthSnapshot();
   const connections = useConnectionsSnapshot();
   const [diagnosticReport, setDiagnosticReport] = useState<ReturnType<typeof buildDiagnosticReport> | null>(null);
+  // ORDEM DE SERVIÇO (Frente 1, §2.3 — "conflitos de CPU/RAM entre
+  // agentes"): tempo de parede REAL do último ciclo completo do Radar
+  // (App.tsx's runRadarScan) — o candidato real mais forte a "múltiplos
+  // agentes competindo por CPU" encontrado na auditoria desta rodada, e
+  // até esta rodada, o único ciclo real deste app sem NENHUMA
+  // instrumentação de custo. Sem classificação OK/WARN/CRITICAL ainda —
+  // este sandbox não tem conectividade Binance/MEXC (EGRESS_BLOCKED
+  // documentado) para medir uma linha de base real antes de calibrar um
+  // limiar honesto; um limiar chutado seria fabricação (Regra de Ouro 2/3).
+  const radarScanLatencyMs = useRadarScanLatencySnapshot();
 
   const quality = realCycle?.dataQuality ?? null;
   const qualityLabel = quality
@@ -12745,6 +12883,11 @@ function TelemetryHealthWidget() {
           label={`LATÊNCIA DO CICLO (${chartTimeframe?.toUpperCase() ?? "15M"})`}
           value={num(cycleLatencyMs) ? `${cycleLatencyMs}ms${cycleClass ? ` · ${cycleClass}` : ""}` : AWAIT}
           valueClass={cycleColor}
+        />
+        <Row
+          label="LATÊNCIA DO CICLO (RADAR, ~60 ATIVOS)"
+          value={num(radarScanLatencyMs) ? `${(radarScanLatencyMs / 1000).toFixed(1)}s` : AWAIT}
+          valueClass="text-[#8ab4f8]"
         />
         <Row label="FPS (UI REAL)" value={num(fps) ? `${fps}${fpsClass ? ` · ${fpsClass}` : ""}` : AWAIT} valueClass={fpsColor} />
         <Row
@@ -13032,6 +13175,10 @@ function DecisionValidationWidget() {
   const riskLabel = riskOk
     ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risk ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
     : "0% · sem sugestão";
+  // ORDEM DE SERVIÇO (Frente 1, §2.2): mesmo motivo real já lido acima em
+  // MarketBiasDecisionCard — o campo é o mesmo riskSuggestion.reason, zero
+  // segunda leitura/interpretação.
+  const riskReason = !riskOk ? humanizeReasonCode(riskSuggestion?.reason) : null;
   const riskColor = riskOk ? "text-[#00f0ff]" : "text-[#8ab4f8]/50";
 
   // Phase Ω Priority 2: Motor de Confluência Cruzada — quantos dos 3
@@ -13052,12 +13199,29 @@ function DecisionValidationWidget() {
         : convictionReading.verdict === "CONTRADICTS"
           ? "text-[#ff0055]"
           : "text-[#f0d06f]";
+  // ORDEM DE SERVIÇO (Frente 1, §2.2): convictionReading.reason tem 3
+  // valores reais possíveis quando status !== "OK" — só o primeiro tinha
+  // tradução própria, os outros 2 caíam no AWAIT genérico mesmo já
+  // existindo um motivo real computado (achado de auditoria). A frase
+  // dedicada "SEM DIREÇÃO ATIVA (WAIT)" continua (é o rótulo PRIMÁRIO já
+  // conhecido do Operador); as outras 2 usam o tradutor compartilhado.
   const convictionLabel =
     convictionReading.status !== "OK"
-      ? (convictionReading.reason === "core_engine_sem_direcao_ativa_no_momento_(WAIT)" ? "SEM DIREÇÃO ATIVA (WAIT)" : AWAIT)
+      ? (convictionReading.reason === "core_engine_sem_direcao_ativa_no_momento_(WAIT)"
+          ? "SEM DIREÇÃO ATIVA (WAIT)"
+          : (humanizeReasonCode(convictionReading.reason) ?? AWAIT))
       : `${convictionReading.verdict} · ${convictionReading.agreeingCount}/${convictionReading.totalReadable} · força ${(convictionReading.conviction! * 100).toFixed(0)}%${
           num(convictionReading.convictionAdjusted) ? ` (aj. ${(convictionReading.convictionAdjusted! * 100).toFixed(0)}%)` : ""
         }`;
+  // Detalhe real POR SUBSISTEMA (Ensemble/Council/Multi-Timeframe) — já
+  // computado por buildConvictionReading (confluence-engine.ts) e nunca
+  // lido em nenhum lugar da UI antes desta rodada (achado de auditoria).
+  // Só entra no tooltip quando o veredito não é OK — com OK os 3 já
+  // concordaram e o número em si já é a informação relevante.
+  const convictionMembersDetail =
+    convictionReading.status !== "OK" && convictionReading.members.length > 0
+      ? convictionReading.members.map((m) => `${m.id}: ${m.detail}`).join(" · ")
+      : null;
 
   // Fase F: Comitê de Validação (linear opinion pool, src/consensus/).
   // Direção + força do comitê das lógicas SECUNDÁRIAS — rótulo deixa
@@ -13162,7 +13326,7 @@ function DecisionValidationWidget() {
           <span className="text-[0.45rem] accent-consensus font-bold tracking-widest">
             CONFLUÊNCIA CRUZADA · 3 SUBSISTEMAS
           </span>
-          <span className={`text-[0.55rem] font-mono font-black ${convictionColor}`}>{convictionLabel}</span>
+          <span title={convictionMembersDetail ?? undefined} className={`text-[0.55rem] font-mono font-black ${convictionColor}`}>{convictionLabel}</span>
         </div>
         {/* Fase H: Risk Engine — % do equity e % de risco (nunca valor
             monetário). O selo abaixo é OBRIGATÓRIO e permanente (ordem de
@@ -13170,7 +13334,7 @@ function DecisionValidationWidget() {
         <div className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0">
           <div className="flex justify-between items-center">
             <span className="text-[0.45rem] accent-risk font-bold tracking-widest">TAMANHO SUGERIDO (RISK ENGINE)</span>
-            <span className={`text-[0.55rem] font-mono font-black ${riskColor}`}>{riskLabel}</span>
+            <span title={riskReason ?? undefined} className={`text-[0.55rem] font-mono font-black ${riskColor}`}>{riskLabel}</span>
           </div>
           <span className="text-[0.4rem] text-[#f0d06f]/80 font-bold tracking-widest">
             SUGESTÃO ALGORÍTMICA · NÃO É CONSELHO FINANCEIRO
