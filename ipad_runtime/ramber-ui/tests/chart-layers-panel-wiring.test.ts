@@ -557,7 +557,7 @@ describe('UM MODO SÓ: o automático é a única ação de estado; habilitar cam
 
   it('a única ação de estado é voltar tudo ao automático — fora de qualquer bloco condicional', () => {
     const a = read('../src/App.tsx');
-    const idx = a.indexOf('AR10 CYBORG · Estado Inteligente Adaptativo');
+    const idx = a.indexOf('AR10 CYBORG · Adaptive Intelligent State');
     expect(idx, 'botão primário não encontrado').toBeGreaterThan(-1);
     const block = a.slice(a.lastIndexOf('<button', idx), idx);
     expect(block).toContain('onClick={() => restoreChartLayersToAuto?.()}');
@@ -596,7 +596,7 @@ describe('UM MODO SÓ: o automático é a única ação de estado; habilitar cam
     const a = read('../src/App.tsx');
     expect(a).toContain('const [habilitarManualAberto, setHabilitarManualAberto] = useState(false);');
     expect(a).toContain('onClick={() => setHabilitarManualAberto((v) => !v)}');
-    expect(a).toContain('<span>Habilitar camada a camada, se quiser</span>');
+    expect(a).toContain('<span>Enable layer by layer, if you want</span>');
     // o toggle real e o reset por camada continuam existindo
     expect(a).toContain('onClick={() => toggleChartLayer?.(id)}');
     expect(a).toContain('resetChartLayerToAuto,');
