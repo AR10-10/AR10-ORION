@@ -1067,9 +1067,9 @@ describe('Session Key Levels (pedido do Operador, captura de indicador de refer�
     expect(c).toContain('session_key_levels: true,');
   });
 
-  it('painel "Camadas do Gráfico" (App.tsx) ganha a linha KEY LEVELS (SESSÕES)', () => {
+  it('painel "Chart Layers" (App.tsx) ganha a linha KEY LEVELS (SESSIONS)', () => {
     const a = app();
-    expect(a).toContain('{ id: "session_key_levels", label: "KEY LEVELS (SESSÕES)" }');
+    expect(a).toContain('{ id: "session_key_levels", label: "KEY LEVELS (SESSIONS)" }');
     // A segunda metade deste teste checava a pertinência ao preset
     // "Inteligência". Os 3 presets manuais foram removidos a pedido do
     // Operador ("deixa só o modo"); a cobertura que importa — a camada

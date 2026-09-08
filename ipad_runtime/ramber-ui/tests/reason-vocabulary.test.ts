@@ -29,6 +29,11 @@ describe("humanizeReasonCode: tabela exaustiva de códigos reais conhecidos", ()
     ["pool_sem_leitura_real", "pool de opinião sem leitura real para comparar"],
     // lorentzian-classifier.js (não-paramétrico)
     ["feature_atual_invalida_apos_warmup", "features do candle atual inválidas após o aquecimento"],
+    // multi-timeframe-engine.ts (baseInsufficient) — achado real da ORDEM DE
+    // SERVIÇO FINAL (auditoria de auto-cura): tooltip da Multi-Timeframe
+    // Matrix mostrava este código cru.
+    ["sem_candles_reais_para_este_timeframe", "sem candles reais para este prazo agora"],
+    ["nenhum_motor_real_teve_leitura_nesta_janela", "nenhum motor real teve leitura nesta janela"],
   ];
   for (const [raw, expected] of cases) {
     it(`"${raw}" -> "${expected}"`, () => {

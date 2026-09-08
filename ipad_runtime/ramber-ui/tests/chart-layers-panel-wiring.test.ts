@@ -179,17 +179,18 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(listMatch![1]).toContain('{ id: "trend_channel", label: "TREND CHANNEL" }');
     // EPC OMEGA FINAL Etapa 10.
     expect(listMatch![1]).toContain('{ id: "liquidity_sweep", label: "LIQUIDITY SWEEP" }');
-    expect(listMatch![1]).toContain('{ id: "market_sessions", label: "SESSÕES (ÁSIA/LONDRES/NY)" }');
+    // Frente 3 §17 (padronização de idioma): rótulo traduzido pra English Technical.
+    expect(listMatch![1]).toContain('{ id: "market_sessions", label: "SESSIONS (ASIA/LONDON/NY)" }');
     // Ferramentas Institucionais: Kill Zones ICT no canvas.
     expect(listMatch![1]).toContain('{ id: "kill_zones", label: "KILL ZONES (ICT)" }');
     // Pedido do Operador: Key Levels de sessão no canvas.
-    expect(listMatch![1]).toContain('{ id: "session_key_levels", label: "KEY LEVELS (SESSÕES)" }');
+    expect(listMatch![1]).toContain('{ id: "session_key_levels", label: "KEY LEVELS (SESSIONS)" }');
     // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4: faixa de confluência real.
-    expect(listMatch![1]).toContain('{ id: "institutional_zones", label: "ZONA INSTITUCIONAL" }');
+    expect(listMatch![1]).toContain('{ id: "institutional_zones", label: "INSTITUTIONAL ZONE" }');
     // Entrega 47 (pedido direto do Operador): ZigZag graduado do Laboratório.
     expect(listMatch![1]).toContain('{ id: "zigzag", label: "ZIGZAG" }');
     // Achado 2.5: Motor de Cenários ganha o mesmo toggle que todo o resto.
-    expect(listMatch![1]).toContain('{ id: "scenario_projection", label: "CENÁRIOS (FUTURE PATH MAP)" }');
+    expect(listMatch![1]).toContain('{ id: "scenario_projection", label: "SCENARIOS (FUTURE PATH MAP)" }');
   });
 
   it('Auditoria de pendências: os 7 toggles novos (VWAP/Nexus Line/CVD/Fibonacci/Premium-Discount/harmônico/EQH-EQL) entram no painel — nenhum elemento nativo do gráfico fica sem controle', () => {
@@ -202,11 +203,12 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(body).toContain('{ id: "cvd", label: "CVD" }');
     expect(body).toContain('{ id: "fibonacci", label: "FIBONACCI" }');
     expect(body).toContain('{ id: "premium_discount", label: "PREMIUM / DISCOUNT" }');
-    // Carta Branca: rótulo ampliado de "HARMÔNICOS" para "PADRÕES GRÁFICOS"
-    // — o mesmo id/toggle interno agora gate as 3 famílias que competem
-    // pelo mesmo desenho no canvas (harmônico + Triângulo + Ombro-Cabeça-
-    // Ombro), nunca uma migração de preferência salva do Operador.
-    expect(body).toContain('{ id: "harmonics", label: "PADRÕES GRÁFICOS" }');
+    // Carta Branca: rótulo ampliado de "HARMÔNICOS" para "CHART PATTERNS"
+    // (Frente 3 §17: traduzido pra English Technical) — o mesmo id/toggle
+    // interno agora gate as 3 famílias que competem pelo mesmo desenho no
+    // canvas (harmônico + Triângulo + Ombro-Cabeça-Ombro), nunca uma
+    // migração de preferência salva do Operador.
+    expect(body).toContain('{ id: "harmonics", label: "CHART PATTERNS" }');
     expect(body).toContain('{ id: "equal_highs_lows", label: "EQH / EQL" }');
   });
 

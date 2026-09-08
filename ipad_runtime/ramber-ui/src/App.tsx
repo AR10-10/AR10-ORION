@@ -271,6 +271,7 @@ import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResul
 import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
 import { computeDirectionalConsensus, describeDirectionalConsensus, normalizeSide, sideFromSigned, computeLiquidityMap, liquidityBias, type DirectionalSource, type DirectionalConsensusReading, type LiquidityTarget, type LiquidityMapReading } from "./nexus/directional-consensus";
 import { humanizeReasonCode } from "./nexus/reason-vocabulary";
+import { formatRiskSuggestionLabel } from "./nexus/risk-suggestion-label";
 import { computeZoneSignificance, formatZoneAtrWidth, selectSharedZoneHighlights } from "./nexus/liquidity-significance";
 // "constrói uma bola... um só aparece, tipo longa ou short, com essa
 // porcentagem, bem profissional" (pedido direto do Operador) — geometria
@@ -4902,32 +4903,32 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // 3 famílias reais que competem pelo MESMO desenho no canvas (harmônico
   // XABCD/Wolfe, Triângulo, Ombro-Cabeça-Ombro — ver EnhancedChart_110_
   // Percent.tsx, useEffect do padrão vencedor).
-  { id: "harmonics", label: "PADRÕES GRÁFICOS" },
+  { id: "harmonics", label: "CHART PATTERNS" },
   { id: "equal_highs_lows", label: "EQH / EQL" },
   // OMEGA CORE V-MAX Fase 8.1: rótulo deliberadamente "LIQUIDAÇÕES
   // FORÇADAS" (mesmo termo já usado no painel de lista real, "Forced
   // Liquidations") — nunca "LIQUIDATION HEATMAP", que colidiria
   // visualmente com "LIQUIDITY HEATMAP" (order_flow_heatmap, 2 linhas
   // acima) e confundiria qual camada o Operador está ligando/desligando.
-  { id: "liquidation_heatmap", label: "LIQUIDAÇÕES FORÇADAS" },
+  { id: "liquidation_heatmap", label: "FORCED LIQUIDATIONS" },
   // EPC OMEGA FINAL Etapa 10 (Novas Camadas Institucionais).
   { id: "liquidity_sweep", label: "LIQUIDITY SWEEP" },
-  { id: "market_sessions", label: "SESSÕES (ÁSIA/LONDRES/NY)" },
+  { id: "market_sessions", label: "SESSIONS (ASIA/LONDON/NY)" },
   // Ferramentas Institucionais: badge do header já existia (§6.48), esta
   // linha liga o canvas (KillZoneBandsPlugin) ao painel de camadas.
   { id: "kill_zones", label: "KILL ZONES (ICT)" },
   // Pedido do Operador ("Key Levels"): máxima/mínima real de cada sessão
   // como nível horizontal (SessionKeyLevelsPlugin).
-  { id: "session_key_levels", label: "KEY LEVELS (SESSÕES)" },
+  { id: "session_key_levels", label: "KEY LEVELS (SESSIONS)" },
   // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4: faixa real de confluência
   // entre >=2 ferramentas independentes (InstitutionalZonePlugin).
-  { id: "institutional_zones", label: "ZONA INSTITUCIONAL" },
+  { id: "institutional_zones", label: "INSTITUTIONAL ZONE" },
   // Entrega 40: livro de ofertas real (DepthChartPlugin) como camada de
   // gráfico — gap nomeado desde a Entrega 35 §4.
-  { id: "order_book_depth", label: "PROFUNDIDADE DO LIVRO" },
+  { id: "order_book_depth", label: "ORDER BOOK DEPTH" },
   // Entrega 41: perfil TPO real da sessão corrente (Steidlmayer/CBOT) —
   // gap real nomeado desde a auditoria v16.0 ULTRA §12.2/12.3.
-  { id: "tpo_profile", label: "PERFIL TPO" },
+  { id: "tpo_profile", label: "TPO PROFILE" },
   // Entrega 47 (pedido direto do Operador): ZigZag graduado do Laboratório
   // de Evolução (research/engines/zigzag-engine.js, isolado e testado
   // desde a Entrega 35) — pivôs confirmados por deviation%+depth.
@@ -4936,7 +4937,7 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // Achado 2.5 (Visual Cleanup & Rendering Audit): SCENARIO A/B ("Future
   // Path Map", scenario-engine.ts) ganha o mesmo toggle/relevância que
   // toda outra camada real já tinha — era a única sem nenhum dos dois.
-  { id: "scenario_projection", label: "CENÁRIOS (FUTURE PATH MAP)" },
+  { id: "scenario_projection", label: "SCENARIOS (FUTURE PATH MAP)" },
   // ACHADO DESTA RODADA, pego por um teste novo que compara as duas listas:
   // `candle_patterns` estava em CHART_LAYER_IDS (o canvas monta o plugin em
   // `{visibility.candle_patterns && (`), em RELEVANCE_LAYER_IDS e no custo
@@ -4946,7 +4947,7 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // também não aparecia na LEITURA do painel (o resumo itera esta lista).
   // Uma ferramenta desenhando no gráfico sem existir no painel é exatamente
   // o oposto de "as ferramentas principais aparecerem na leitura".
-  { id: "candle_patterns", label: "PADRÕES DE VELA" },
+  { id: "candle_patterns", label: "CANDLE PATTERNS" },
   // Auditoria do ecossistema de indicadores (pedido direto do Operador:
   // "qual ferramenta que está faltando"): Pivot Points clássicos (Floor
   // Trader) — único gap real não-redundante encontrado. Mesmo cuidado do
@@ -4963,7 +4964,7 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // quando a retencao de CVD subiu de 120 para 900 amostras, ~1h). Camada
   // propria: compara duas SERIES (preco e CVD), enquanto structure_breaks le
   // so a estrutura de preco.
-  { id: "delta_divergence", label: "DIVERGÊNCIA DE DELTA" },
+  { id: "delta_divergence", label: "DELTA DIVERGENCE" },
   // Graduacao de andrews-pitchfork-engine.js — ultima ferramenta de grafico
   // com nome proprio ausente que nao estava bloqueada por dado nem por
   // decisao do Operador.
@@ -6430,7 +6431,7 @@ function SiriformCoreCard() {
   const sinalOutcomeQualifier = sinalOutcome ? (OUTCOME_QUALIFIER[sinalOutcome] ?? null) : null;
   const sinalValue = direction ? (sinalOutcomeQualifier ? `${direction} · ${sinalOutcomeQualifier}` : direction) : AWAIT;
   const collapsed = widgets?.se_core?.collapsed ?? true;
-  const statusLabel = engineStatus === "pending" ? AWAIT : engineStatus === "ok" ? "SINCRONIZADO" : "FALHOU";
+  const statusLabel = engineStatus === "pending" ? AWAIT : engineStatus === "ok" ? "SYNCED" : "FAILED";
   const statusColor =
     engineStatus === "pending" ? "text-[#f0d06f]" : engineStatus === "ok" ? "text-[#00ffaa]" : "text-[#ff0055]";
   const dirColor =
@@ -7366,13 +7367,13 @@ function NucleoVoiceOrb() {
   if (offline) {
     coreColor = "#f0d06f"; coreLabel = "OFFLINE";
   } else if (engineStatus === "error") {
-    coreColor = "#ff0055"; coreLabel = "FALHOU";
+    coreColor = "#ff0055"; coreLabel = "FAILED";
   } else if (engineStatus === "pending") {
     coreColor = "#f0d06f"; coreLabel = AWAIT;
   } else if (stale) {
-    coreColor = "#f0d06f"; coreLabel = "DESATUALIZADO";
+    coreColor = "#f0d06f"; coreLabel = "STALE";
   } else {
-    coreColor = "#00ffaa"; coreLabel = "SINCRONIZADO";
+    coreColor = "#00ffaa"; coreLabel = "SYNCED";
   }
   const ttsSupported = voiceStatus.supported;
 
@@ -8362,7 +8363,12 @@ function TopBar({ data }: { data?: PriceState | null }) {
       : realCycle?.instrumentType === "crypto_spot"
         ? "Spot"
         : null;
-  const isPos = (data?.deltaPct ?? 0) >= 0;
+  // ORDEM DE SERVIÇO FINAL (auditoria de estados vazios, Golden Rule 3):
+  // antes do primeiro tick real, deltaPct é null — `?? 0` fazia `0 >= 0`
+  // pintar o preço/percentual de VERDE (alta) sem nenhuma leitura real por
+  // trás. null/undefined agora é seu próprio estado (nem alta, nem baixa).
+  const deltaPct = data?.deltaPct ?? null;
+  const isPos: boolean | null = num(deltaPct) ? deltaPct >= 0 : null;
 
   return (
     // Barra de comando — redesenho radical (modelo do Operador, imagem de
@@ -8553,13 +8559,13 @@ function TopBar({ data }: { data?: PriceState | null }) {
             <div className="flex items-baseline gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap">
               <span
                 className={`text-base md:text-lg font-black font-mono tracking-tight drop-shadow-[0_0_6px_currentColor] ${
-                  isPos ? "text-[#00ffaa]" : "text-[#ff0055]"
+                  isPos === null ? "text-[#8ab4f8]/60" : isPos ? "text-[#00ffaa]" : "text-[#ff0055]"
                 }`}
               >
                 {fmt(data?.price ?? null)}
               </span>
               <span
-                className={`text-[0.55rem] font-bold tabular-nums ${isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+                className={`text-[0.55rem] font-bold tabular-nums ${isPos === null ? "text-[#8ab4f8]/60" : isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
               >
                 {fmtSignedPct(data?.deltaPct ?? null)}
               </span>
@@ -9163,23 +9169,41 @@ class WidgetErrorBoundary extends React.Component<
     // a causa real fica no log do navegador (DevTools/Safari remoto no
     // iPad), nunca só o texto genérico da tela. Nunca envia rede, nunca
     // muda estado além do já capturado por getDerivedStateFromError.
-    console.error(`[WidgetErrorBoundary] ${this.props.title || "PAINEL"}:`, error, info.componentStack);
+    console.error(`[WidgetErrorBoundary] ${this.props.title || "PANEL"}:`, error, info.componentStack);
   }
+  // ORDEM DE SERVIÇO FINAL (auto-cura): achado real de auditoria — esta
+  // boundary isolava o erro (não derrubava o app inteiro) mas nunca dava ao
+  // Operador um jeito de tentar de novo SEM recarregar a página inteira
+  // (GlobalErrorBoundary tem "Recarregar", esta não tinha nada). Muitos
+  // erros reais de render são de uma janela ruim de dado (ex.: troca de
+  // ativo em voo) que já não existe mais no PRÓXIMO ciclo real — um retry
+  // manual aqui é o "isolar o erro" da ordem, nunca um retry automático
+  // (que arriscaria um loop se a causa for persistente): a decisão de
+  // tentar de novo continua do Operador, mesma filosofia do botão
+  // "Recarregar" da boundary global.
+  handleRetry = () => this.setState({ error: null });
   render() {
     if (this.state.error) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center gap-1 text-center px-2 overflow-y-auto">
+        <div className="flex-1 flex flex-col items-center justify-center gap-1.5 text-center px-2 overflow-y-auto">
           <span className="text-[0.5rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
-            {this.props.title || "PAINEL"} · ERRO DE RENDERIZAÇÃO
+            {this.props.title || "PANEL"} · RENDER ERROR
           </span>
           <span className="text-[0.45rem] text-[#8ab4f8]/50">
-            Os demais painéis continuam ativos.
+            Other panels remain active.
           </span>
           {this.state.error.message ? (
             <span className="text-[0.42rem] text-[#8ab4f8]/40 break-words max-w-full px-2">
               {this.state.error.message}
             </span>
           ) : null}
+          <button
+            type="button"
+            onClick={this.handleRetry}
+            className="mt-0.5 text-[0.4rem] font-bold uppercase tracking-wider px-2 py-1 rounded border border-[#8ab4f8]/30 text-[#8ab4f8]/70 hover:text-[#00f0ff] hover:border-[#00f0ff]/40"
+          >
+            Retry
+          </button>
         </div>
       );
     }
@@ -11193,14 +11217,24 @@ function OrderFlowWidget() {
         </div>
 
         <div className="w-full h-4 mt-1 flex relative bg-[#010308] border border-[#00f0ff15] rounded overflow-hidden shadow-[inset_0_0_10px_rgba(0,240,255,0.05)]">
-          <div
-            className="h-full bg-gradient-to-r from-[#00ffaa10] to-[#00ffaa60] border-r border-[#00ffaa] relative overflow-hidden transition-[background-color,opacity] duration-500"
-            style={{ width: `${num(buyPercent) ? buyPercent : 50}%` }}
-          ></div>
-          <div
-            className="h-full bg-gradient-to-l from-[#ff005510] to-[#ff005560] border-l border-[#ff0055] relative overflow-hidden transition-[background-color,opacity] duration-500"
-            style={{ width: `${num(sellPercent) ? sellPercent : 50}%` }}
-          ></div>
+          {/* ORDEM DE SERVIÇO FINAL (auditoria de estados vazios, Golden Rule
+              3): sem leitura real, esta barra caía num 50/50 fabricado — um
+              "mercado equilibrado" que ninguém mediu. Sem os dois lados reais,
+              mostra uma faixa neutra única, nunca um split inventado. */}
+          {num(buyPercent) && num(sellPercent) ? (
+            <>
+              <div
+                className="h-full bg-gradient-to-r from-[#00ffaa10] to-[#00ffaa60] border-r border-[#00ffaa] relative overflow-hidden transition-[background-color,opacity] duration-500"
+                style={{ width: `${buyPercent}%` }}
+              ></div>
+              <div
+                className="h-full bg-gradient-to-l from-[#ff005510] to-[#ff005560] border-l border-[#ff0055] relative overflow-hidden transition-[background-color,opacity] duration-500"
+                style={{ width: `${sellPercent}%` }}
+              ></div>
+            </>
+          ) : (
+            <div className="h-full w-full bg-[#8ab4f8]/10"></div>
+          )}
         </div>
 
         {/* Real Order Flow Engine (OFI/Absorption/Exhaustion) fed by real
@@ -11478,9 +11512,11 @@ function MarketBiasDecisionCard() {
   const confidenceLabel = engine?.confidence ?? AWAIT;
 
   const riskOk = riskSuggestion?.status === "OK";
-  const riskLabel = riskOk
-    ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risk ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
-    : "0% · sem sugestão";
+  // Frente 3 §3 (auditoria de duplicidade): formatação extraída para
+  // nexus/risk-suggestion-label.ts — era redigitada byte a byte aqui e em
+  // DecisionValidationWidget, achado real da auditoria Council×Validação
+  // Multi-Camada×Market Intelligence.
+  const riskLabel = formatRiskSuggestionLabel(riskSuggestion);
   // ORDEM DE SERVIÇO (Frente 1, §2.2): riskSuggestion já carrega o motivo
   // REAL do SEM_SUGESTAO (risk-engine.js's semSugestao) — só nunca tinha
   // sido lido aqui. Vai pro tooltip (o rótulo continua curto de propósito,
@@ -12601,7 +12637,7 @@ function MultiTimeframeMatrixWidget() {
           const stanceColor = stance ? MTF_STANCE_COLOR[stance] : "text-[#8ab4f8]";
           const structureShort = ctx?.structureLabel ? ctx.structureLabel.replace("ESTRUTURA_", "") : null;
           const tooltip = insufficient
-            ? `${MTF_ROW_LABEL[tf]}: ${ctx?.reason ?? "sem_dados_reais"}`
+            ? `${MTF_ROW_LABEL[tf]}: ${humanizeReasonCode(ctx?.reason) ?? "sem dados reais"}`
             : [
                 ctx.regime ? `Regime ${ctx.regime}` : null,
                 ctx.rsi !== null ? `RSI ${ctx.rsi.toFixed(1)}` : null,
@@ -12658,10 +12694,10 @@ function MultiTimeframeMatrixWidget() {
 // pelas outras linhas deste painel — nunca uma 2ª paleta), rótulo curto
 // para caber na largura do Row.
 const CHART_INTEGRITY_LABEL: Record<ChartIntegrityStatus, string> = {
-  SYNCED: "SINCRONIZADO",
-  SYMBOL_MISMATCH: "DESSINCRONIZADO",
-  STALE_DATA: "DADO ATRASADO",
-  DADOS_INSUFICIENTES: "AGUARDANDO",
+  SYNCED: "SYNCED",
+  SYMBOL_MISMATCH: "MISMATCHED",
+  STALE_DATA: "STALE DATA",
+  DADOS_INSUFICIENTES: "AWAITING",
 };
 const CHART_INTEGRITY_QUALITY: Record<ChartIntegrityStatus, DataQualityLabel> = {
   SYNCED: "OK",
@@ -12674,10 +12710,10 @@ const CHART_INTEGRITY_QUALITY: Record<ChartIntegrityStatus, DataQualityLabel> = 
 // das 2 constantes acima — nunca uma 3ª paleta, sempre a mesma
 // DATA_QUALITY_COLOR de 4 estados.
 const ORGANISM_HEALTH_LABEL: Record<OrganismHealthVerdict, string> = {
-  OK: "SAUDÁVEL",
-  WARN: "ATENÇÃO",
-  CRITICAL: "CRÍTICO",
-  AGUARDANDO: "AGUARDANDO",
+  OK: "HEALTHY",
+  WARN: "WARNING",
+  CRITICAL: "CRITICAL",
+  AGUARDANDO: "AWAITING",
 };
 const ORGANISM_HEALTH_QUALITY: Record<OrganismHealthVerdict, DataQualityLabel> = {
   OK: "OK",
@@ -12866,7 +12902,7 @@ function TelemetryHealthWidget() {
             o sinal responsável só aparece quando o veredito não é OK
             (nunca verboso quando está tudo bem). */}
         <Row
-          label="SAÚDE DO ORGANISMO"
+          label="ORGANISM HEALTH"
           value={
             organismHealth.verdict === "OK"
               ? ORGANISM_HEALTH_LABEL[organismHealth.verdict]
@@ -12874,10 +12910,10 @@ function TelemetryHealthWidget() {
           }
           valueClass={organismHealthColor}
         />
-        <Row label="QUALIDADE DA FONTE (BUS)" value={qualityLabel} valueClass={qualityColor} />
-        <Row label="SUFICIÊNCIA DE DADOS" value={sufficiencyLabel} valueClass={sufficiencyColor} />
-        <Row label="QUALIDADE GMIL (CONTEXTO)" value={gmilLabel} valueClass={gmilColor} />
-        <Row label="INTEGRIDADE DO GRÁFICO" value={CHART_INTEGRITY_LABEL[chartIntegrity.status]} valueClass={chartIntegrityColor} />
+        <Row label="SOURCE QUALITY (BUS)" value={qualityLabel} valueClass={qualityColor} />
+        <Row label="DATA SUFFICIENCY" value={sufficiencyLabel} valueClass={sufficiencyColor} />
+        <Row label="GMIL QUALITY (CONTEXT)" value={gmilLabel} valueClass={gmilColor} />
+        <Row label="CHART INTEGRITY" value={CHART_INTEGRITY_LABEL[chartIntegrity.status]} valueClass={chartIntegrityColor} />
         <Row label="WASM ENGINE" value={variant ?? AWAIT} valueClass={variant === "SIMD128" ? "text-[#00ffaa]" : "text-[#8ab4f8]"} />
         <Row
           label={`LATÊNCIA DO CICLO (${chartTimeframe?.toUpperCase() ?? "15M"})`}
@@ -12924,7 +12960,7 @@ function TelemetryHealthWidget() {
           onClick={() => setDiagnosticReport(buildDiagnosticReport(diagnosticInput))}
           className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff30] hover:bg-[#00f0ff10] transition-colors text-left"
         >
-          <span className="text-[0.45rem] text-[#00f0ff] font-bold tracking-wide">AUTODIAGNÓSTICO (auto a cada 60s)</span>
+          <span className="text-[0.45rem] text-[#00f0ff] font-bold tracking-wide">SELF-DIAGNOSTIC (auto every 60s)</span>
           <span className="text-[0.5rem] font-mono font-black text-[#00f0ff]">▶</span>
         </button>
         {diagnosticReport && (
@@ -13172,9 +13208,9 @@ function DecisionValidationWidget() {
   // SEM_SUGESTAO exibe 0% com o motivo real. O selo é PERMANENTE e
   // incondicional (diretriz 3 da ordem de ignição).
   const riskOk = riskSuggestion?.status === "OK";
-  const riskLabel = riskOk
-    ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risk ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
-    : "0% · sem sugestão";
+  // Frente 3 §3 (auditoria de duplicidade): mesma formatação de
+  // MarketBiasDecisionCard, extraída para nexus/risk-suggestion-label.ts.
+  const riskLabel = formatRiskSuggestionLabel(riskSuggestion);
   // ORDEM DE SERVIÇO (Frente 1, §2.2): mesmo motivo real já lido acima em
   // MarketBiasDecisionCard — o campo é o mesmo riskSuggestion.reason, zero
   // segunda leitura/interpretação.

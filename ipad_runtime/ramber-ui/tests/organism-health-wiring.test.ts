@@ -45,12 +45,13 @@ describe('App.tsx: SAÚDE DO ORGANISMO usa o mesmo motor puro, zero segunda medi
     expect(app).toContain('const organismHealthColor = DATA_QUALITY_COLOR[ORGANISM_HEALTH_QUALITY[organismHealth.verdict]];');
   });
 
-  it('a Row "SAÚDE DO ORGANISMO" é a primeira do painel SYSTEM HEALTH (antes de QUALIDADE DA FONTE)', () => {
+  it('a Row "ORGANISM HEALTH" é a primeira do painel SYSTEM HEALTH (antes de SOURCE QUALITY)', () => {
+    // Frente 3 §17 (padronização de idioma): rótulos traduzidos pra English Technical.
     const app = read('../src/App.tsx');
-    const healthRowIdx = app.indexOf('label="SAÚDE DO ORGANISMO"');
-    const firstOldRowIdx = app.indexOf('label="QUALIDADE DA FONTE (BUS)"');
-    expect(healthRowIdx, 'Row SAÚDE DO ORGANISMO não encontrada').toBeGreaterThan(-1);
-    expect(firstOldRowIdx, 'Row QUALIDADE DA FONTE (BUS) não encontrada').toBeGreaterThan(-1);
+    const healthRowIdx = app.indexOf('label="ORGANISM HEALTH"');
+    const firstOldRowIdx = app.indexOf('label="SOURCE QUALITY (BUS)"');
+    expect(healthRowIdx, 'Row ORGANISM HEALTH não encontrada').toBeGreaterThan(-1);
+    expect(firstOldRowIdx, 'Row SOURCE QUALITY (BUS) não encontrada').toBeGreaterThan(-1);
     expect(healthRowIdx).toBeLessThan(firstOldRowIdx);
   });
 
