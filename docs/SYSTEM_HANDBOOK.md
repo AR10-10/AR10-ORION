@@ -9223,6 +9223,104 @@ corrigida.
 + fiação). A medição do defeito virou invariante permanente: a faixa nunca
 mais pode reivindicar mais que a tolerância que a agrupou.
 
+### 6.115 MASTER ORDER — PHASE A (AUDIT). Resultado medido, e o STOP respeitado
+
+A MASTER ORDER ("Adaptive Market Learning") manda executar **uma fase por
+vez**, e a Phase A é **auditoria pura**: `IMPLEMENT → TEST → VALIDATE →
+REPORT → STOP`, sem avanço automático (§73/§79). Esta seção é o registro
+do que a Phase A mediu. **Nada de Phase B foi ligado.**
+
+#### A ferramenta: `tools/ast-lineage.mjs`
+
+Existe porque a varredura por **texto** equivalente falhou nesta sessão:
+ela varria tipos aninhados e listava como órfãos campos demonstravelmente
+consumidos. Uma auditoria que erra assim é pior que nenhuma — gera
+trabalho falso. A versão por AST (TypeScript compiler API, zero regex
+sobre código) classifica cada propriedade devolvida por função exportada
+de `nexus/` ou `engine-bridge.ts`:
+
+| classe §62 | significado | medido |
+|---|---|---|
+| **A** | produzido e consumido em `src/` | **400** |
+| **B** | consumido só por `tests/` — não chega ao Operador | **53** |
+| **C** | produzido e **perdido** (ninguém lê) | **8** |
+
+Total: 461 propriedades sobre 221 arquivos de `src/` e 307 de `tests/`.
+
+**Limite honesto declarado na própria ferramenta:** "consumido" é *"existe
+algum acesso com este NOME"* — aproximação por nome, não por tipo. Isso a
+torna **conservadora**: um homônimo consumido esconde um órfão, então ela
+subestima C, nunca a superestima. Todo item de C merece confirmação por
+leitura antes de virar tarefa. As classes **D/E/F/G** do §62 (perda
+semântica, fonte duplicada, correto, falso positivo) **não são decidíveis
+por AST** e a ferramenta deliberadamente não as inventa.
+
+#### O achado principal: 4 leituras reais que morriam na tela
+
+Antes desta rodada a classe C tinha **12** itens, e quatro deles estavam no
+**mesmo módulo**. `composeMicrostructureSnapshot()` computa a cada mudança
+de order flow / trap / CVD / book, grava na store — e ninguém lia:
+
+- `absorptionState` — a distinção ABSORPTION_OBSERVED vs **_CONFIRMED**
+  (corroborada por `trap-detection.ts`);
+- `bidWalls` / `askWalls` — muros reais do book;
+- `eventIntensity` — "intensidade ≠ direção".
+
+O seletor `useMicrostructureSnapshot` existia na store e **também nunca
+tinha sido consumido**. Mesma família de `resolvedAt` (§6.110),
+`contextAtOpen.score` (§6.112) e `computeLevelStrength` (§6.106) — só que
+aqui a fronteira onde o dado morria era a **própria tela**.
+
+`nexus/microstructure-readout.ts` (novo) reduz isso ao que vale ocupar
+espaço, com a regra que não pode ser quebrada: **venues nunca são
+somadas** (Ordem A2.1 §16) — 2 muros na Binance e 1 na MEXC não são "3
+muros", são duas leituras independentes que por acaso concordam.
+
+**É módulo de LABORATÓRIO: puro, 16 testes de execução real, e NÃO
+ligado.** Um dos testes é a própria trava de fase — falha se algum arquivo
+de `src/` passar a importá-lo. Graduar é Phase B e depende do aval do
+Operador. Consequência honesta de registrar: como o módulo *lê* os 4
+campos, a ferramenta agora os classifica em **A**, não em C — a linhagem
+está fechada no código, mas ainda **não na tela**.
+
+#### §63 — auditoria de fallback: resultado limpo
+
+48 ocorrências de `?? 0` / `|| 0` em `src/`. **Zero** transformam dado
+ausente em evidência falsa — nenhuma cai em campo de score, probabilidade,
+confiança, taxa ou expectativa (varredura direcionada: 0 resultados). Os 3
+fallbacks de **timestamp** foram lidos um a um:
+
+- `health-monitor.ts:107-108` — o `?? 0` alimenta um `Math.max`, e
+  `freshest > 0 ? freshest : null` impede qualquer timestamp fabricado
+  chegar à UI. **Correto** (classe F).
+- `engine-bridge.ts:621` — `now - (updatedAt ?? 0)` dá um número enorme,
+  que reprova o cache e força refetch. **Fail-safe por construção.**
+
+#### §40 — semântica temporal: verificada, não suposta
+
+A gravação de `contextAtOpen` é **write-once** (`App.tsx:3491`:
+`if (!active || active.contextAtOpen !== undefined) return;`), e todo
+leitor a jusante (`trade-simulation.ts`, `plan-markers.ts`) consome o valor
+**congelado na abertura** com `?? null`, nunca o valor de agora. É
+exatamente a regra prequencial do §28 ("nunca alterar prediction
+retroativamente"), já garantida por construção.
+
+#### Inventário: o que JÁ existe (§13 — "não criar motores duplicados")
+
+| capacidade | módulos reais |
+|---|---|
+| microestrutura | `microstructure-snapshot`, `order-book-depth`, `orderflow-history`, `trap-detection`, `liquidity-significance`, `liquidity-zone-fusion`, `cross-exchange-book/-service`, `cross-venue-intelligence` |
+| regime | `regime-engine.js`, `hmm-regime-model.js`, `market-structure-engine.js` |
+| calibração | `platt-calibration`, `walk-forward-calibration`, `shadow-calibration`, `calibration-freshness`, `sample-maturity-line`, `expectancy` |
+| outcome / performance | `signal-track-record`, `trade-simulation`, `outcome-matrix`, `target-hit-rate`, `scenario-fingerprint`, `institutional-score` |
+| Workers / WASM | 4 Workers (`llm`, `backtest`, `conviction-cyclone`, `orderflow-heatmap`) + 2 WASM (`cyborg_quant_core`, `_simd`) |
+
+Boa parte do que a MASTER ORDER pede nas Phases D e E **já está
+construída** — Phase D itens 1-9 (outcome, target outcomes, fees,
+slippage, funding, expectancy, target hit rate) e Phase E itens 5-6
+(shadow, walk-forward) foram entregues nas rodadas §6.110-§6.113. As
+lacunas reais estão nas Phases B, C e E1-E4.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar
