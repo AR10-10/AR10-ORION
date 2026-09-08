@@ -197,7 +197,6 @@ import { HarmonicGeometryPlugin } from "./HarmonicGeometryPlugin";
 import type { TrianglePatternHit } from "../nexus/triangle-pattern";
 import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
 import type { NexusDecision } from "../nexus/decision-layer";
-import { formatEtaRange } from "../nexus/eta-engine";
 // Research-driven precision order: VWAP, the institutional-standard
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
@@ -225,7 +224,6 @@ import { clusterSweptPrices } from "../nexus/trap-detection";
 // nexus/trend-channel-engine.ts para a definição real (Linear Regression
 // Channel) e a pesquisa que a confirmou.
 import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
-import { shouldCompactLabels } from "./label-compaction";
 import { formatTickMark, chartLocale } from "./tick-mark-format";
 import { formatZoneMemberList } from "../nexus/zone-member-codes";
 import { computeSuperTrend } from "../engine-bridge";
@@ -236,7 +234,7 @@ import { CvdLinePlugin } from "./CvdLinePlugin";
 // repositório antes desta rodada — as etiquetas EN/ST/TP respondem "a que
 // PREÇO", nunca "em QUAL MOMENTO".
 import { buildPlanMarkers, type PlanMarkerSource } from "./plan-markers";
-import { formatPrice, nativePriceDecimals } from "../nexus/price-format";
+import { formatPrice, nativePriceDecimals, formatPriceGrouped } from "../nexus/price-format";
 import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
 
@@ -721,10 +719,14 @@ interface EnhancedChartProps {
 }
 
 // Continuidade §6 (hierarquia visual dos alvos) — Diretriz de Evolução
-// Profissional Fase 10 item P: a lógica em si (limiar + decisão de
-// compactar) agora vive em label-compaction.ts como função pura testável
-// por execução real; este arquivo só importa e usa (Regra de Ouro 4:
-// realocar, nunca duplicar).
+// Profissional Fase 10 item P: a decisão de compactar (limiar +
+// comparação de níveis adjacentes) vive em label-compaction.ts como
+// função pura testável por execução real. Pedido "lateral direita
+// compacta" (Operador) removeu o ÚNICO chamador real (as etiquetas
+// TP1/TP2/TP3/ST voltaram a ser sempre nome+preço, sem segmento
+// secundário condicional) — o módulo continua real e testado, disponível
+// se uma rodada futura precisar da mesma lógica de novo (Regra de Ouro 4:
+// realocar/reter, nunca apagar).
 
 // §22: paleta institucional de estado + seta discreta. A NL usa a mesma
 // paleta com opacidade menor — §29 "nunca competir visualmente com a VWAP".
@@ -2661,9 +2663,10 @@ function EnhancedChart_110_PercentImpl({
       return floor + Math.max(0, Math.min(1, weight)) * (ceiling - floor);
     };
     // Índice 0 = alvo mais próximo (peso cheio); cada alvo mais distante
-    // na mesma rota pesa menos — mesmo espírito do "hierarquia visual dos
-    // alvos" já usado no Trade Plan real (label-compaction.ts), aqui só
-    // por opacidade (cor/traço continuam intocados, Regra de Ouro 5).
+    // na mesma rota pesa menos — mesmo espírito de "hierarquia visual dos
+    // alvos" que o Trade Plan real já explorou (label-compaction.ts, hoje
+    // sem chamador ali — ver comentário acima de PriceLabelStackPluginProps),
+    // aqui só por opacidade (cor/traço continuam intocados, Regra de Ouro 5).
     const TARGET_ALPHA_FALLOFF = [1, 0.65, 0.4];
 
     // Lavanda dedicada — nunca a mesma cor de nenhum nível real já
@@ -3225,24 +3228,10 @@ function EnhancedChart_110_PercentImpl({
     // deixava sobrepor S1/R1/VWAP quando um plano ativo tem níveis
     // próximos. Cores reais já usadas pelas LINHAS acima (âmbar=entrada,
     // vermelho=stop, verde=alvo) — leitura instantânea de ENTRY LONG/SHORT/
-    // STOP/TARGET pela cor da caixa. O texto/estado (REACHED/BREACHED,
-    // distância %/ETA, compactação) é IDÊNTICO ao que a lib desenhava,
-    // computado das MESMAS funções puras (effectiveStopForTargetsHit,
-    // shouldCompactLabels, formatEtaRange) e MESMOS inputs reais que o
-    // efeito da LINHA acima — linha e rótulo nunca divergem. Fail-closed:
-    // sem plano, zero rótulos (early guard de cada push por Number.isFinite).
-    // OMEGA CORE V-MAX Fase 4 (§4.2/§4.4 — auditoria "Bate-Olho"): achado
-    // real — esta função só existia dentro do bloco engineFallbackLevels
-    // abaixo, então o Trade Plan REAL do Conselho nunca mostrava a
-    // contagem de obstáculos no rótulo do alvo (só a zona destacada no
-    // LiquidityZonesPlugin a exibia). Hoisted para o escopo externo — os
-    // DOIS blocos agora reusam a MESMA função, zero duplicação (antes
-    // havia uma cópia idêntica só dentro do bloco do fallback).
-    const obstacleSuffix = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? ` ⚠ ${n}` : "");
+    // STOP/TARGET pela cor da caixa. Fail-closed: sem plano, zero rótulos
+    // (early guard de cada push por Number.isFinite).
     if (tradePlan) {
       const hits = targetsHit ?? 0;
-      const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
-      const long = tradePlan.direction === "LONG";
       const entryColor = "rgba(240, 193, 111, 0.75)";
       // Pedido do Operador (evolução, revertendo — com confirmação explícita
       // — a decisão registrada abaixo): a % real de confluência volta ao
@@ -3285,141 +3274,71 @@ function EnhancedChart_110_PercentImpl({
         }
       }
       // Stop no preço EFETIVO (ratchet real, MESMA função pura do efeito da
-      // linha) — BREACHED quando o preço vivo já rompeu (fail-closed:
-      // preço não-finito nunca resolve BREACHED).
+      // linha).
       const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);
+      // Pedido direto do Operador ("lateral direita compacta", depois
+      // refinado com exemplo literal "TP1   79,405.00" — vírgula de milhar,
+      // ponto decimal, casas SEMPRE visíveis): rótulo volta a ser só NOME +
+      // PREÇO — o segmento secundário (basis/motivo/TRILHADO/BREAK-EVEN/
+      // BREACHED/R:R/ETA/obstáculo/REACHED/score de confluência) que
+      // rodadas anteriores ("Lapidação das Etiquetas TP1/TP2") tinham
+      // movido pra cá sai do canvas inteiro. Zero dado apagado (Regra de
+      // Ouro 4): o estado BREACHED/REACHED já tem seu próprio destaque de
+      // tom no command bar (TradePlanTopStrip, App.tsx), e basis/R:R/ETA/
+      // obstáculo/score continuam reais e visíveis no painel do Trade Plan
+      // e no ExpectancyCard/ScoreContextCard — este rótulo do canvas nunca
+      // foi a única leitura desse dado. `formatPriceGrouped` (não
+      // `formatPrice`/`fmtAxisLabelPrice`) de propósito: TP/ST é o plano
+      // ATIVO, não um rótulo de eixo compacto — precisa da mesma disciplina
+      // de "nunca perder um decimal" que `nativePriceDecimals` já garante
+      // pro preço vivo, com separador de milhar por cima (padrão de
+      // terminal profissional pedido explicitamente).
       if (Number.isFinite(effectiveStopPrice)) {
-        const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
-        // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4: PRIMÁRIO = só "ST"
-        // (a própria etiqueta já diz o que é — o preço no eixo já é o
-        // valor); SECUNDÁRIO = motivo/estado, fonte menor — mesma
-        // informação, sem competir peso visual com o rótulo em si.
-        const stopSecondary = hits >= 2
-          ? `TRILHADO (alvo ${hits - 1})`
-          : hits > 0
-            ? `BREAK-EVEN (real)`
-            : tradePlan.stop.basis;
         out.push({
           price: effectiveStopPrice,
-          text: "ST",
-          secondaryText: withScore(stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary),
+          text: `ST ${formatPriceGrouped(effectiveStopPrice)}`,
           color: "rgba(242, 54, 69, 0.75)",
           tier: "critical",
         });
       }
-      // Continuidade §6: níveis apertados => rótulos compactos (WIDTH); o
-      // resolvedor de colisão já cuida da separação VERTICAL. O stop
-      // EFETIVO entra na medição (o ratchet pode encostá-lo num alvo real).
-      const levels = [effectiveStopPrice, ...tradePlan.targets.map((t) => t.price)].sort((a, b) => a - b);
-      const compactLabels = shouldCompactLabels(levels);
       tradePlan.targets.forEach((target, i) => {
         if (!Number.isFinite(target.price)) return;
-        const reached = i < hits;
-        const rr = tradePlan.riskRewardRatios[i];
         // EPC FINAL §8: TP1/TP2/TP3 sempre numerado (mesmo com 1 alvo só) —
         // a mesma convenção pedida, sem distinção "singular vs plural".
-        // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4/§11 (achado real
-        // de captura: "TP1 FRACA · 0.34% · 1:0.04 · REACHED" ocupava uma
-        // faixa horizontal grande sobre as velas — o problema não era o
-        // tamanho da fonte, era description/estado com o MESMO peso do
-        // rótulo+valor). PRIMÁRIO = label + distância (prioridades 3/4 da
-        // Ordem — "onde fica o alvo"); SECUNDÁRIO = basis/R:R/ETA/
-        // obstáculo/REACHED (prioridades 5/6 — "descrição/força/status"),
-        // sempre presente, nunca apagado — só menor e mais discreto
-        // (PriceLabelStackPlugin desenha em fonte reduzida + opacidade
-        // menor). compactLabels continua controlando SÓ se basis/R:R
-        // entram no secundário (mesma regra de sempre: níveis apertados
-        // não cabem o detalhe completo); ETA/obstáculo/REACHED sempre
-        // aparecem quando reais, nos dois modos.
-        const fusedTarget = decision?.plan?.targets[i];
-        const etaLabel =
-          fusedTarget && Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)
-            ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
-            : null;
-        const secondaryParts = [
-          // Pedido do Operador, repetido em duas rodadas com capturas reais:
-          // "deixar só as iniciais, não precisa aquela numeração na frente
-          // NEM A PORCENTAGEM [de DISTÂNCIA até o alvo]". A primeira
-          // tentativa só desceu a distância para o secundário — e ela
-          // continuou aparecendo na tela (TP1 3.14% FRACA 1:0.42 na captura
-          // de ZEC 4H). Essa % de distância continua fora do canvas — ela
-          // segue no painel do Trade Plan (App.tsx). O `withScore` abaixo é
-          // outro número: a % de CONFLUÊNCIA do plano (institutional-score.ts),
-          // pedida de volta numa rodada posterior — compacta de propósito
-          // (um token, não a frase inteira que motivou a remoção original).
-          //
-          // Regra de Ouro 4 (nunca apagar dado real, só realocar) está
-          // satisfeita: a distância percentual até cada alvo continua
-          // renderizada no painel do Trade Plan (App.tsx, linha do target:
-          // preço, basis, PORCENTAGEM, R:R, ETA e obstáculos).
-          compactLabels ? null : target.basis,
-          compactLabels || rr === null ? null : `1:${rr.toFixed(2)}`,
-          etaLabel ? `ETA ${etaLabel}` : null,
-          obstacleSuffix(target.obstacleCount).trim() || null,
-          reached ? "REACHED" : null,
-        ].filter((v): v is string => v !== null);
         out.push({
           price: target.price,
-          text: `TP${i + 1}`,
-          secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined),
+          text: `TP${i + 1} ${formatPriceGrouped(target.price)}`,
           color: "rgba(8, 153, 129, 0.75)",
           tier: "critical",
         });
       });
     }
     // EPC §5/§6 (continuação): rótulos do fallback do Core Engine — MESMO
-    // sistema anti-colisão, "(Núcleo)" no texto deixa explícito que é uma
-    // fonte diferente do Trade Plan do Conselho acima (nunca os dois ao
-    // mesmo tempo: engineFallbackLevels já vem null quando tradePlan
-    // existe). REACHED/BREACHED aqui é derivação simples do preço vivo
-    // contra o nível — não usa o ratchet effectiveStopForTargetsHit nem o
-    // Track Record autoritativo (signal-track-record.ts), que rastreiam
-    // especificamente o Trade Plan do Conselho; misturar os dois
-    // conflaria dois planos distintos.
+    // sistema anti-colisão que o Trade Plan do Conselho acima (nunca os
+    // dois ao mesmo tempo: engineFallbackLevels já vem null quando
+    // tradePlan existe).
     if (engineFallbackLevels) {
-      const longFb = engineFallbackLevels.direction === "LONG";
-      const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
       // Achado real do Operador ("nome Grandão, um monte de letra... mais
       // padrão, mais profissional"): "(Núcleo)" repetido em CADA rótulo
       // (STOP/TARGET1/TARGET2) era redundante — o overlay do canto
       // superior esquerdo (tradePlanAbsenceReason) já deixa "linhas
       // abaixo são do Núcleo" explícito UMA vez, persistente enquanto o
-      // fallback estiver ativo (nunca some sozinho). Removido daqui —
-      // zero informação perdida, só zero repetição (Regra de Ouro 4). A
-      // distinção visual real continua existindo: cor mais opaca/apagada
-      // (0.5/0.35) que o Trade Plan do Conselho (0.75) sempre teve.
-      // strengthSuffix também alinhado ao estilo tight de levelTitle()
-      // (S1/R1 acima) — espaço, nunca "·", mesmo padrão em todo o eixo.
-      const strengthSuffix = (s: { label: "FORTE" | "FRACA"; touches: number } | null) => (s ? ` ${s.label}` : "");
-      // EPC MODO ELITE §4 ("Obstáculos estruturais" na lista permanente):
-      // sufixo compacto "⚠ N" (mesmo glifo ⚠ da zona destacada no
-      // LiquidityZonesPlugin), só quando há obstáculo real no caminho —
-      // zero quando livre. obstacleSuffix agora vem do escopo externo
-      // (Fase 4: hoisted para ser reusado pelo Trade Plan REAL acima
-      // também, ver comentário na declaração).
-      // tier:"critical" (Ordem "Lapidação Visual Final e Sincronia
-      // Operacional" §3): mesmo Nível A do Trade Plan do Conselho acima —
-      // é o plano ATIVO do Operador quando não há um plano do Conselho,
-      // não uma referência secundária.
+      // fallback estiver ativo (nunca some sozinho). A distinção visual
+      // real continua existindo: cor mais opaca/apagada (0.5/0.35/0.2) que
+      // o Trade Plan do Conselho (0.75) sempre teve.
       //
-      // A distância percentual até o alvo NÃO é mais desenhada aqui
-      // (pedido repetido do Operador, com captura real mostrando
-      // "TP1 3.14% FRACA 1:0.42" sobre as velas). Ela continua real e
-      // visível no painel do Trade Plan — este canvas parou de repetir o
-      // que o painel já diz. `p` segue em escopo porque REACHED depende
-      // dele.
-      // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4/§11 (achado real de
-      // captura: "TP1 FRACA · 0.34% · 1:0.04 · REACHED" — mesmo problema
-      // do Trade Plan do Conselho acima, mesma correção: PRIMÁRIO = label
-      // + distância (o essencial pra ler "qual alvo, quão longe"),
-      // SECUNDÁRIO = força/R:R/obstáculo/status, em fonte menor via
-      // PriceLabelStackPlugin — zero dado apagado, só peso visual menor.
+      // Pedido direto do Operador ("lateral direita compacta", exemplo
+      // literal "79,405.00"): mesma simplificação do Trade Plan do
+      // Conselho acima — NOME + PREÇO só, via `formatPriceGrouped`
+      // (separador de milhar + casas decimais sempre presentes, nunca
+      // corta ".00", pra ler como coluna alinhada). Força/R:R/obstáculo/
+      // REACHED/BREACHED saem do canvas — zero dado apagado (Regra de
+      // Ouro 4): a mesma leitura do preço vivo contra o nível continua
+      // disponível no painel do Trade Plan/command bar.
       if (Number.isFinite(engineFallbackLevels.stop)) {
-        const breached = p !== null && (longFb ? p <= engineFallbackLevels.stop : p >= engineFallbackLevels.stop);
         out.push({
           price: engineFallbackLevels.stop,
-          text: "ST",
-          secondaryText: breached ? "BREACHED" : undefined,
+          text: `ST ${formatPriceGrouped(engineFallbackLevels.stop)}`,
           color: "rgba(242, 54, 69, 0.5)",
           tier: "critical",
         });
@@ -3427,53 +3346,28 @@ function EnhancedChart_110_PercentImpl({
       // EPC FINAL §8: TP1/TP2 sempre numerado, mesma convenção do Trade
       // Plan do Conselho acima — zero distinção singular/plural no rótulo.
       if (Number.isFinite(engineFallbackLevels.target1)) {
-        const reached = p !== null && (longFb ? p >= engineFallbackLevels.target1 : p <= engineFallbackLevels.target1);
-        const rr = engineFallbackLevels.riskRewardRatio;
-        const secondary1 = [
-          // Mesma regra do Trade Plan acima: a porcentagem sai do canvas e
-          // permanece no painel.
-          strengthSuffix(engineFallbackLevels.target1Strength).trim() || null,
-          rr !== null ? `1:${rr.toFixed(2)}` : null,
-          obstacleSuffix(engineFallbackLevels.target1ObstacleCount).trim() || null,
-          reached ? "REACHED" : null,
-        ].filter((v): v is string => v !== null);
         out.push({
           price: engineFallbackLevels.target1,
-          text: "TP1",
-          secondaryText: secondary1.length > 0 ? secondary1.join(" ") : undefined,
+          text: `TP1 ${formatPriceGrouped(engineFallbackLevels.target1)}`,
           color: "rgba(8, 153, 129, 0.5)",
           tier: "critical",
         });
       }
       if (engineFallbackLevels.target2 !== null && Number.isFinite(engineFallbackLevels.target2)) {
-        const reached = p !== null && (longFb ? p >= engineFallbackLevels.target2 : p <= engineFallbackLevels.target2);
-        const secondary2 = [
-          strengthSuffix(engineFallbackLevels.target2Strength).trim() || null,
-          obstacleSuffix(engineFallbackLevels.target2ObstacleCount).trim() || null,
-          reached ? "REACHED" : null,
-        ].filter((v): v is string => v !== null);
         out.push({
           price: engineFallbackLevels.target2,
-          text: "TP2",
-          secondaryText: secondary2.length > 0 ? secondary2.join(" ") : undefined,
+          text: `TP2 ${formatPriceGrouped(engineFallbackLevels.target2)}`,
           color: "rgba(8, 153, 129, 0.35)",
           tier: "critical",
         });
       }
       // Achado de auditoria (Ferramentas Institucionais): TP3 = extensão
-      // de Fibonacci 61.8%, mesma convenção TP1/TP2/TP3 numerada sempre
-      // (EPC FINAL §8) — sem strengthSuffix/obstacleSuffix porque a fonte
-      // (support-resistance-engine.js) não computa esses metadados para
-      // este nível, nunca um valor fabricado só para preencher o rótulo.
+      // de Fibonacci 61.8% (support-resistance-engine.js), mesma
+      // convenção TP1/TP2/TP3 numerada sempre (EPC FINAL §8).
       if (engineFallbackLevels.target3 != null && Number.isFinite(engineFallbackLevels.target3)) {
-        const reached = p !== null && (longFb ? p >= engineFallbackLevels.target3 : p <= engineFallbackLevels.target3);
-        const secondary3 = [reached ? "REACHED" : null].filter(
-          (v): v is string => v !== null,
-        );
         out.push({
           price: engineFallbackLevels.target3,
-          text: "TP3",
-          secondaryText: secondary3.length > 0 ? secondary3.join(" ") : undefined,
+          text: `TP3 ${formatPriceGrouped(engineFallbackLevels.target3)}`,
           color: "rgba(8, 153, 129, 0.2)",
           tier: "critical",
         });

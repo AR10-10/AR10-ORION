@@ -530,41 +530,37 @@ describe('§6: painel Síntese Operacional — 6 eixos derivados do MESMO NexusD
 // winner-selection/zigue-zague/rótulos agora vive em
 // harmonic-geometry-plugin-wiring.test.ts.
 describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no gráfico', () => {
-  it('títulos das linhas de alvo carregam distância % ao preço VIVO + ETA em faixa do contrato fundido (guard de preço)', () => {
+  it('distância %/ETA por alvo nunca voltaram ao canvas — pedido "lateral direita compacta" (Operador) foi além e removeu também o segmento secundário que withScore()/ETA usavam, deixando ST/TP1-3 como NOME + PREÇO só (ver describe "Lateral Direita Compacta" abaixo)', () => {
     const c = chart();
     // REVERTIDO POR PEDIDO REPETIDO DO OPERADOR (duas rodadas, com captura
     // real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" na tela): a
     // porcentagem de DISTÂNCIA até o alvo saiu do canvas de vez. Regra de
     // Ouro 4 satisfeita — a distância percentual continua real e visível no
     // painel do Trade Plan (App.tsx), que já a renderizava antes desta
-    // mudança. A distância vive no PAINEL, não no canvas — é lá que a
-    // asserção passa a morar.
-    //
-    // Isto NÃO é o mesmo "%" que withScore() (mesmo arquivo, abaixo) volta a
-    // desenhar numa rodada posterior — aquele é a % de CONFLUÊNCIA do plano
-    // (institutional-score.ts), um número por PLANO, não por alvo, pedido
-    // de volta explicitamente pelo Operador. Duas percentagens diferentes;
-    // só a de distância-por-alvo continua banida do canvas.
+    // mudança. A distância vive no PAINEL, não no canvas.
     expect(c).not.toContain('const distPct =');
     const app = read('../src/App.tsx');
     expect(app).toContain("(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)");
-    expect(c).toContain('const fusedTarget = decision?.plan?.targets[i];');
-    expect(c).toContain('Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)');
-    expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
+    // fusedTarget/etaLabel (o ETA por alvo, formatEtaRange) saíram junto
+    // com o resto do segmento secundário — o mesmo ETA continua real no
+    // painel do Trade Plan, nunca fabricado, só realocado (Regra de Ouro 4).
+    expect(c).not.toContain('const fusedTarget = decision?.plan?.targets[i];');
+    expect(c).not.toContain('formatEtaRange');
   });
 
-  it('withScore devolve a % real de confluência do plano às etiquetas EN/ST/TP1/TP2 (revertido, com autorização explícita)', () => {
-    // Pedido do Operador: "tenha a porcentagem pra poder lá aparecer" —
-    // confirmado via AskUserQuestion (duas opções escolhidas: setas de
-    // entrada E reverter em EN/ST/TP1/TP2), depois do achado acima. Compacto
-    // de propósito — um token só, nunca a frase inteira que motivou a
-    // remoção original.
+  it('withScore (% real de confluência do plano) continua real para EN — ST/TP1-3 abandonaram o segmento secundário por completo no pedido "lateral direita compacta" (a % de confluência do plano continua visível no ScoreContextCard/ExpectancyCard)', () => {
+    // Histórico: "tenha a porcentagem pra poder lá aparecer" (confirmado
+    // via AskUserQuestion) trouxe institutionalScoreValue/withScore() de
+    // volta a EN/ST/TP1/TP2. Rodada posterior ("lateral direita compacta")
+    // removeu o segmento secundário inteiro de ST/TP1-3 — withScore()
+    // continua real e usado, só que agora apenas por EN (não nomeado pelo
+    // Operador nesse pedido).
     const c = chart();
     expect(c).toContain('institutionalScoreValue?: number | null;');
     expect(c).toContain('const withScore = (text?: string | null) => [text, scoreToken].filter(Boolean).join(" ") || undefined;');
     expect(c).toContain('secondaryText: withScore(tradePlan.entry.basis)');
-    expect(c).toContain('secondaryText: withScore(stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary)');
-    expect(c).toContain('secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined)');
+    expect(c).not.toContain('withScore(stopHitNow');
+    expect(c).not.toContain('withScore(secondaryParts');
     const app = read('../src/App.tsx');
     expect(app).toContain('institutionalScoreValue={institutionalScore?.score ?? null}');
   });
@@ -1196,31 +1192,50 @@ describe('Continuidade §5: o cartão VWAP (ScoreContextCard) exibe o VALOR real
   });
 });
 
-// ─── Continuidade Final §6: rótulos compactos condicionais dos alvos ───
-describe('Continuidade §6: níveis apertados => rótulos TP compactos, preço NUNCA deslocado', () => {
-  it('medição inclui o stop EFETIVO (ratchet pode encostar num alvo); a decisão em si vem da função pura testada por execução real em label-compaction.test.ts (Diretriz de Evolução Profissional, Fase 10-P)', () => {
+// ─── Pedido direto do Operador ("lateral direita compacta", refinado com
+// exemplo literal "TP1   79,405.00" / "ST   78,700.00" — vírgula de
+// milhar, ponto decimal, casas sempre visíveis): TP1/TP2/TP3/ST voltam a
+// ser só NOME + PREÇO no canvas. A rodada "Lapidação das Etiquetas
+// TP1/TP2" tinha movido basis/R:R/ETA/obstáculo/REACHED para um segmento
+// secundário (nunca apagado, só reduzido em peso); este pedido remove
+// esse segmento do canvas por completo — Regra de Ouro 4 satisfeita
+// porque o mesmo dado continua real e visível no painel do Trade Plan e
+// no command bar (TradePlanTopStrip), nunca só aqui.
+describe('Lateral Direita Compacta: TP1/TP2/TP3/ST são NOME + PREÇO, zero segmento secundário', () => {
+  it('Trade Plan do Conselho: ST e TP1-3 usam formatPriceGrouped (vírgula de milhar + casas decimais sempre presentes — nunca fmtAxisLabelPrice, que corta ".00" e zera casas acima de 1000) — nenhuma etiqueta crítica do plano declara secondaryText', () => {
     const c = chart();
-    expect(c).toContain('import { shouldCompactLabels } from "./label-compaction";');
-    expect(c).toContain('const levels = [effectiveStopPrice, ...tradePlan.targets.map((t) => t.price)].sort((a, b) => a - b);');
-    expect(c).toContain('const compactLabels = shouldCompactLabels(levels);');
+    const idx = c.indexOf('if (tradePlan) {', c.indexOf('const priceAxisLabels = useMemo'));
+    const end = c.indexOf('if (engineFallbackLevels) {', idx);
+    const block = c.slice(idx, end);
+    expect(block).toContain('text: `ST ${formatPriceGrouped(effectiveStopPrice)}`,');
+    expect(block).toContain('text: `TP${i + 1} ${formatPriceGrouped(target.price)}`,');
+    expect(block).not.toContain('secondaryText: withScore(stopHitNow');
+    expect(block).not.toMatch(/text: `TP\$\{i \+ 1\}\`,\s*secondaryText/);
   });
 
-  it('modo compacto: secundário sem basis/R:R (ETA/obstáculo/REACHED seguem); modo cheio inclui basis+R:R; OMEGA CORE V-MAX Fase 4 (§4.2) acrescentou o sufixo real de obstáculos aos dois modos — Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4 moveu todo esse detalhe pro secundário (texto primário é só label+distância nos dois modos, ver o teste de "bater o olho profissional" em price-label-stack-plugin.test.ts)', () => {
+  it('fallback do Núcleo (engineFallbackLevels): mesma simplificação, mesmas cores mais apagadas (0.5/0.35/0.2) de sempre', () => {
     const c = chart();
-    expect(c).toContain('compactLabels ? null : target.basis,');
-    expect(c).toContain('compactLabels || rr === null ? null : `1:${rr.toFixed(2)}`,');
-    expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
-    expect(c).toContain('obstacleSuffix(target.obstacleCount).trim() || null,');
-    expect(c).toContain('reached ? "REACHED" : null,');
-    // withScore() (Pedido do Operador, rodada posterior) envolve o texto —
-    // ver o teste de withScore acima; o conteúdo interno continua o mesmo.
-    expect(c).toContain('secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined),');
+    const idx = c.indexOf('if (engineFallbackLevels) {', c.indexOf('const priceAxisLabels = useMemo'));
+    // Bound at the next real section (BOS/CHOCH), NOT at `return out;` —
+    // the useMemo keeps pushing many more unrelated labels (structure
+    // breaks, sweeps, zones) after this block closes, several of which
+    // legitimately declare secondaryText; slicing to the final `return
+    // out;` would swallow all of that and produce a false failure.
+    const end = c.indexOf('// Ordem "Ciborgue Vivo" §1', idx);
+    const block = c.slice(idx, end);
+    expect(block).toContain('text: `ST ${formatPriceGrouped(engineFallbackLevels.stop)}`,');
+    expect(block).toContain('text: `TP1 ${formatPriceGrouped(engineFallbackLevels.target1)}`,');
+    expect(block).toContain('text: `TP2 ${formatPriceGrouped(engineFallbackLevels.target2)}`,');
+    expect(block).toContain('text: `TP3 ${formatPriceGrouped(engineFallbackLevels.target3)}`,');
+    expect(block).not.toContain('secondaryText');
   });
 
-  it('a âncora do preço real permanece documentada onde a decisão de compactar agora vive (label-compaction.ts): applyOptions nunca recebe um price deslocado no título compacto', () => {
-    const lc = read('../src/chart/label-compaction.ts');
-    expect(lc).toContain('ancoradas no preço real: o preço matemático nunca muda para');
-    expect(lc).toContain('caber a etiqueta.');
+  it('shouldCompactLabels/label-compaction.ts não são mais importados aqui — a decisão de compactar não se aplica mais a etiquetas que nunca carregam segmento secundário (o módulo em si continua real e testado, só sem chamador neste arquivo — Regra de Ouro 4)', () => {
+    const c = chart();
+    expect(c).not.toContain('shouldCompactLabels');
+    expect(c).not.toContain('import { shouldCompactLabels }');
+    expect(c).not.toContain('from "./label-compaction"');
+    expect(c).not.toContain('formatEtaRange');
   });
 });
 

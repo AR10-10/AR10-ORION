@@ -8091,6 +8091,126 @@ cobertura de execução real completa).
 
 ---
 
+### 6.101 Lateral Direita Compacta — TP1/TP2/TP3/ST simplificados +
+separador de milhar profissional (pedido direto do Operador, 2 rodadas)
+
+Pedido concreto e bem-escopado (ao contrário dos memos anteriores desta
+seção): a "lateral direita" — identificada, por auditoria de código antes
+de tocar em qualquer arquivo, como a COLUNA de rótulos do eixo de preço
+desenhada por `PriceLabelStackPlugin.tsx` (largura sob demanda,
+`chart-plot-area.ts`), **não** as gavetas reais `terminal-right`/
+`terminal-properties` (Core Intelligence/Properties — nenhuma das duas
+renderiza TP/ST). A confusão era razoável: o Operador vê uma "lateral"
+visualmente, mas ela é o EIXO do gráfico, não um painel lateral separado.
+
+**Achado central:** `EnhancedChart_110_Percent.tsx` já tinha passado por
+3 rodadas anteriores ("Lapidação das Etiquetas TP1/TP2", registradas nos
+comentários do próprio código) tentando resolver exatamente esta queixa
+— mas cada rodada só *reduzia o peso visual* do segmento secundário
+(basis/R:R/ETA/obstáculo/REACHED/BREACHED/score de confluência, fonte
+menor + opacidade reduzida via `secondaryText`), nunca o removia. O
+pedido desta vez é categoricamente diferente: remover o segmento por
+completo, deixando só NOME + PREÇO — e ainda assim a Regra de Ouro 4 (zero
+dado apagado) continua satisfeita porque cada peça desse segmento já
+vivia duplicada em outro lugar real (basis/%/R:R/ETA/obstáculo no painel
+do Trade Plan, App.tsx; REACHED/BREACHED no command bar `TradePlanTopStrip`;
+score de confluência no `ScoreContextCard`/`ExpectancyCard`) — o canvas
+nunca foi a única leitura desse dado, só parou de REPETI-LO.
+
+**Construído** (`EnhancedChart_110_Percent.tsx`, função `priceAxisLabels`,
+dois branches — Trade Plan real do Conselho e `engineFallbackLevels` do
+Núcleo):
+- `ST`/`TP1`/`TP2`/`TP3` (ambos os branches) perderam o `secondaryText`
+  por completo; o `text` primário passou a levar o PREÇO junto:
+  `` `TP${i + 1} ${formatPriceGrouped(target.price)}` ``. `EN` (entrada)
+  não foi tocado — o Operador nomeou só os 4 rótulos de alvo/stop.
+- Código morto removido junto (nunca deixado pra trás): `obstacleSuffix`/
+  `strengthSuffix`/`stopSecondary`/`stopHitNow` (no escopo do Trade Plan
+  real)/`secondaryParts`/`fusedTarget`/`etaLabel`/`reached` (nos dois
+  branches, onde só alimentavam o texto removido) e a decisão de
+  compactação `compactLabels`/`levels`/`shouldCompactLabels` — o import de
+  `./label-compaction` e de `formatEtaRange` (`nexus/eta-engine`) saíram
+  do arquivo. **Zero Delete real**: `label-compaction.ts` (a função pura
+  `shouldCompactLabels`) e seu teste de execução real continuam no
+  repositório, intactos e passando — só sem chamador aqui agora; a mesma
+  lógica de "alvos próximos demais entram em modo compacto" fica
+  disponível se uma rodada futura precisar dela de novo.
+- **Segunda rodada do mesmo pedido** (o Operador refinou com um exemplo
+  literal mais preciso, "TP1   79,405.00" — vírgula de milhar, ponto
+  decimal, casas sempre visíveis): `nexus/price-format.ts` ganhou
+  `formatPriceGrouped(value)`, nova função exportada que reusa
+  `nativePriceDecimals` (o mesmo piso de "nunca menos que 2 casas acima
+  de 1" já usado pro preço vivo — não `priceDecimals`, que zera casas
+  acima de 1000 pro rótulo de eixo compacto "65200") e aplica
+  `toLocaleString("en-US", {...})` por cima só pra ganhar o separador de
+  milhar — zero reimplementação de aritmética de arredondamento, a régua
+  de precisão continua a MESMA fonte única de sempre. Os 6 pontos de
+  `formatPrice(...)` escritos na primeira rodada foram trocados por
+  `formatPriceGrouped(...)` na segunda, sem tocar em mais nada.
+- **Largura da lateral**: nenhuma mudança direta — é consequência
+  automática do mecanismo já existente (`resolveAxisWidthForLabels`,
+  `chart-plot-area.ts`, degraus de 8px + histerese + teto de 140px): a
+  coluna já dimensiona pela etiqueta mais larga do conjunto, e o segmento
+  secundário removido era, segundo os próprios comentários de rodadas
+  anteriores, o que "ocupava uma faixa horizontal grande sobre as velas".
+  Reusar a arquitetura existente em vez de hardcodar uma largura nova
+  evita reabrir a lógica de anti-colisão que essas rodadas já validaram.
+- **Numeração consistente**: satisfeita pela própria `formatPriceGrouped`
+  — decimais nunca cortados (nem o `.00` de nível redondo, nem o corte
+  sub-1 que `formatPrice` normal aplica pros painéis).
+- **Tempo restante da vela em todos os timeframes**: já resolvido em
+  §6.100 (`CandleCountdownBadge`) — confirmado nesta rodada, por
+  comparação direta linha a linha, que os 14 `value`s reais de
+  `CHART_TIMEFRAMES` (App.tsx) batem 1:1 com as 14 chaves de
+  `TIMEFRAME_MS` (`aura-lifecycle.ts`) que `candle-countdown.ts` já
+  consultava — nenhum timeframe excluído silenciosamente.
+
+**O que ficou de fora desta rodada, honestamente** (o pedido mais recente
+do Operador pediu uma "revisão completa do ecossistema" — 6 seções,
+muito além do que uma sessão deveria tentar de uma vez sem o mesmo
+cuidado de auditoria que este item recebeu):
+- **"Força" removida das caixinhas**: o próprio pedido já autorizou
+  explicitamente que ela pode continuar existindo em outro lugar
+  ("encontre a melhor estratégia... se for útil e aparecer de forma
+  discreta, pode permanecer") — mas construir um NOVO indicador visual
+  dedicado pra ela é uma decisão de design nova (que forma? onde? qual
+  peso visual frente ao resto da hierarquia já calibrada?), não um ajuste
+  de pixel. Documentado como pendência real, não fabricado às pressas: a
+  força continua sendo REALMENTE calculada (nenhum motor foi tocado) e
+  visível no painel do Trade Plan — só sem um segundo lugar dedicado no
+  canvas ainda.
+- **Volume + Volume Profile na lateral, realinhamento do Volume Profile**:
+  mudança de LAYOUT (mover um painel inteiro de posição, corrigir uma
+  desalinhamento real relatado), não um ajuste de rótulo — precisa da
+  própria auditoria antes de tocar (mesma disciplina de sempre: onde
+  Volume/Volume Profile vivem hoje, por que o desalinhamento acontece,
+  qual arquitetura de lane já existe em `chart-profile-lanes.ts` pra
+  reusar). Não investigado nesta rodada.
+- **Hierarquia de peso de linha (BOS/FVG mais fortes, secundárias mais
+  finas), varredura de setas/ícones/menus/painéis/cores do ecossistema
+  inteiro**: pedido de escopo comparável às "Frente 3"/reformas visuais
+  amplas já adiadas 4 vezes nesta mesma seção — nenhuma dessas rodadas
+  jamais foi executada sem primeiro mapear o estado atual peça por peça.
+  Forçar uma versão apressada agora fabricaria uma "elevação total" sem
+  a auditoria que o próprio padrão institucional citado (Bloomberg/
+  TradingView Pro) exigiria de qualquer equipe real. Fica registrado como
+  pendência real, não silenciosamente ignorado.
+
+**Testes**: 7 arquivos de teste de fiação atualizados para o novo
+formato (`price-label-stack-plugin.test.ts`, `refinamento-final-
+wiring.test.ts`, `trade-plan-zone-plugin.test.ts`,
+`volume-profile-plugin.test.ts` — os 4 continham cópias/variações do
+mesmo asserto sobre o texto antigo das etiquetas) + `price-format.test.ts`
+ganhou a suíte de `formatPriceGrouped` (exemplo literal do Operador +
+piso de decimais + fail-closed). `npm run verify`: tsc limpo, **292
+arquivos / 4784 testes** (4 novos, todos de execução real), build ok
+(1955 módulos). Verificado AO VIVO via Playwright: zero page error novo
+— mesma limitação de sempre (sandbox sem rede real pra Binance, candle
+nunca carrega, então a leitura visual das etiquetas fica limitada à
+cobertura de teste, não a uma captura de tela real).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

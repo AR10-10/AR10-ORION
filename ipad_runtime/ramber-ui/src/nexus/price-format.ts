@@ -93,3 +93,28 @@ export function formatPrice(value: number, stripRoundZeros = false): string {
   if (stripRoundZeros && out.endsWith(".00")) return value.toFixed(0);
   return out;
 }
+
+/**
+ * Preço formatado com separador de milhar (vírgula) e decimal (ponto) —
+ * padrão de terminal profissional pedido diretamente pelo Operador para as
+ * etiquetas críticas do plano ativo (TP1/TP2/TP3/ST no canvas do gráfico:
+ * "79,405.00", nunca "79405.00" nem "79405"). Casas decimais SEMPRE
+ * presentes e alinhadas — nunca corta zero à direita, nem abaixo de 1 (ao
+ * contrário de `formatPrice`, cujo corte sub-1 existe para os PAINÉIS, não
+ * para uma coluna que precisa alinhar).
+ *
+ * Decimais vêm de `nativePriceDecimals` (piso de 2 casas acima de 1), não
+ * de `priceDecimals` (que zera as casas acima de 1000 para caber num
+ * rótulo de eixo compacto — "65200" em vez de "65200.00"). TP/ST é o plano
+ * ATIVO que o Operador está lendo agora, a mesma razão pela qual o preço
+ * vivo nunca perde centavos: perder um decimal aqui pra ganhar compacidade
+ * seria a mesma troca ruim já documentada em `nativePriceDecimals`.
+ */
+export function formatPriceGrouped(value: number): string {
+  if (!Number.isFinite(value)) return "—"; // fail-closed: nunca "NaN"/"Infinity" na tela
+  const decimals = nativePriceDecimals(value);
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}

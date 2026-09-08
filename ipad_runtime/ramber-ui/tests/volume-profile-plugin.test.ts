@@ -181,12 +181,12 @@ describe('EnhancedChart: Trade Plan drawn as silk-thread price lines (Signal Pre
     expect(block).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
   });
 
-  it('English labels carry the real structure basis and the R:R (EN/ST/TP short form, EPC FINAL §8, v2: one line per real target); Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4 moved basis/R:R into the secondary (smaller-font) text, primary text is label+distance only', () => {
+  it('English labels use the EN/ST/TP short form (EPC FINAL §8, v2: one line per real target); "lateral direita compacta" order simplified ST/TP1-3 to NAME + grouped price only (EN untouched — the Operator named only TP1/TP2/TP3/ST)', () => {
     const s = chart();
     expect(s).toContain('`EN ${tradePlan.direction}');
-    expect(s).toContain('text: "ST",');
-    expect(s).toContain(': tradePlan.stop.basis;');
-    expect(s).toContain('compactLabels ? null : target.basis,');
+    expect(s).toContain('text: `ST ${formatPriceGrouped(effectiveStopPrice)}`,');
+    expect(s).toContain('text: `TP${i + 1} ${formatPriceGrouped(target.price)}`,');
+    expect(s).not.toContain('compactLabels');
   });
 
   it('fail-closed: no plan draws nothing, and lines are cleared on every change and on unmount', () => {
