@@ -8050,6 +8050,47 @@ sempre — só o concreto e de baixo risco entrou):
 
 ---
 
+### 6.100 Cronômetro até a vela fechar (`CandleCountdownBadge`) —
+achado real do Operador ("não mostra quanto tempo um [candle de] 1
+minuto tá mostrando")
+
+Pedido ambíguo entre 2 interpretações reais — resolvido via
+`AskUserQuestion` antes de codar, para não construir a feature errada:
+contagem regressiva até a vela ATUAL fechar (confirmada como recurso
+ausente por leitura direta do código — Binance/TradingView/Bybit todos
+mostram isso) vs. um rótulo de faixa de tempo total visível no gráfico.
+Operador escolheu a contagem regressiva. Segunda pergunta (escopo do
+resto do pedido, "toda a lapidação visual tá grosseira") resolvida para
+"só este item concreto agora" — a reforma visual ampla continua sendo a
+mesma "Frente 3" adiada 4 vezes.
+
+**Construído:** `nexus/candle-countdown.ts` — motor puro
+(`computeCandleCountdown`), zero estado/rede/timer, reusa `TIMEFRAME_MS`
+(`aura-lifecycle.ts`, já usada em 6+ lugares — nunca uma segunda tabela
+de durações) sobre o `time` real (segundos Unix, confirmado no header de
+`getChartCandles`) do último candle do MESMO `chartData` que o gráfico
+desenha. Fail-closed: candle/timeframe ausente ou desconhecido → `null`,
+nunca uma contagem fabricada; `msRemaining` clampado em 0 (feed atrasado
+é sintoma do `DataFreshnessBanner` já existente, não uma segunda função
+de staleness aqui). Label `mm:ss` para timeframes ≤15m (onde segundos
+importam de verdade), `Xh Ym`/`Ym` para timeframes maiores.
+
+`CandleCountdownBadge` (App.tsx) — tick de 1s LOCAL ao componente, mesmo
+padrão já em uso por `FooterBar`/`DataFreshnessBanner` (Regra de Ouro 6:
+o intervalo nunca re-renderiza o resto da árvore). Montado no cabeçalho
+do próprio painel do gráfico, entre `OhlcReadout` e o seletor de
+timeframe — mesma leitura sequencial (OHLC → tempo restante →
+timeframe). Ícone `Timer` (lucide-react, já usado no resto do app).
+
+`npm run verify`: **292 arquivos / 4780 testes** (9 novos: 8 de execução
+real da aritmética + 1 arquivo de fiação), tsc limpo, build ok (1956
+módulos). Verificado AO VIVO via Playwright: zero page error novo (rede
+bloqueada no sandbox impede candle real pro badge renderizar — mesma
+limitação já registrada em rodadas anteriores; a aritmética em si já tem
+cobertura de execução real completa).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
