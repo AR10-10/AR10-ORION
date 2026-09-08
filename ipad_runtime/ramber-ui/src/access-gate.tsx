@@ -93,7 +93,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
   // atrás de um "senha incorreta" que nunca vai deixar de aparecer.
   if (ACCESS_HASH === null) {
     return (
-      <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#010205] px-6">
+      <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#0c0e11] px-6">
         <div className="cyber-panel w-full max-w-xs px-6 py-8 flex flex-col items-center gap-3 text-center">
           <div className="text-[#00f0ff] font-black tracking-[0.2em] text-sm drop-shadow-[0_0_5px_#00f0ff]">
             AR10 CYBORG
@@ -129,7 +129,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#010205] px-6">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#0c0e11] px-6">
       <form onSubmit={handleSubmit} className="cyber-panel w-full max-w-xs px-6 py-8 flex flex-col items-center gap-4">
         <div className="text-center">
           <div className="text-[#00f0ff] font-black tracking-[0.2em] text-sm drop-shadow-[0_0_5px_#00f0ff]">

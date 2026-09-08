@@ -153,7 +153,123 @@ describe("LEI 24: vocabulário de apresentação, nunca decisão", () => {
     for (const proibida of ["direction", "engine.", "probability", "LONG", "SHORT"]) {
       expect(src.includes(`export const ${proibida}`)).toBe(false);
     }
-    // E não importa nada do núcleo.
-    expect(src).not.toContain("import");
+    // E não importa NADA — nem do núcleo, nem de lib. Regex da forma real
+    // de import: o substring cru casava com "importante", que aparece de
+    // propósito no cabeçalho ("o que é importante aparece mais forte").
+    expect(src).not.toMatch(/^\s*import[\s{]/m);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUPERFÍCIES (rodada 2) — execução real: a pergunta é "os degraus são
+// perceptíveis, na direção certa, e o texto ainda passa no contraste?"
+// ═══════════════════════════════════════════════════════════════════════
+import {
+  SURFACE,
+  SURFACE_STEP_DELTA_L,
+  SURFACE_MIGRATIONS,
+  CONTRAST_MIN_AA,
+  relativeLuminance,
+  contrastRatio,
+} from "../src/nexus/terminal-design-tokens";
+
+/** L* de CIE Lab — o eixo perceptual de claridade. Reimplementado aqui de
+ *  propósito: o teste não deve confiar na mesma conta do módulo. */
+function lStar(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const r = lin(((n >> 16) & 255) / 255);
+  const g = lin(((n >> 8) & 255) / 255);
+  const b = lin((n & 255) / 255);
+  const Y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return Y > 0.008856 ? 116 * Y ** (1 / 3) - 16 : 903.3 * Y;
+}
+
+describe("a escala de superfície tem profundidade REAL — o defeito era não ter", () => {
+  it("base → panel → raised é crescente em claridade (convenção de UI escura)", () => {
+    expect(lStar(SURFACE.base)).toBeLessThan(lStar(SURFACE.panel));
+    expect(lStar(SURFACE.panel)).toBeLessThan(lStar(SURFACE.raised));
+  });
+
+  it("cada degrau é PERCEPTÍVEL — o sistema antigo inteiro cabia em ΔL* 1.65", () => {
+    const d1 = lStar(SURFACE.panel) - lStar(SURFACE.base);
+    const d2 = lStar(SURFACE.raised) - lStar(SURFACE.panel);
+    for (const d of [d1, d2]) {
+      expect(d).toBeGreaterThanOrEqual(SURFACE_STEP_DELTA_L - 0.5);
+      // E nunca tanto a ponto de clarear o terminal.
+      expect(d).toBeLessThan(SURFACE_STEP_DELTA_L + 1.5);
+    }
+    // A amplitude total supera com folga o 1.65 medido antes da correção.
+    expect(lStar(SURFACE.raised) - lStar(SURFACE.base)).toBeGreaterThan(1.65 * 2);
+  });
+
+  it("a base é a âncora — o dominante de 65 usos, cor inalterada", () => {
+    expect(SURFACE.base).toBe("#010308");
+  });
+
+  it("os degraus preservam o matiz azulado (azul > vermelho em todos)", () => {
+    for (const hex of Object.values(SURFACE)) {
+      const n = parseInt(hex.slice(1), 16);
+      expect((n & 255) > ((n >> 16) & 255), `${hex} deixou de ser azulado`).toBe(true);
+    }
+  });
+});
+
+describe("contraste WCAG verificado contra o PIOR caso, não assumido", () => {
+  const TEXTOS = ["#8ab4f8", "#00f0ff", "#00ffaa", "#ff0055", "#f0d06f", "#be37ff"];
+
+  it("toda cor de texto real passa AA sobre a superfície mais clara", () => {
+    for (const cor of TEXTOS) {
+      const r = contrastRatio(cor, SURFACE.raised)!;
+      expect(r, `${cor} sobre ${SURFACE.raised} = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+        CONTRAST_MIN_AA,
+      );
+    }
+  });
+
+  it("o roxo corrigido passa — o antigo REPROVAVA, e já reprovava antes desta rodada", () => {
+    // Registro do defeito real: #b026ff dava 4.49:1 contra o fundo antigo,
+    // 0.01 abaixo do mínimo. Não foi esta rodada que o quebrou.
+    expect(contrastRatio("#b026ff", "#010308")!).toBeLessThan(CONTRAST_MIN_AA);
+    expect(contrastRatio("#be37ff", SURFACE.raised)!).toBeGreaterThanOrEqual(CONTRAST_MIN_AA);
+  });
+
+  it("contrastRatio é simétrico e bate com valores conhecidos", () => {
+    expect(contrastRatio("#ffffff", "#000000")!).toBeCloseTo(21, 5);
+    expect(contrastRatio("#000000", "#ffffff")!).toBeCloseTo(21, 5);
+    expect(contrastRatio("#777777", "#777777")!).toBeCloseTo(1, 5);
+  });
+
+  it("fail-closed: hex inválido devolve null, nunca um número que pareceria medição", () => {
+    for (const ruim of ["", "#fff", "roxo", "#gggggg", "010308"]) {
+      expect(relativeLuminance(ruim)).toBeNull();
+      expect(contrastRatio(ruim, "#010308")).toBeNull();
+    }
+  });
+});
+
+describe("CONFORMIDADE: as cores redundantes sumiram do app", () => {
+  it("nenhuma das 6 migradas volta em código executável", () => {
+    const arquivos = tsxFiles(srcDir);
+    const violacoes: string[] = [];
+    for (const file of arquivos) {
+      readFileSync(file, "utf8").split("\n").forEach((line, i) => {
+        const t = line.trimStart();
+        if (t.startsWith("//") || t.startsWith("*")) return;
+        for (const { from } of SURFACE_MIGRATIONS) {
+          if (line.toLowerCase().includes(from.toLowerCase())) {
+            violacoes.push(`${file.replace(srcDir, "src")}:${i + 1} → ${from}`);
+          }
+        }
+      });
+    }
+    expect(violacoes, `cores migradas de volta:\n${violacoes.join("\n")}`).toEqual([]);
+  });
+
+  it("as 3 superfícies estão de fato em uso no app", () => {
+    const todos = tsxFiles(srcDir).map((f) => readFileSync(f, "utf8")).join("\n").toLowerCase();
+    for (const hex of Object.values(SURFACE)) {
+      expect(todos.includes(hex.toLowerCase()), `${hex} declarado mas não usado`).toBe(true);
+    }
   });
 });

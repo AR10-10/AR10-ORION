@@ -189,7 +189,7 @@ export function SmartOmnibox({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar: BTC, PEPE, AAPL, XAUUSD..."
-            className="w-full bg-[#020610] border border-[#00f0ff20] rounded px-2 py-1.5 text-[0.6rem] text-[#a0f0ff] mb-2 focus:outline-none focus:border-[#00f0ff60]"
+            className="w-full bg-[#010308] border border-[#00f0ff20] rounded px-2 py-1.5 text-[0.6rem] text-[#a0f0ff] mb-2 focus:outline-none focus:border-[#00f0ff60]"
           />
 
           {/* Master Panel handoff: fonte agora é Futures USDT-M Perpétuo
@@ -311,7 +311,7 @@ function OmniboxItem({
       onClick={onClick}
       className="flex items-center justify-between px-2 py-1.5 rounded text-left hover:bg-[#00f0ff10] transition-colors"
     >
-      <span className={`text-[0.6rem] font-bold ${accent ? "text-[#b026ff]" : "text-[#a0f0ff]"}`}>{label}</span>
+      <span className={`text-[0.6rem] font-bold ${accent ? "text-[#be37ff]" : "text-[#a0f0ff]"}`}>{label}</span>
       <span className="text-[0.5rem] text-[#8ab4f8]/50 truncate max-w-[140px]">{sub}</span>
     </button>
   );

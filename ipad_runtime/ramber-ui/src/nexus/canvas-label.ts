@@ -66,7 +66,7 @@ export function activeCanvasLabelFont(): string {
 /** @deprecated Use activeCanvasLabelFont(). Mantido só porque outros módulos
  *  já importam este nome; agora resolve pela tela real em vez de congelar 9px. */
 export const CANVAS_LABEL_FONT = `${CANVAS_LABEL_BASE_FONT_PX}px -apple-system, sans-serif`;
-export const CANVAS_LABEL_TEXT_COLOR = "#050810";
+export const CANVAS_LABEL_TEXT_COLOR = "#141518";
 export const CANVAS_LABEL_PAD_X = 4;
 export const CANVAS_LABEL_PAD_Y = 2;
 export const CANVAS_LABEL_RADIUS = 3; // suave e discreto — nunca uma "pílula" que compete com o preço (Parte 13 da diretiva).

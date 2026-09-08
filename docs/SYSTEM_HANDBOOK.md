@@ -8720,6 +8720,67 @@ qualquer tamanho fora dos 7 degraus.
 `npm run verify`: tsc limpo, **299 arquivos / 4907 testes** (39 novos),
 build ok.
 
+### 6.108 "EVOLUÇÃO COMPLETA" rodada 2 — a paleta ganha profundidade real
+
+Continuação da §6.107. A rodada 1 fez a tipografia; esta faz a **superfície**.
+
+**O que a medição contrariou.** A suposição natural seria "as cores estão
+com contraste ruim". Medido em WCAG 2.1 contra o fundo do terminal: **11 de
+13 cores principais passam AA para texto normal**. Contraste não era o
+problema.
+
+**O problema real: redundância e profundidade zero.** Varredura de distância
+perceptual (CIE76) entre as 39 cores achou **16 pares com ΔE < 5** — o olho
+mal os separa. Concentrados nos quase-pretos, que exerciam papéis distintos
+e legíveis no código:
+
+| cor | usos | papel pretendido | L* |
+|---|---|---|---|
+| `#010205` | 15 | painel / card / modal | 0.55 |
+| `#010308` | 65 | dominante (63 `bg-`) | 0.80 |
+| `#020610` | 2 | fundo da página (`h-[100dvh]`) | 1.63 |
+| `#050810` | 4 | chip de etiqueta no canvas | 2.20 |
+
+**O sistema de profundidade inteiro ocupava ΔL\* = 1.65 numa escala de
+0 a 100.** Degraus vizinhos de 0.26, 0.83 e 0.57 — um degrau só começa a
+ser lido como deliberado por volta de ΔL\* 2–3. E o fundo da **página** era
+mais claro que os **painéis**: profundidade invertida em relação à convenção
+de UI escura. Não havia hierarquia de superfície; havia quatro quase-pretos
+acidentais. É o pedido "hierarquia clara" dito em cor.
+
+**A escala.** Âncora `#010308` (o dominante, cor inalterada). Os dois
+degraus acima gerados **em Lab**, somando ΔL\* = 3.0 e preservando o matiz
+(a\*, b\*) — continuam o mesmo quase-preto azulado, com luz suficiente para
+o degrau existir:
+
+`base #010308` → `panel #0c0e11` → `raised #141518`
+
+**Contraste verificado, não assumido.** Clarear superfície derruba o
+contraste do texto, então cada cor de texto real foi medida contra a
+superfície **mais clara** (pior caso). Todas passam AA — e a medição
+revelou um defeito **pré-existente**: `#b026ff` dava 4.49:1 contra o fundo
+antigo, reprovado por 0.01. Corrigido para `#be37ff` subindo só o L\*.
+
+Mais 2 pares perceptualmente idênticos colapsados (`#c3d0dc`→`#c8d4e6`,
+`#ffaa00`→`#ffb020`). Paleta: **39 → 36** cores (−6 redundantes, +3 degraus
+deliberados).
+
+**Achado de processo, registrado no próprio módulo.** A migração foi feita
+com `sed` sobre `src/**`, e `terminal-design-tokens.ts` mora lá — o `sed`
+reescreveu a tabela `SURFACE_MIGRATIONS`, trocando cada `from` pelo seu
+próprio `to`. Foi o **teste de conformidade que pegou**, acusando `#010308`
+como "cor migrada de volta". Quem repetir uma migração assim precisa
+excluir o arquivo de tokens do `sed`, ou a tabela deixa de ser registro e
+vira eco.
+
+**Honestamente pendente:** confirmação visual com Playwright. A mudança de
+superfície é a primeira desta série que o Operador **vai ver** (painéis
+passam a se destacar da página) — argumento matemático não substitui olhar
+a tela.
+
+`npm run verify`: tsc limpo, **299 arquivos / 4917 testes** (10 novos),
+build ok.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)

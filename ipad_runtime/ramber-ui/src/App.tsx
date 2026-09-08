@@ -4318,7 +4318,7 @@ export default function App() {
           invadiria o rodapé — confirmado em screenshot real do dispositivo
           (barra de comando cortada em pé e deitado). Em navegador comum
           env() é 0 e nada muda. */}
-      <div className="flex flex-col h-[100dvh] pt-safe pb-safe bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
+      <div className="flex flex-col h-[100dvh] pt-safe pb-safe bg-[#010308] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
         <LiveRegionAnnouncer direction={announcerDirection} wsLive={wsLive} />
         <TopBar data={priceData} />
         {bootRestFailed && (
@@ -4732,7 +4732,7 @@ function ConfigPanel() {
         {Object.entries(widgets).map(([id, state]: [string, any]) => (
           <div
             key={id}
-            className="cyber-panel p-4 flex flex-col gap-3 bg-[#010205]"
+            className="cyber-panel p-4 flex flex-col gap-3 bg-[#0c0e11]"
           >
             <span className="font-bold text-white tracking-widest uppercase">
               {WIDGET_LABELS[id] ?? id}
@@ -4834,7 +4834,7 @@ function WorkspaceManagerPanel() {
             return (
               <div
                 key={id}
-                className="flex flex-wrap items-center justify-between gap-2 bg-[#010205] border border-[#00f0ff15] rounded-lg px-3 py-2"
+                className="flex flex-wrap items-center justify-between gap-2 bg-[#0c0e11] border border-[#00f0ff15] rounded-lg px-3 py-2"
               >
                 <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
                 <div className="flex gap-1 flex-wrap">
@@ -5047,7 +5047,7 @@ function ChartLayersPanelContent() {
           agora, resolvida pela mesma decisão que o canvas recebeu. "Cedeu
           espaço" é dito com todas as letras — é diferente de "sem leitura
           real", e essa diferença é a que sustenta a confiança no automático. */}
-      <div className="flex flex-col gap-1.5 bg-[#010205] border border-[#00ffaa20] rounded-lg px-3 py-2">
+      <div className="flex flex-col gap-1.5 bg-[#0c0e11] border border-[#00ffaa20] rounded-lg px-3 py-2">
         <span className="text-[0.45rem] text-[#00ffaa]/80 tracking-[0.15em] uppercase font-bold">
           {describeLayerPanel(resumo)}
         </span>
@@ -5111,7 +5111,7 @@ function ChartLayersPanelContent() {
         return (
           <div
             key={id}
-            className="flex flex-col gap-1.5 bg-[#010205] border border-[#00f0ff15] rounded-lg px-3 py-2"
+            className="flex flex-col gap-1.5 bg-[#0c0e11] border border-[#00f0ff15] rounded-lg px-3 py-2"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
@@ -5318,7 +5318,7 @@ function RadarPanel() {
                   type="button"
                   onClick={() => openCandidate(c.symbol)}
                   title={describeRadarQualificationReason(c.reason)}
-                  className="flex items-center justify-between gap-2 bg-[#010205] border border-[#00f0ff15] hover:border-[#00f0ff40] rounded-lg px-3 py-2 text-left transition-colors"
+                  className="flex items-center justify-between gap-2 bg-[#0c0e11] border border-[#00f0ff15] hover:border-[#00f0ff40] rounded-lg px-3 py-2 text-left transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     {isLong ? (
@@ -5605,7 +5605,7 @@ function MarketAnalysisPublicationTab({ snapshot }: { snapshot: PublicationSnaps
 
           <div className="flex flex-col gap-1">
             <span className="text-[0.4rem] text-[#8ab4f8]/50 uppercase tracking-[0.1em]">Legenda sugerida para X</span>
-            <pre className="whitespace-pre-wrap break-words text-[0.45rem] leading-relaxed text-[#a0f0ff] bg-[#010205] border border-[#00f0ff15] rounded p-2 font-mono">
+            <pre className="whitespace-pre-wrap break-words text-[0.45rem] leading-relaxed text-[#a0f0ff] bg-[#0c0e11] border border-[#00f0ff15] rounded p-2 font-mono">
               {formatMarketAnalysisForX(snapshot.analysis)}
             </pre>
             <button
@@ -7073,7 +7073,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                   </div>
                 </div>
 
-                <div className="bg-[#010205] p-3 rounded-xl border border-[#8ab4f8] flex flex-col flex-1 relative overflow-hidden shadow-[inset_0_0_15px_rgba(138,180,248,0.1)]">
+                <div className="bg-[#0c0e11] p-3 rounded-xl border border-[#8ab4f8] flex flex-col flex-1 relative overflow-hidden shadow-[inset_0_0_15px_rgba(138,180,248,0.1)]">
                   <span className="text-[0.55rem] text-[#8ab4f8] tracking-[0.2em] mb-3 font-bold uppercase flex items-center gap-2">
                     <Activity size={12} /> NÍVEIS ESTRUTURAIS (MOTOR REAL)
                   </span>
@@ -7190,7 +7190,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
             ></div>
 
             <div
-              className={`relative w-32 h-32 [@media(max-height:1050px)]:w-16 [@media(max-height:1050px)]:h-16 rounded-full border-[3px] border-[#00f0ff60] bg-[#010205] flex items-center justify-center shadow-[0_0_50px_rgba(0,240,255,0.4)] transition-all duration-500 overflow-hidden cursor-pointer ${hovered ? "w-[450px] h-[120px] max-w-[90vw] rounded-2xl border-[#00f0ff] shadow-[0_0_60px_#00f0ff] bg-[#00f0ff0a] backdrop-blur-2xl" : ""}`}
+              className={`relative w-32 h-32 [@media(max-height:1050px)]:w-16 [@media(max-height:1050px)]:h-16 rounded-full border-[3px] border-[#00f0ff60] bg-[#0c0e11] flex items-center justify-center shadow-[0_0_50px_rgba(0,240,255,0.4)] transition-all duration-500 overflow-hidden cursor-pointer ${hovered ? "w-[450px] h-[120px] max-w-[90vw] rounded-2xl border-[#00f0ff] shadow-[0_0_60px_#00f0ff] bg-[#00f0ff0a] backdrop-blur-2xl" : ""}`}
             >
               <div
                 className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${hovered ? "opacity-0 pointer-events-none" : "opacity-100"}`}
@@ -7217,7 +7217,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                   </div>
                 </div>
 
-                <div className="flex gap-2 sm:gap-4 items-center mt-3 sm:mt-4 bg-[#010205]/60 px-3 py-2 sm:px-4 sm:py-2 rounded-lg border border-[#00f0ff40]">
+                <div className="flex gap-2 sm:gap-4 items-center mt-3 sm:mt-4 bg-[#0c0e11]/60 px-3 py-2 sm:px-4 sm:py-2 rounded-lg border border-[#00f0ff40]">
                   <input
                     type="text"
                     placeholder="NOTA DE ANÁLISE (LOCAL)..."
@@ -7247,7 +7247,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
         </div>
 
         <div className="w-full px-4 sm:px-8 text-center z-10 mt-auto pb-4 [@media(max-height:1050px)]:pb-1 shrink-0">
-          <div className="inline-block bg-[#010205] border border-[#00f0ff20] px-4 py-2 [@media(max-height:1050px)]:py-1 [@media(max-height:1050px)]:px-2 rounded-lg text-[0.5rem] sm:text-[0.55rem] text-[#8ab4f8]/80 leading-relaxed text-justify max-w-2xl shadow-[0_0_20px_rgba(0,0,0,0.5)]">
+          <div className="inline-block bg-[#0c0e11] border border-[#00f0ff20] px-4 py-2 [@media(max-height:1050px)]:py-1 [@media(max-height:1050px)]:px-2 rounded-lg text-[0.5rem] sm:text-[0.55rem] text-[#8ab4f8]/80 leading-relaxed text-justify max-w-2xl shadow-[0_0_20px_rgba(0,0,0,0.5)]">
             <strong className="text-[#00f0ff]">POLÍTICA DO ECOSSISTEMA:</strong>{" "}
             opera em{" "}
             <span className="text-[#00ffaa] font-bold">
@@ -7682,7 +7682,7 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
           <BarField
             label="Zona"
             value={`${entryZone}${favored ? " ✓" : ""}`}
-            labelClass="text-[#b026ff]/60"
+            labelClass="text-[#be37ff]/60"
             valueClass={favored ? "text-[#00ffaa]/90" : entryZone === "EQ" ? "text-[#8ab4f8]/70" : "text-[#f0d06f]/90"}
             title={`Premium/Discount do dealing range real (últimos swings fractais confirmados: ${f(premiumDiscount.rangeLow.price)}–${f(premiumDiscount.rangeHigh.price)}, equilíbrio ${f(premiumDiscount.equilibrium)}). Entrada do plano em ${entryPct.toFixed(0)}% do range — ${favored ? `${entryZone} favorece ${plan.direction} (convenção SMC)` : entryZone === "EQ" ? "região de equilíbrio, sem vantagem de zona" : `${entryZone} NÃO é a zona classicamente favorável para ${plan.direction}`}. Contexto display-only (LEI 24).`}
           />
@@ -8427,7 +8427,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
             <div
               className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
                 marketMode === "TRADFI"
-                  ? "bg-[#b026ff20] border border-[#b026ff40] shadow-[0_0_10px_rgba(176,38,255,0.25)]"
+                  ? "bg-[#be37ff20] border border-[#be37ff40] shadow-[0_0_10px_rgba(176,38,255,0.25)]"
                   : marketMode === "MEXC"
                     ? "bg-[#00e0a020] border border-[#00e0a040] shadow-[0_0_10px_rgba(0,224,160,0.25)]"
                     : selectedAsset === "BTC"
@@ -8482,7 +8482,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
               <span
                 className={`text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider whitespace-nowrap shrink-0 ${
                   marketMode === "TRADFI"
-                    ? "bg-[#b026ff20] text-[#b026ff]"
+                    ? "bg-[#be37ff20] text-[#be37ff]"
                     : marketMode === "MEXC"
                       ? "bg-[#00e0a020] text-[#00e0a0]"
                       : "bg-[#00f0ff20] text-[#00f0ff]"
@@ -9531,7 +9531,7 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
             value={agg.farTargetEligible > 0 ? `${formatarFracao(agg.farTargetHitRate)} de ${agg.farTargetEligible}` : "—"}
           />
           {taxa.ressalva && (
-            <span className="text-[0.45rem] text-[#ffaa00] leading-tight">⚠ {taxa.ressalva}</span>
+            <span className="text-[0.45rem] text-[#ffb020] leading-tight">⚠ {taxa.ressalva}</span>
           )}
           {prov && <span className="text-[0.4rem] text-[#8ab4f8]/50 leading-tight">{avisoObrigatorio(prov)}</span>}
           <button
@@ -9556,7 +9556,7 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
                 <ModuleStat label="z-score / Δ taxa" value={`${comparison.zScore.toFixed(2)} / ${formatarFracao(comparison.delta)}`} />
               )}
               {comparison.sameContext === false && (
-                <span className="text-[0.4rem] text-[#ffaa00] leading-tight">
+                <span className="text-[0.4rem] text-[#ffb020] leading-tight">
                   ⚠ Baseline e corrida atual são de símbolo/timeframe diferentes — comparação entre contextos distintos.
                 </span>
               )}
@@ -13801,8 +13801,8 @@ function BottomPanels() {
 
   return (
     <div className="relative shrink-0 w-full mb-1">
-      <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#010205] to-transparent z-20 pointer-events-none"></div>
-      <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#010205] to-transparent z-20 pointer-events-none"></div>
+      <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#0c0e11] to-transparent z-20 pointer-events-none"></div>
+      <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#0c0e11] to-transparent z-20 pointer-events-none"></div>
 
       <div className="h-[95px] flex gap-2 w-full pb-1 overflow-x-auto overflow-y-hidden scrollbar-hide snap-x pt-1 px-4">
         <Widget id="tactical" title="INSTITUTIONAL LIQUIDATIONS · REAL" className="min-w-[320px] snap-start" flex="flex-[1.8]" extraHeader={<Activity size={12} className="text-[#ff005560]" />}>

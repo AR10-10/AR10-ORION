@@ -4093,7 +4093,7 @@ function EnhancedChart_110_PercentImpl({
         onClick={recenterChart}
         aria-label="Recentralizar gráfico"
         title="Recentralizar"
-        className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-1 rounded bg-[#050810]/70 border border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40] cursor-pointer pointer-events-auto"
+        className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-1 rounded bg-[#141518]/70 border border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40] cursor-pointer pointer-events-auto"
       >
         <Crosshair size={11} />
       </button>
