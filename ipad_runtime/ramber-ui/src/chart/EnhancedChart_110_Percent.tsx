@@ -281,6 +281,13 @@ export interface EnhancedChartLiquidity {
 export interface LevelStrength {
   label: "FORTE" | "FRACA";
   touches: number;
+  /** §4 ("as linhas não devem atravessar o gráfico inteiro"): índices de
+   *  candle dos toques reais que sustentam `touches`. Mesmo achado/mesma
+   *  correção do EQH/EQL logo acima, um nível abaixo — o motor sempre
+   *  contou os swings tocando o nível e descartava os objetos (que já
+   *  carregam `.index`) no mesmo `.filter(...).length`. Opcional e
+   *  fail-closed: sem ele a linha volta à largura total de sempre. */
+  touchIndices?: number[];
 }
 
 // V-MAX Fase 1 (superfície visual): nível de retração real da Matriz de
@@ -1074,8 +1081,6 @@ function EnhancedChart_110_PercentImpl({
     targetPrices: [],
     livePrice: null,
   });
-  const supportLineRef = useRef<IPriceLine | null>(null);
-  const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
@@ -1620,8 +1625,6 @@ function EnhancedChart_110_PercentImpl({
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
-      supportLineRef.current = null;
-      resistanceLineRef.current = null;
       zoneLinesRef.current = [];
       fibLinesRef.current = [];
       tradePlanLinesRef.current = [];
@@ -2395,58 +2398,40 @@ function EnhancedChart_110_PercentImpl({
   // Cleanup & Rendering Audit) passou a depender do peso real resolvido
   // pelo orçamento visual — TDZ do TypeScript exige a leitura depois da
   // declaração; zero mudança de comportamento, só de posição no arquivo.
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    if (supportLineRef.current) {
-      seriesRef.current.removePriceLine(supportLineRef.current);
-      supportLineRef.current = null;
-    }
+  // GRADUAÇÃO §4 (2026-09-08, ordem "NÚCLEO + POSICIONAMENTO INTELIGENTE"):
+  // "as linhas não devem atravessar o gráfico inteiro — limitar a 2-3 toques
+  // relevantes". S1/R1 eram as duas ÚLTIMAS linhas de nível desenhadas por
+  // `createPriceLine` nativo, e essa primitiva SEMPRE atravessa o gráfico
+  // inteiro — a lib não tem parâmetro de início/fim. Migradas para
+  // HorizontalLevelLinesPlugin (canvas próprio, z real via
+  // getChartLayerZIndex), agora desenhando só o TRECHO dos toques reais.
+  //
+  // O que é preservado byte a byte: preço, o âmbar #f59e0b da Especificação
+  // Visual Profissional v1, e o alpha do orçamento visual (levelLineAlpha).
+  // O `title` (levelTitle) NÃO se perde e nem era visível: `axisLabelVisible:
+  // false` fazia o texto nativo nunca chegar ao painel de velas (mesma
+  // classe de achado já documentada para EQH/EQL e harmônicos) — quem
+  // desenha o rótulo real de S1/R1 é o PriceLabelStackPlugin mais abaixo,
+  // que continua usando levelTitle() como fonte única do texto. Regra de
+  // Ouro 4 intacta: nada observável foi removido.
+  const supportResistanceLevels = useMemo<HorizontalLevel[]>(() => {
+    const out: HorizontalLevel[] = [];
     if (Number.isFinite(support)) {
-      supportLineRef.current = seriesRef.current.createPriceLine({
+      out.push({
         price: support as number,
-        // Especificação Visual Profissional v1 (pedido direto do
-        // Operador): S/R unificados em âmbar #f59e0b — "âmbar único para
-        // todos os níveis", mesma família de EQH/EQL abaixo. Distinto do
-        // caso FVG (pergunta direta ao Operador: mantido verde/vermelho
-        // por um pedido V18.2 anterior e explícito) — S1/R1 nunca teve
-        // essa mesma exigência de preservação de cor.
-        // Achado 2.3: alpha agora segue o peso real resolvido pela
-        // competição de orçamento visual (força do nível × concorrência
-        // com Trade Plan/Zonas/Estrutura), nunca mais um 0.65 fixo — teto
-        // igual ao valor fixo de sempre (zero regressão no caso FORTE sem
-        // competição), piso 0.35 (Regra de Ouro 4, nunca desaparece).
         color: `rgba(245, 158, 11, ${levelLineAlpha(supportVisualWeight).toFixed(3)})`,
-        lineWidth: 1,
-        lineStyle: LineStyle.Solid,
-        // Mesmo achado/mesma correção da série de candles acima — o tag
-        // nativo do eixo colidia com VWAP/NL/preço quando os valores
-        // reais ficam próximos; PriceLabelStackPlugin assume o rótulo.
-        axisLabelVisible: false,
-        title: levelTitle("S1", supportStrength, supportBreakouts),
+        touchIndices: supportStrength?.touchIndices,
       });
-    }
-  }, [support, supportStrength, supportBreakouts, supportVisualWeight]);
-
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    if (resistanceLineRef.current) {
-      seriesRef.current.removePriceLine(resistanceLineRef.current);
-      resistanceLineRef.current = null;
     }
     if (Number.isFinite(resistance)) {
-      resistanceLineRef.current = seriesRef.current.createPriceLine({
+      out.push({
         price: resistance as number,
-        // Especificação Visual Profissional v1: mesmo âmbar unificado de S1.
-        // Achado 2.3: mesmo peso real resolvido do S1 acima (levelLineAlpha).
         color: `rgba(245, 158, 11, ${levelLineAlpha(resistanceVisualWeight).toFixed(3)})`,
-        lineWidth: 1,
-        lineStyle: LineStyle.Solid,
-        // Mesmo achado/mesma correção do S1 acima.
-        axisLabelVisible: false,
-        title: levelTitle("R1", resistanceStrength, resistanceBreakouts),
+        touchIndices: resistanceStrength?.touchIndices,
       });
     }
-  }, [resistance, resistanceStrength, resistanceBreakouts, resistanceVisualWeight]);
+    return out;
+  }, [support, resistance, supportStrength, resistanceStrength, supportVisualWeight, resistanceVisualWeight]);
 
   // Auditoria do ecossistema de indicadores (pedido direto do Operador:
   // "qual ferramenta que está faltando" — Pivot Points era o único gap real
@@ -3008,8 +2993,9 @@ function EnhancedChart_110_PercentImpl({
     // esta zona ainda" — o caso genuinamente menos preciso). Gate real
     // agora: só FORTE (>=2 toques independentes, STRONG_TOUCH_THRESHOLD)
     // ganha etiqueta no eixo — "precisão maciça" de verdade, não presença.
-    // Regra de Ouro 4: a LINHA nativa (useEffect acima, supportLineRef/
-    // resistanceLineRef) e o valor real de support/resistance (usado pelo
+    // Regra de Ouro 4: a LINHA (desde a graduação §4, o trecho desenhado
+    // por HorizontalLevelLinesPlugin via supportResistanceLevels acima —
+    // antes uma price line nativa) e o valor real de support/resistance (usado pelo
     // Core Engine/StructureLevelsStrip/etc.) continuam INTOCADOS — só a
     // etiqueta flutuante do eixo fica mais rigorosa, nunca o dado.
     // Ordem "FECHAMENTO DO AR10 CYBORG" §3 (hierarquia de 3 níveis): o
@@ -3868,6 +3854,19 @@ function EnhancedChart_110_PercentImpl({
           layerId="pivot_points"
         />
       )}
+      {/* S1/R1 — GRADUAÇÃO §4. As duas ÚLTIMAS linhas de nível que ainda
+         usavam `createPriceLine` nativo (largura total por natureza da lib).
+         Sem `visibility.*` de propósito: S1/R1 nunca teve toggle e esta
+         rodada não cria um — a migração é de PRIMITIVA de desenho, não de
+         comportamento. `candles={data}` é o único dado novo que o plugin
+         precisa, e só para traduzir índice de toque em coordenada X. */}
+      <HorizontalLevelLinesPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        levels={supportResistanceLevels}
+        layerId="support_resistance"
+        candles={data}
+      />
       {/* GRADUAÇÃO (2026-09-07, mesmo "resíduo honesto"): SuperTrend
          migrado das 2 LineSeries nativas (chart.addSeries(LineSeries),
          z=35 compartilhado) para canvas próprio — SupertrendPlugin reusa

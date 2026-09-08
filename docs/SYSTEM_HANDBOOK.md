@@ -8558,6 +8558,63 @@ nos 3 gráficos.
 `npm run verify`: tsc limpo, **295 arquivos / 4833 testes** (19 novos),
 build ok.
 
+### 6.106 §4 fechada — a linha de S1/R1 deixa de atravessar o gráfico
+
+Último item aberto da ordem "NÚCLEO + POSICIONAMENTO INTELIGENTE": *"as
+linhas não devem atravessar o gráfico inteiro — limitar a 2-3 toques
+relevantes ou N candles"*. A §6.105 tinha localizado a causa e adiado a
+correção por tamanho; esta rodada a fecha.
+
+**O achado que destravou.** `computeLevelStrength()`
+(`support-resistance-engine.js`) filtrava os swings dentro da banda de
+tolerância e devolvia `.length`. Os objetos de swing — cada um com
+`.index`, a posição real do candle — eram descartados na MESMA linha em
+que eram contados. Sem índice não existe "trecho", e a única primitiva
+possível era `createPriceLine`, que atravessa o gráfico inteiro por
+natureza da lib. É literalmente a mesma classe de achado já registrada
+para EQH/EQL ("nem o índice do último toque, que o motor sempre teve"),
+um nível abaixo — desta vez o descarte era dentro do próprio motor.
+
+**Cadeia real, ponta a ponta:**
+
+| Camada | Mudança |
+|---|---|
+| `support-resistance-engine.js` | `touch_indices` aditivo. `touches` continua sendo a mesma contagem (`touching.length`), mesmo limiar FORTE/FRACA — zero matemática nova. |
+| `engine-bridge.ts` | `readLevelStrength()` traduz `touch_indices`→`touchIndices` (a mesma fronteira snake→camel que já existia para `LiquidityZone.touchIndices`). Nenhuma conta de força na ponte. |
+| `chart/level-touch-window.ts` **(novo)** | Decide QUAIS toques entram: os `LEVEL_MAX_RELEVANT_TOUCHES = 3` mais recentes. 18 testes de execução real. |
+| `chart/HorizontalLevelLinesPlugin.tsx` | Modo trecho **opt-in**. Sem `touchIndices` + candles, desenha a largura total de sempre. |
+| `chart/EnhancedChart_110_Percent.tsx` | S1/R1 migram de `createPriceLine` para o plugin. Native price lines: **5 → 3**. |
+
+**Reuso, não reescrita.** A geometria (piso de legibilidade, sobra à
+direita, recorte no canvas) é `resolveEqualLevelSegment` — a mesma função
+que o `LiquidityZonesPlugin` já usa ao vivo para EQH/EQL. Só a etapa
+anterior ("quais toques") é nova, porque EQH/EQL usa todos (um pool é um
+cluster curto) e S1/R1 conta contra a amostra inteira.
+
+**O "N candles" NÃO foi implementado, de propósito.** A ordem oferece duas
+formulações; "2-3 toques" É a especificação do Operador, enquanto o `N` de
+"N candles" teria de ser inventado — não existe no projeto nenhum limiar
+declarado de "um S/R para de valer depois de N candles", e fabricar um
+encurtaria o traço ABAIXO da evidência medida. O trecho já nunca ultrapassa
+a tela, então o objetivo real (a linha deixar de nascer em `x=0`) é atingido
+sem o número inventado.
+
+**Regra de Ouro 4 verificada, não assumida.** Cor âmbar e alpha do
+orçamento visual preservados byte a byte; o `title` (`levelTitle`) não se
+perdeu porque nunca era visível (`axisLabelVisible:false`) — quem sempre
+o exibiu é o `PriceLabelStackPlugin`, intacto. 7 testes que travavam o
+comportamento antigo foram reescritos para travar o novo, cada um
+mantendo a invariante real que protegia.
+
+**Achado colateral registrado** (`chart-layer-depth.ts`):
+`CHART_NATIVE_LAYER_IDS` vazia significava "nenhuma camada COM ID
+REGISTRADO é nativa" — não "zero price line nativa". S1/R1 eram nativas e
+nunca apareceram ali, por nunca terem tido id (não têm toggle). O
+comentário agora diz isso e traz a contagem real medida.
+
+`npm run verify`: tsc limpo, **297 arquivos / 4868 testes** (35 novos),
+build ok.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)

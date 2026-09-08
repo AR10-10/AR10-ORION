@@ -29,6 +29,7 @@ export const metadata = {
         'Volume Profile (HVN/LVN) nao tem conector real conectado nesta arvore: niveis vem so de pivots/swing/Fibonacci sobre preco, nunca de volume.',
         'Sem swing high/low confirmados o suficiente na amostra, cai em DADOS_INSUFICIENTES — nunca extrapola um nivel.',
         'V11.5 Fase 6: FORTE/FRACA e uma contagem REAL de quantos swings independentes (fractais confirmados) caem dentro da mesma banda de tolerancia de um nivel — nunca uma probabilidade estatistica. Este motor nao estima "chance de o alvo ser atingido": nao ha backtest neste repositorio para sustentar essa afirmacao honestamente (mesmo principio ja documentado em research-engine.js sobre confidence qualitativo vs. probabilidade).',
+        'touch_indices sao indices de candle DENTRO da amostra recebida (ohlcv_series desta chamada), nunca identificadores absolutos de tempo: quem consome precisa indexar o MESMO array que passou aqui.',
     ],
 };
 
@@ -42,12 +43,33 @@ const STRONG_TOUCH_THRESHOLD = 2;
 /** Conta quantos swings reais (fractais confirmados, incluindo o próprio
  * nível) caem dentro de +-tolerancia% do preço do nível — uma medida real de
  * confluência (quantas vezes o preço reverteu perto desta mesma zona nesta
- * amostra), não uma projeção. >=2 toques independentes = FORTE; 1 = FRACA. */
+ * amostra), não uma projeção. >=2 toques independentes = FORTE; 1 = FRACA.
+ *
+ * `touch_indices` (aditivo, 2026-09-08): ONDE cada toque aconteceu, em
+ * indice de candle. Achado real da ordem "NÚCLEO + POSICIONAMENTO
+ * INTELIGENTE" §4 ("as linhas nao devem atravessar o grafico inteiro"):
+ * esta funcao ja tinha os objetos de swing em maos — cada um com `.index` —
+ * e jogava todos fora no mesmo `.filter(...).length` em que os contava.
+ * Sem indice nao existe "trecho", e a unica primitiva possivel no grafico
+ * era a linha de largura total. Mesma classe de achado ja registrada para
+ * EQH/EQL ("nem o indice do ultimo toque, que o motor sempre teve").
+ *
+ * Zero matematica nova: `touches` continua sendo exatamente a mesma
+ * contagem de antes (agora `touch_indices.length`), o rotulo FORTE/FRACA
+ * continua o mesmo limiar. So' para de descartar o que ja estava medido. */
 function computeLevelStrength(levelPrice, swingPoints) {
     if (!Number.isFinite(levelPrice) || swingPoints.length === 0) return null;
     const band = Math.abs(levelPrice) * STRENGTH_TOLERANCE_FRAC;
-    const touches = swingPoints.filter((s) => Math.abs(s.price - levelPrice) <= band).length;
-    return { label: touches >= STRONG_TOUCH_THRESHOLD ? 'FORTE' : 'FRACA', touches };
+    const touching = swingPoints.filter((s) => Math.abs(s.price - levelPrice) <= band);
+    const touches = touching.length;
+    return {
+        label: touches >= STRONG_TOUCH_THRESHOLD ? 'FORTE' : 'FRACA',
+        touches,
+        // Crescente (do mais antigo ao mais recente): `swingPoints` chega
+        // ordenado do mais NOVO para o mais antigo neste motor, e uma
+        // janela de "toques recentes" so' e' legivel na ordem do tempo.
+        touch_indices: touching.map((s) => s.index).sort((a, b) => a - b),
+    };
 }
 
 /**

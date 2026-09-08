@@ -95,6 +95,15 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   supertrend: "line",
   session_key_levels: "line",
   equal_highs_lows: "line",
+  // S1/R1. Declarado na GRADUAÇÃO §4 (2026-09-08), quando as duas saíram de
+  // `createPriceLine` nativo para HorizontalLevelLinesPlugin.tsx e passaram a
+  // desenhar só o TRECHO dos toques reais em vez da largura total.
+  // Deliberadamente SEM entrada em CHART_LAYER_IDS: S1/R1 nunca teve toggle
+  // de visibilidade (sempre desenhado) e esta rodada não é o lugar de criar
+  // um — a cobertura 1:1 do teste é "todo id do painel tem profundidade",
+  // não o inverso. "line" pelo mesmo critério das irmãs acima: o que ela
+  // desenha é reta de 1px, e preenchimento por cima a faria sumir.
+  support_resistance: "line",
   // Auditoria do ecossistema de indicadores: até 7 createPriceLine de 1px
   // (PP+R1-3+S1-3) — mesma natureza de session_key_levels/equal_highs_lows
   // logo acima, nunca abaixo de preenchimento.
@@ -292,7 +301,19 @@ export const CHART_FILL_TIERS: readonly ChartDepthTier[] = ["field", "zone", "pr
  *  discount`/`scenario_projection`/`pivot_points` migraram pra
  *  HorizontalLevelLinesPlugin.tsx, `supertrend` pra SupertrendPlugin.tsx e
  *  `cvd` pra CvdLinePlugin.tsx, todas no mesmo commit — 5→0. Vazia de
- *  propósito: resíduo fechado, não um censo esquecido). */
+ *  propósito: resíduo fechado, não um censo esquecido).
+ *
+ *  ⚠ LEIA COM CUIDADO — esta lista é de CAMADAS COM ID REGISTRADO, não um
+ *  censo de `createPriceLine` no arquivo. Achado da GRADUAÇÃO §4
+ *  (2026-09-08): S1/R1 ERAM nativas e nunca apareceram aqui, simplesmente
+ *  porque nunca tiveram id de camada (não têm toggle no painel do
+ *  Operador). Ou seja, "vazia" nunca significou "zero price line nativa".
+ *  Contagem real medida em EnhancedChart_110_Percent.tsx no fechamento da
+ *  §4: 5 chamadas de `createPriceLine` → 3, depois de S1/R1 migrarem para
+ *  HorizontalLevelLinesPlugin. As 3 restantes são fibonacci, trade plan e
+ *  engine fallback — nenhuma delas é evidência de toque, então nenhuma
+ *  tem a mesma razão de encurtar que S1/R1 tinha; migrá-las seria por
+ *  outro motivo (z-index próprio), não pela §4. */
 export const CHART_NATIVE_LAYER_IDS: readonly string[] = [];
 
 /** z-index das etiquetas de preço. Constante própria porque o

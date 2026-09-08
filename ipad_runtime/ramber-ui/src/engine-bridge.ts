@@ -216,6 +216,19 @@ export interface PriceZone {
   mitigated: boolean;
 }
 
+/** Força real de um nível (S1/R1), de `computeLevelStrength()` em
+ *  support-resistance-engine.js: contagem de swings fractais confirmados
+ *  dentro de ±0.15% do preço do nível. NUNCA uma probabilidade (Regra de
+ *  Ouro 2) — é confluência medida na amostra atual. */
+export interface LevelStrengthReading {
+  label: 'FORTE' | 'FRACA';
+  touches: number;
+  /** Índices de candle dos toques reais, crescente. Opcional: só existe a
+   *  partir da rodada §4 do motor — sem ele o consumidor mantém o desenho
+   *  anterior, nunca inventa uma posição (Regra de Ouro 3). */
+  touchIndices?: number[];
+}
+
 export interface RealCycleResult {
   ok: boolean;
   reason?: string;
@@ -253,8 +266,18 @@ export interface RealCycleResult {
   // analysis-frame.js só repassava os PREÇOS (support/resistance acima),
   // descartando a força antes de chegar aqui. Achado da auditoria V16:
   // passthrough puro, nenhum cálculo novo.
-  supportStrength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
-  resistanceStrength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
+  //
+  // `touchIndices` (aditivo, ordem "NÚCLEO + POSICIONAMENTO INTELIGENTE"
+  // §4): ONDE cada toque aconteceu, em índice de candle da amostra. Mesma
+  // classe de achado do parágrafo acima, um nível abaixo — desta vez o
+  // descarte era dentro do próprio motor (`computeLevelStrength()` fazia
+  // `.filter(...).length` e jogava fora os objetos de swing, que sempre
+  // tiveram `.index`). Sem isso a linha de S1/R1 não tinha como saber onde
+  // começar e só podia atravessar o gráfico inteiro. Opcional de propósito:
+  // um motor antigo/em cache que não devolva os índices continua válido, e
+  // a linha só volta ao comportamento de largura total (fail-closed).
+  supportStrength?: LevelStrengthReading | null;
+  resistanceStrength?: LevelStrengthReading | null;
   condition?: string | null;
   rationale?: string | null;
   lorentzian?: LorentzianResult;
@@ -418,6 +441,26 @@ function getWorkerClient() {
 }
 
 const isNum = (v: any): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** Traduz a força de nível do motor (`computeLevelStrength()` em
+ *  support-resistance-engine.js) para a forma que o lado React consome.
+ *  Zero cálculo: `label`/`touches` passam intactos; a única mudança é
+ *  `touch_indices` → `touchIndices`, a mesma tradução snake→camel que esta
+ *  fronteira já faz para `LiquidityZone.touchIndices`.
+ *
+ *  Fail-closed (Regra de Ouro 3): índice que não seja inteiro não-negativo
+ *  é descartado, e um motor que não devolva `touch_indices` simplesmente
+ *  não ganha o campo — o consumidor volta ao desenho anterior em vez de
+ *  posicionar um traço a partir de um índice inventado. */
+function readLevelStrength(raw: any): LevelStrengthReading | null {
+  if (!raw || (raw.label !== 'FORTE' && raw.label !== 'FRACA') || !isNum(raw.touches)) return null;
+  const out: LevelStrengthReading = { label: raw.label, touches: raw.touches };
+  if (Array.isArray(raw.touch_indices)) {
+    const idx = raw.touch_indices.filter((i: any) => Number.isInteger(i) && i >= 0);
+    if (idx.length > 0) out.touchIndices = idx;
+  }
+  return out;
+}
 
 // Worker/script load failures reject with a DOM Event (no .message), which a
 // template string renders as the useless "[object Event]" — surfaced verbatim
@@ -746,8 +789,14 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
       stop: route && isNum(route.invalidation) ? route.invalidation : null,
       support: isNum(frame.support) ? frame.support : null,
       resistance: isNum(frame.resistance) ? frame.resistance : null,
-      supportStrength: frame.support_1_strength ?? null,
-      resistanceStrength: frame.resistance_1_strength ?? null,
+      // Antes era passthrough cru (`frame.support_1_strength ?? null`). Vira
+      // uma normalização mínima porque o motor devolve `touch_indices`
+      // (snake_case, convenção dos motores `.js`) e o lado React/TS deste
+      // projeto já declarou camelCase para exatamente este dado em
+      // `LiquidityZone.touchIndices` — a mesma fronteira, a mesma tradução.
+      // `label`/`touches` continuam byte a byte o que o motor devolveu.
+      supportStrength: readLevelStrength(frame.support_1_strength),
+      resistanceStrength: readLevelStrength(frame.resistance_1_strength),
       condition: typeof matrix.condition === 'string' ? matrix.condition : null,
       rationale: typeof matrix.rationale === 'string' ? matrix.rationale : null,
       riskRewardRatio: route && isNum(route.risk_reward_ratio) ? route.risk_reward_ratio : null,

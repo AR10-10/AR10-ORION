@@ -394,12 +394,19 @@ describe('EnhancedChart_110_Percent: os "last value label"/"axis label" NATIVOS 
     expect(s).not.toContain('title: `EMA ${activeEmaPeriod}`');
   });
 
-  it('S1/R1: axisLabelVisible false nas duas price lines (era true) — a LINHA horizontal continua desenhada, só o tag do eixo muda de dono', () => {
+  it('S1/R1: o tag NATIVO do eixo continua desligado — o rótulo é do overlay, e a LINHA continua desenhada', () => {
+    // ATUALIZADO na GRADUAÇÃO §4 (2026-09-08): não existem mais "as duas
+    // price lines" de S1/R1 — elas migraram para o canvas do
+    // HorizontalLevelLinesPlugin, justamente porque createPriceLine
+    // atravessa o gráfico inteiro. O tag nativo do eixo, que era o alvo
+    // real deste teste, agora está desligado da forma mais forte possível:
+    // não há primitiva nativa nenhuma para acendê-lo.
     const s = chart();
-    const supportIdx = s.indexOf('supportLineRef.current = seriesRef.current.createPriceLine({');
-    expect(s.slice(supportIdx, supportIdx + 1400)).toContain('axisLabelVisible: false,');
-    const resistanceIdx = s.indexOf('resistanceLineRef.current = seriesRef.current.createPriceLine({');
-    expect(s.slice(resistanceIdx, resistanceIdx + 600)).toContain('axisLabelVisible: false,');
+    expect(s).not.toContain('supportLineRef');
+    expect(s).not.toContain('resistanceLineRef');
+    // E as duas continuam sendo desenhadas — só que como trecho de canvas.
+    expect(s).toContain('const supportResistanceLevels = useMemo<HorizontalLevel[]>');
+    expect(s).toContain('layerId="support_resistance"');
   });
 
   it('Trade Plan (ENTRY/STOP/TARGET) MIGROU para o overlay ("bater o olho profissional"): a LINHA continua (axisLabelVisible:false, title:""), o RÓTULO vai para priceAxisLabels — era o ÚLTIMO grupo ainda no eixo nativo, podendo sobrepor S1/R1/VWAP', () => {
@@ -495,20 +502,19 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('Carta Branca ("etiquetas laterais... só mostrar a precisão maciça"): Regra de Ouro 4 — só a ETIQUETA do eixo fica mais rigorosa, a LINHA nativa de S1/R1 e o próprio valor real de support/resistance continuam incondicionais (Number.isFinite puro, sem gate de força)', () => {
     const c = chart();
-    // A linha nativa (useEffect dedicado, muito antes de priceAxisLabels no
-    // arquivo) desenha S1/R1 sempre que o preço é finito — o dado real
-    // nunca desaparece, mesmo quando o rótulo do eixo some por FRACA.
-    const supportLineIdx = c.indexOf('useEffect(() => {\n    if (!seriesRef.current) return;\n    if (supportLineRef.current) {');
-    expect(supportLineIdx, 'useEffect nativo de S1 não encontrado').toBeGreaterThan(-1);
-    const supportLineBlock = c.slice(supportLineIdx, supportLineIdx + 700);
-    expect(supportLineBlock).toContain('if (Number.isFinite(support)) {');
-    expect(supportLineBlock).not.toContain('supportStrength?.label === "FORTE"');
-
-    const resistanceLineIdx = c.indexOf('useEffect(() => {\n    if (!seriesRef.current) return;\n    if (resistanceLineRef.current) {');
-    expect(resistanceLineIdx, 'useEffect nativo de R1 não encontrado').toBeGreaterThan(-1);
-    const resistanceLineBlock = c.slice(resistanceLineIdx, resistanceLineIdx + 700);
-    expect(resistanceLineBlock).toContain('if (Number.isFinite(resistance)) {');
-    expect(resistanceLineBlock).not.toContain('resistanceStrength?.label === "FORTE"');
+    // ATUALIZADO na GRADUAÇÃO §4: a linha de S1/R1 não é mais nativa (saiu
+    // de createPriceLine para o canvas do HorizontalLevelLinesPlugin), mas
+    // a REGRA que este teste protege é exatamente a mesma e continua no
+    // mesmo lugar lógico: a LINHA é incondicional (Number.isFinite puro),
+    // só o RÓTULO do eixo exige FORTE. O dado real nunca desaparece.
+    const idx = c.indexOf('const supportResistanceLevels = useMemo<HorizontalLevel[]>');
+    expect(idx, 'memo de S1/R1 não encontrado').toBeGreaterThan(-1);
+    const block = c.slice(idx, c.indexOf('}, [support, resistance,', idx));
+    expect(block).toContain('if (Number.isFinite(support)) {');
+    expect(block).toContain('if (Number.isFinite(resistance)) {');
+    // Nenhum gate de força na LINHA — esse é o ponto inteiro do teste.
+    expect(block).not.toContain('supportStrength?.label === "FORTE"');
+    expect(block).not.toContain('resistanceStrength?.label === "FORTE"');
   });
 
   it('gate real reusa STRONG_TOUCH_THRESHOLD já existente (support-resistance-engine.js: >=2 toques independentes = FORTE) — zero novo limiar inventado só para esconder etiqueta', () => {
@@ -1186,23 +1192,30 @@ describe('Achado 2.3 (Visual Cleanup): S1/R1 entram na competição real de orç
     expect(c).toContain('const resistanceVisualWeight = useMemo(\n    () => visualBudgetResults.find((r) => r.id === "r1")?.visualWeight ?? null,\n    [visualBudgetResults],\n  );');
   });
 
-  it('a price line NATIVA de S1/R1 (createPriceLine) usa levelLineAlpha(supportVisualWeight/resistanceVisualWeight) — nunca mais o 0.65 hardcoded', () => {
+  it('a LINHA de S1/R1 usa levelLineAlpha(supportVisualWeight/resistanceVisualWeight) — nunca mais o 0.65 hardcoded', () => {
+    // ATUALIZADO na GRADUAÇÃO §4: a linha saiu de createPriceLine para o
+    // canvas, mas o Achado 2.3 (alpha vindo do orçamento visual real, nunca
+    // um valor fixo) é preservado byte a byte — é justamente o que este
+    // teste existe para travar.
     const c = chart();
-    const supportIdx = c.indexOf('supportLineRef.current = seriesRef.current.createPriceLine({');
-    const supportBlock = c.slice(supportIdx, supportIdx + 1400);
-    expect(supportBlock).toContain('color: `rgba(245, 158, 11, ${levelLineAlpha(supportVisualWeight).toFixed(3)})`,');
-    expect(supportBlock).not.toContain('color: "rgba(245, 158, 11, 0.65)"');
-
-    const resistanceIdx = c.indexOf('resistanceLineRef.current = seriesRef.current.createPriceLine({');
-    const resistanceBlock = c.slice(resistanceIdx, resistanceIdx + 600);
-    expect(resistanceBlock).toContain('color: `rgba(245, 158, 11, ${levelLineAlpha(resistanceVisualWeight).toFixed(3)})`,');
-    expect(resistanceBlock).not.toContain('color: "rgba(245, 158, 11, 0.65)"');
+    const idx = c.indexOf('const supportResistanceLevels = useMemo<HorizontalLevel[]>');
+    const block = c.slice(idx, c.indexOf('}, [support, resistance,', idx));
+    expect(block).toContain('color: `rgba(245, 158, 11, ${levelLineAlpha(supportVisualWeight).toFixed(3)})`,');
+    expect(block).toContain('color: `rgba(245, 158, 11, ${levelLineAlpha(resistanceVisualWeight).toFixed(3)})`,');
+    expect(block).not.toContain('0.65)"');
   });
 
-  it('os 2 useEffect nativos de S1/R1 recalculam quando o peso visual resolvido muda — senão a linha ficaria presa na cor de um orçamento antigo', () => {
+  it('a linha de S1/R1 recalcula quando o peso visual resolvido muda — senão ficaria presa na cor de um orçamento antigo', () => {
+    // Mesmo contrato de antes, agora nas deps do useMemo único em vez das
+    // dos 2 useEffect nativos. supportBreakouts/resistanceBreakouts saíram
+    // das deps porque só alimentavam o `title` da price line — que nunca
+    // chegava à tela; quem os usa de verdade é priceAxisLabels, que os
+    // mantém nas SUAS deps (verificado no próprio arquivo).
     const c = chart();
-    expect(c).toContain('}, [support, supportStrength, supportBreakouts, supportVisualWeight]);');
-    expect(c).toContain('}, [resistance, resistanceStrength, resistanceBreakouts, resistanceVisualWeight]);');
+    expect(c).toContain(
+      '}, [support, resistance, supportStrength, resistanceStrength, supportVisualWeight, resistanceVisualWeight]);',
+    );
+    expect(c).toMatch(/priceAxisLabels[\s\S]*?supportBreakouts, resistanceBreakouts/);
   });
 });
 

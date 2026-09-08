@@ -135,12 +135,28 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
     expect(app).toContain('label: `Ciclo do Motor (${chartTimeframe?.toUpperCase() ?? "15M"})`');
   });
 
-  it('RealCycleResult.supportStrength/resistanceStrength são passthrough puro de frame.support_1_strength/resistance_1_strength — nunca recomputados', () => {
+  it('RealCycleResult.supportStrength/resistanceStrength vêm de frame.support_1_strength/resistance_1_strength — nunca recomputados', () => {
+    // ATUALIZADO na GRADUAÇÃO §4: deixou de ser passthrough LITERAL do
+    // objeto e passou por readLevelStrength(), porque o motor ganhou
+    // `touch_indices` (snake_case) e o lado React já declarava camelCase
+    // para esse mesmo dado (LiquidityZone.touchIndices). O que este teste
+    // realmente protege — "NUNCA RECOMPUTADOS" — segue intacto e agora é
+    // verificável de forma mais forte: nenhuma conta de força vive na
+    // ponte, só a leitura dos campos que o motor já decidiu.
     const bridge = read('../src/engine-bridge.ts');
-    expect(bridge).toContain("supportStrength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;");
-    expect(bridge).toContain("resistanceStrength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;");
-    expect(bridge).toContain('supportStrength: frame.support_1_strength ?? null,');
-    expect(bridge).toContain('resistanceStrength: frame.resistance_1_strength ?? null,');
+    expect(bridge).toContain('supportStrength?: LevelStrengthReading | null;');
+    expect(bridge).toContain('resistanceStrength?: LevelStrengthReading | null;');
+    expect(bridge).toContain('supportStrength: readLevelStrength(frame.support_1_strength)');
+    expect(bridge).toContain('resistanceStrength: readLevelStrength(frame.resistance_1_strength)');
+
+    // A prova do "nunca recomputado": readLevelStrength só COPIA label e
+    // touches. Nenhum limiar de força, nenhuma contagem, nenhuma banda de
+    // tolerância — tudo isso é exclusividade do motor.
+    const fn = bridge.match(/function readLevelStrength\([\s\S]*?\n\}/);
+    expect(fn, 'readLevelStrength não encontrada').not.toBeNull();
+    expect(fn![0]).toContain('label: raw.label, touches: raw.touches');
+    expect(fn![0]).not.toContain('STRONG_TOUCH_THRESHOLD');
+    expect(fn![0]).not.toMatch(/FORTE'\s*:\s*'FRACA/);
   });
 
   it('countBreakouts conta closes reais da MESMA janela chartData — nunca Math.random nem uma probabilidade', () => {
@@ -152,9 +168,17 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
 
   // V18 Sprint 1 (Tarefa B): CandleChart (SVG feito à mão) foi substituído
   // por EnhancedChart_110_Percent (lightweight-charts) — mesmo dado real
-  // de força/toques/rompimentos, agora desenhado como price line nativa
-  // (createPriceLine) em vez de um <span> posicionado em pixel.
-  it('EnhancedChart_110_Percent recebe support/resistance/strength/breakouts e monta o título da price line com a MESMA informação real que o gráfico antigo mostrava', () => {
+  // de força/toques/rompimentos.
+  //
+  // ATUALIZADO na GRADUAÇÃO §4 (2026-09-08): S1/R1 saíram de
+  // `createPriceLine` nativo para o canvas do HorizontalLevelLinesPlugin,
+  // porque a price line SEMPRE atravessa o gráfico inteiro. O que este
+  // teste protege de verdade — "a MESMA informação real que o gráfico
+  // antigo mostrava" — não mudou: levelTitle continua sendo a fonte única
+  // do texto de força/toques/rompimentos, só que agora exclusivamente pelo
+  // PriceLabelStackPlugin (que sempre foi quem o EXIBIA; no `title` da
+  // price line, com axisLabelVisible:false, ele nunca chegava à tela).
+  it('EnhancedChart_110_Percent recebe support/resistance/strength/breakouts e monta o rótulo com a MESMA informação real que o gráfico antigo mostrava', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const propsMatch = chart.match(/interface EnhancedChartProps \{([\s\S]*?)\n\}/);
     expect(propsMatch, 'EnhancedChartProps não encontrado').not.toBeNull();
@@ -168,9 +192,11 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
     expect(titleFnMatch![0]).toContain('strength.label');
     expect(titleFnMatch![0]).toContain('strength.touches');
 
-    expect(chart).toContain('createPriceLine');
-    expect(chart).toContain('levelTitle("S1", supportStrength, supportBreakouts)');
-    expect(chart).toContain('levelTitle("R1", resistanceStrength, resistanceBreakouts)');
+    // A informação real continua no eixo, pela MESMA função de sempre.
+    expect(chart).toContain('levelTitle("", supportStrength, supportBreakouts)');
+    expect(chart).toContain('levelTitle("", resistanceStrength, resistanceBreakouts)');
+    // E a linha existe, agora como trecho de canvas em vez de price line.
+    expect(chart).toContain('layerId="support_resistance"');
   });
 
   it('V18.1 NucleoVoiceOrb: fusão núcleo+voz na barra de comando deriva a cor do MESMO engineStatus real (nunca um score fabricado) e usa o gesto real de voz do voiceEngine', () => {
