@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useRadarScanLatencySnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useTrackRecordArchive, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useRadarScanLatencySnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -299,8 +299,38 @@ import { calibrateConfidence, type CalibrationResult } from "./nexus/platt-calib
 // ele bate simplesmente repetir a taxa base? Ver header do módulo.
 import {
   evaluateWalkForwardCalibration,
+  MIN_WALK_FORWARD_TRAIN,
+  MIN_WALK_FORWARD_PREDICTIONS,
   type WalkForwardReport,
 } from "./nexus/walk-forward-calibration";
+// A IDADE da amostra que produz aquela probabilidade. Sem isto, 40 trades
+// resolvidos há três meses (noutro regime) e 40 da semana passada apareciam
+// com a MESMA autoridade visual. Ver header do módulo.
+import { buildSampleMaturity, reasonStillNeeded } from "./nexus/sample-maturity-line";
+import {
+  measureCalibrationFreshness,
+  describeCalibrationFreshness,
+  type CalibrationFreshness,
+} from "./nexus/calibration-freshness";
+import {
+  computeTargetHitRates,
+  describeTargetHitRates,
+  type TargetHitRateReport,
+} from "./nexus/target-hit-rate";
+import {
+  evaluateShadowCalibration,
+  describeShadowCalibration,
+  MIN_SHADOW_SAMPLE,
+  type ShadowCalibrationReport,
+} from "./nexus/shadow-calibration";
+import {
+  buildOutcomeMatrix,
+  buildArchiveOutcomeMatrix,
+  informativeSlices,
+  type OutcomeMatrix,
+  type OutcomeSlice,
+  type OutcomeCell,
+} from "./nexus/outcome-matrix";
 import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
@@ -3354,6 +3384,50 @@ export default function App() {
     [trackRecordResults],
   );
 
+  // Frescor da MESMA amostra (zero segunda fonte, mesma disciplina dos dois
+  // memos acima). Diferente deles, este depende do RELÓGIO — e a idade
+  // congelaria se o memo só reagisse à amostra: num gráfico de 1m, 8h de
+  // terminal aberto sem trade novo seriam 480 barras de erro no número
+  // exibido. O balde de minuto entra nas deps para o recálculo acontecer no
+  // máximo 1x por minuto (granularidade muito mais fina que os dias/barras
+  // que a UI mostra, e barata: a função é dois passes sobre <=100 itens).
+  const freshnessMinuteBucket = Math.floor(Date.now() / 60_000);
+  const calibrationFreshness: CalibrationFreshness = useMemo(
+    () => measureCalibrationFreshness(trackRecordResults, freshnessMinuteBucket * 60_000, chartTimeframe),
+    [trackRecordResults, freshnessMinuteBucket, chartTimeframe],
+  );
+
+  // Taxa real de alcance por alvo (§49 da §2 de "EVOLUÇÃO COMPLETA"). Fonte
+  // é `trackRecordSlice.history` DIRETO, e não `trackRecordResults` como os
+  // três memos acima — não por descuido: `TradeCostResult` é o resultado em
+  // R DEPOIS de custos, e nesse formato os dois campos de que esta leitura
+  // depende (`plan.targets` e `targetsHit`) já não existem. Enfiá-los lá só
+  // para reaproveitar o pipeline acoplaria custo de execução a uma pergunta
+  // puramente estrutural ("quantos chegaram ao TP2?"), que nada tem a ver
+  // com comissão ou funding. Mesma amostra real, mesmo filtro de resolvido
+  // (TARGET_HIT/PARTIAL_HIT/STOP_HIT) aplicado dentro do módulo.
+  const targetHitRates: TargetHitRateReport = useMemo(
+    () => computeTargetHitRates(trackRecordSlice.history),
+    [trackRecordSlice.history],
+  );
+
+  // Matriz de resultados (§46): a MESMA amostra de trackRecordResults,
+  // fatiada por um eixo de cada vez. Marginal e não produto cartesiano por
+  // uma razão medida, não estética: o histórico tem teto de 100 trades, e
+  // o cruzamento dos eixos daria ~1 trade por célula — ruído com cara de
+  // estatística. Ver o cabeçalho de nexus/outcome-matrix.ts.
+  const outcomeMatrix: OutcomeMatrix = useMemo(() => buildOutcomeMatrix(trackRecordResults), [trackRecordResults]);
+
+  // Modo Shadow (§53): o candidato roda AO LADO do incumbente sobre a
+  // mesma amostra e nunca decide nada — nenhum consumidor lê daqui uma
+  // direção, um filtro ou uma probabilidade exibida (LEI 24). Responde por
+  // MEDIÇÃO a pergunta que calibration-freshness.ts responde por
+  // heurística: reajustar a calibração está ajudando, ou perseguindo ruído?
+  const shadowReport: ShadowCalibrationReport = useMemo(
+    () => evaluateShadowCalibration(trackRecordResults),
+    [trackRecordResults],
+  );
+
   // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
   // NUNCA valor monetário (o sistema não conhece o capital do operador).
   // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
@@ -4232,6 +4306,10 @@ export default function App() {
       expectancyFilter,
       calibrationResult,
       walkForwardReport,
+      calibrationFreshness,
+      targetHitRates,
+      outcomeMatrix,
+      shadowReport,
       contextualRecall,
       decisionDistance,
       directionalConsensus,
@@ -4310,6 +4388,10 @@ export default function App() {
       expectancyFilter,
       calibrationResult,
       walkForwardReport,
+      calibrationFreshness,
+      targetHitRates,
+      outcomeMatrix,
+      shadowReport,
       decisionDistance,
       directionalConsensus,
       liquidityMap,
@@ -6670,6 +6752,78 @@ function ScoreContextCard() {
   );
 }
 
+// MATRIZ DE RESULTADOS (§46) — uma linha por eixo que REALMENTE separou a
+// amostra. Só entra na tela o que foi conquistado: um eixo com uma célula
+// só não é comparação (é a agregada com outro nome) e não aparece; uma
+// célula abaixo do piso de amostra aparece esmaecida e com "?", porque
+// "12 trades, ainda não sei" é informação real e apagá-la faria o painel
+// mentir por omissão. Com Track Record vazio o bloco inteiro some — zero
+// poluição enquanto não há nada medido.
+function OutcomeCellChip({ cell }: { cell: OutcomeCell }) {
+  const r = cell.stats?.expectancyR ?? null;
+  const positivo = r !== null && r > 0;
+  return (
+    <span
+      className={`whitespace-nowrap ${
+        !cell.established ? "text-[#8ab4f8]/40" : positivo ? "text-[#00ffaa]/90" : "text-[#ff0055]/90"
+      }`}
+      title={
+        cell.established
+          ? `${cell.label}: expectativa real de ${r?.toFixed(3)}R por trade sobre ${cell.trades} trades resolvidos, após custos. Frequência observada nesta fatia — nunca previsão do próximo trade.`
+          : `${cell.label}: ${cell.trades} trades resolvidos, abaixo do mínimo de ${MIN_TRADES_FOR_VALID_EXPECTANCY} para uma leitura estabelecida. O número existe e está aqui, mas a amostra ainda não sustenta a conclusão.`
+      }
+    >
+      {cell.label} {r === null ? DASH : `${r >= 0 ? "+" : ""}${r.toFixed(2)}R`}
+      <span className="text-[#8ab4f8]/50">·{cell.trades}{cell.established ? "" : "?"}</span>
+    </span>
+  );
+}
+
+function OutcomeSliceRow({ slice }: { slice: OutcomeSlice }) {
+  return (
+    <div className="flex items-baseline gap-1.5 text-[0.4rem] leading-tight">
+      <span className="shrink-0 text-[#8ab4f8]/50 uppercase tracking-wide" title={slice.title}>
+        {slice.title.split(" ")[0]}
+      </span>
+      <span className="flex flex-wrap gap-x-2 gap-y-0.5">
+        {slice.cells.map((c) => (
+          <OutcomeCellChip key={c.label} cell={c} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+function OutcomeMatrixBlock() {
+  const { outcomeMatrix }: { outcomeMatrix?: OutcomeMatrix } = useContext(WidgetContext) || {};
+  // O arquivo é lido AQUI, e não em App(): o eixo ativo×timeframe atravessa
+  // várias amostras e só este bloco o consome — subir a leitura para App()
+  // faria a árvore inteira re-renderizar a cada arquivamento.
+  const archive = useTrackRecordArchive();
+  const archiveSlice = useMemo(() => buildArchiveOutcomeMatrix(archive), [archive]);
+  const uteis = useMemo(() => (outcomeMatrix ? informativeSlices(outcomeMatrix) : []), [outcomeMatrix]);
+  // Uma célula só no arquivo = o Operador só operou um symbol:timeframe;
+  // repetir a agregada com outro nome seria poluição, não informação.
+  const mostrarArquivo = archiveSlice.cells.length >= 2;
+
+  if (uteis.length === 0 && !mostrarArquivo) return null;
+
+  return (
+    <div className="flex flex-col gap-1 border-t border-[#00f0ff1a] pt-1.5">
+      <span
+        className="text-[0.4rem] uppercase tracking-[0.15em] text-[#00f0ff]/70"
+        title="Onde a expectativa agregada REALMENTE está. Uma média de +0.10R pode ser +0.45R num lado e −0.25R no outro — agregada, essa informação some. Fatias marginais (um eixo por vez), nunca produto cartesiano: com histórico de no máximo 100 trades o cruzamento daria ~1 trade por célula. Ver nexus/outcome-matrix.ts."
+      >
+        Matriz de resultados
+      </span>
+      {uteis.map((s) => (
+        <OutcomeSliceRow key={s.axis} slice={s} />
+      ))}
+      {mostrarArquivo && <OutcomeSliceRow slice={archiveSlice} />}
+    </div>
+  );
+}
+
 // Entrega 42 ("Profitability Engine"): expectativa real (após custos) do
 // Track Record deste symbol:timeframe — mesmo expectancyFilter computado
 // uma vez em App() e compartilhado via contextValue (ver comentário no
@@ -6682,11 +6836,17 @@ function ExpectancyCard() {
     expectancyFilter,
     calibrationResult,
     walkForwardReport,
+    calibrationFreshness,
+    targetHitRates,
+    shadowReport,
     contextualRecall,
   }: {
     expectancyFilter?: FilterResult;
     calibrationResult?: CalibrationResult;
     walkForwardReport?: WalkForwardReport;
+    calibrationFreshness?: CalibrationFreshness;
+    targetHitRates?: TargetHitRateReport;
+    shadowReport?: ShadowCalibrationReport;
     contextualRecall?: ContextualRecall | null;
   } = useContext(WidgetContext) || {};
   const stats = expectancyFilter?.stats ?? null;
@@ -6726,6 +6886,23 @@ function ExpectancyCard() {
   const calibratedTitle =
     "Probabilidade calibrada (Platt Scaling, Platt 1999) do score de fusão de modelos atual (SMC+Order Flow+Regime, orientado à direção do plano) contra o Track Record REAL deste symbol:timeframe — alvos suavizados (nunca 0/1 crus), nunca reivindica mais certeza do que a amostra sustenta.";
 
+  // Os degraus de maturidade, montados dos CONTADORES reais de cada
+  // capacidade — nunca de texto reprocessado. Cada `need` é o mínimo que o
+  // próprio módulo declara, importado dele (zero limiar duplicado aqui).
+  const expectancyGate = { label: "expectativa", have: stats?.totalTrades ?? 0, need: MIN_TRADES_FOR_VALID_EXPECTANCY };
+  const calibrationGate = {
+    label: "calibração",
+    have: calibrationResult?.sampleSize ?? 0,
+    need: MIN_TRADES_FOR_VALID_EXPECTANCY,
+  };
+  const walkForwardGate = {
+    label: "validação",
+    have: walkForwardReport?.usableTrades ?? 0,
+    need: MIN_WALK_FORWARD_TRAIN + MIN_WALK_FORWARD_PREDICTIONS,
+  };
+  const shadowGate = { label: "shadow", have: shadowReport?.usableTrades ?? 0, need: MIN_SHADOW_SAMPLE };
+  const maturity = buildSampleMaturity([expectancyGate, calibrationGate, walkForwardGate, shadowGate]);
+
   return (
     <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
       <div className="flex items-center justify-between gap-2">
@@ -6750,8 +6927,24 @@ function ExpectancyCard() {
           title={calibratedTitle}
         />
       </div>
-      {calibrationResult && !calibrationResult.calibrated && calibrationResult.reason && (
-        <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{calibrationResult.reason}</span>
+      {/* UMA linha de maturidade no lugar de três frases redundantes.
+          Defeito visto em tela: calibração, validação e expectativa
+          escreviam três parágrafos para comunicar um fato só ("o histórico
+          ainda é curto") com três limiares diferentes.
+          Regra de Ouro 4: as razões em prosa NÃO foram apagadas — elas
+          continuam aparecendo abaixo sempre que NÃO forem explicadas pela
+          contagem (ex.: "sem plano ativo", "o ajuste não convergiu"), que
+          são motivos reais e distintos. Ver nexus/sample-maturity-line.ts. */}
+      {maturity.hasGap && (
+        <span
+          className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight"
+          title="Trades REAIS já resolvidos neste symbol:timeframe, contra o mínimo declarado por cada capacidade. Nenhuma delas é exibida antes do seu limiar — ausência de prova nunca vira número."
+        >
+          {maturity.line}
+        </span>
+      )}
+      {reasonStillNeeded(calibrationResult?.reason, calibrationGate) && (
+        <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{calibrationResult!.reason}</span>
       )}
       {/* VALIDAÇÃO FORA-DA-AMOSTRA da "Prob. Calibrada" logo acima.
           Fica AQUI, colado nela, e não num card próprio, porque é
@@ -6813,10 +7006,67 @@ function ExpectancyCard() {
               />
             </div>
           ) : (
-            <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{walkForwardReport.reason}</span>
+            reasonStillNeeded(walkForwardReport.reason, walkForwardGate) && (
+              <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{walkForwardReport.reason}</span>
+            )
+          )}
+          {/* FRESCOR da amostra que produz a probabilidade acima. Sem isto,
+              40 trades de três meses atrás (outro regime) e 40 da semana
+              passada apareciam com a MESMA autoridade visual. A regra é
+              auto-referente e não inventa limiar: está EXTRAPOLANDO quando
+              a lacuna desde o último trade passa do alcance que a própria
+              amostra cobre. Ver nexus/calibration-freshness.ts. */}
+          {calibrationFreshness && calibrationFreshness.status !== "DADOS_INSUFICIENTES" && (
+            <span
+              className={`text-[0.4rem] leading-tight ${
+                calibrationFreshness.status === "EXTRAPOLANDO" ? "text-[#f0d06f]/90" : "text-[#8ab4f8]/60"
+              }`}
+              title="A calibração vale para o período que ela mediu. Quando a lacuna desde o trade mais recente da amostra já passou do alcance que a amostra cobre, o número está sendo projetado além da evidência — e isso aparece aqui, nunca escondido."
+            >
+              Frescor · {describeCalibrationFreshness(calibrationFreshness)}
+            </span>
+          )}
+          {/* MODO SHADOW: a mesma pergunta do frescor, respondida por
+              medição em vez de heurística — "o reajuste ajudou?" em vez de
+              "a amostra está velha?". O candidato nunca decide nada; os
+              dois Brier e os três n ficam sempre visíveis, porque 30
+              retidos dão uma leitura DIRECIONAL, nunca uma prova
+              estatística. Ver nexus/shadow-calibration.ts. */}
+          {shadowReport?.status === "OK" ? (
+            <span
+              className={`text-[0.4rem] leading-tight ${
+                shadowReport.verdict === "REFIT_MELHOROU" ? "text-[#00ffaa]/80" : "text-[#f0d06f]/90"
+              }`}
+              title={`Modo Shadow: a calibração CONGELADA (ajustada só nos ${shadowReport.frozenTrainSize} trades mais antigos) e a AO VIVO (ajustada nos ${shadowReport.liveTrainSize} anteriores à janela) são pontuadas por Brier sobre os mesmos ${shadowReport.evalSize} trades retidos, que nenhuma das duas viu. Menor é melhor. Leitura direcional sobre ${shadowReport.evalSize} pontos — nunca um teste de significância. O candidato roda ao lado e não decide nada.`}
+            >
+              Shadow · {describeShadowCalibration(shadowReport)}
+            </span>
+          ) : (
+            reasonStillNeeded(shadowReport?.reason, shadowGate) && (
+              <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{shadowReport!.reason}</span>
+            )
           )}
         </div>
       )}
+      {/* ALCANCE POR ALVO (§49). O Track Record já dizia quantos planos
+          bateram alvo; nunca dizia quantos chegaram a CADA degrau — e uma
+          escada TP1/TP2/TP3 parece uniforme quando quase nunca é. O
+          denominador é onde mora a honestidade: só entram os planos que
+          REALMENTE ofereceram aquele alvo, porque um plano de 2 alvos
+          jamais poderia alcançar o TP3 e afundaria a taxa dele. Alvo nunca
+          proposto some da linha em vez de virar "0%". Frequência observada
+          sobre o histórico resolvido, com a contagem sempre ao lado —
+          nunca probabilidade do próximo trade (Regra de Ouro 2).
+          Ver nexus/target-hit-rate.ts. */}
+      {targetHitRates?.status === "OK" && targetHitRates.rates.some((r) => r.offered > 0) && (
+        <span
+          className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight"
+          title={`Frequência real com que cada alvo foi alcançado, entre os ${targetHitRates.resolvedPlans} planos resolvidos deste symbol:timeframe que REALMENTE propuseram aquele alvo — um plano de 2 alvos nunca entra no denominador do TP3. Contagem observada sobre histórico já resolvido, nunca probabilidade de o próximo trade chegar lá.`}
+        >
+          Alcance · {describeTargetHitRates(targetHitRates)}
+        </span>
+      )}
+      <OutcomeMatrixBlock />
       {/* LEI 24 — exceção pontual autorizada pelo Operador (ver CLAUDE.md,
           seção "LEI 24"): quando expectancyFilter.show é false, o
           CoreSignalBadge substitui a direção real do Núcleo por NEUTRO.
@@ -6829,8 +7079,8 @@ function ExpectancyCard() {
           </span>
         </div>
       )}
-      {expectancyFilter?.warning && (
-        <span className="text-[0.4rem] text-[#f0d06f]/80 leading-tight">{expectancyFilter.warning}</span>
+      {reasonStillNeeded(expectancyFilter?.warning, expectancyGate) && (
+        <span className="text-[0.4rem] text-[#f0d06f]/80 leading-tight">{expectancyFilter!.warning}</span>
       )}
       {/* MEMÓRIA CONTEXTUAL — o que o histórico já resolvido diz sobre
           contextos como o de agora (regime + estrutura + VWAP + Nexus Line).

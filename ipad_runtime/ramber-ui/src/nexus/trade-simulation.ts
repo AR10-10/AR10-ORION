@@ -75,6 +75,16 @@ export interface TradeCostResult {
   fundingR: number; // sempre >= 0, sempre subtraído (nunca assume funding a favor)
   netR: number; // grossR - commissionR - slippageR - fundingR
   holdingMs: number;
+  /** Instante REAL de resolução do trade (epoch ms). Aditivo (rodada de
+   *  caça a defeitos da ordem "EVOLUÇÃO COMPLETA"): esta função já LIA
+   *  `tracked.resolvedAt` para calcular `holdingMs`, e descartava o
+   *  instante absoluto na mesma linha. Sem ele, nada a jusante consegue
+   *  perguntar QUE IDADE tem a amostra — e a "Prob. Calibrada" podia ser
+   *  exibida com a mesma autoridade visual tendo sido treinada em trades
+   *  de outro regime, meses atrás. Mesma classe de achado já corrigida em
+   *  computeLevelStrength() (support-resistance-engine.js): o dado sempre
+   *  esteve aqui, morria na fronteira. */
+  resolvedAt: number;
   regime: string | null; // engine.marketRegime.regime carimbado na abertura (pode ser null em registros antigos)
   // Escopo Cirúrgico (Operador, Fase 1): assinatura real do cenário
   // (nexus/scenario-fingerprint.ts) — permite agrupar por família de
@@ -82,6 +92,17 @@ export interface TradeCostResult {
   // módulo. null quando o contexto de abertura não tem NENHUM dos 4
   // fatores reais (registros anteriores à Entrega 42/Escopo Cirúrgico).
   fingerprint: string | null;
+  /** Institutional Score REAL carimbado na abertura
+   *  (`contextAtOpen.score`, nexus/institutional-score.ts) — passthrough
+   *  literal, zero recomputação. Mesma classe de achado do `resolvedAt`
+   *  acima e do `computeLevelStrength()`: o dado sempre esteve em
+   *  PlanOpenContext e morria nesta fronteira, então nada a jusante
+   *  conseguia perguntar "os trades de score alto renderam mais que os de
+   *  score baixo?" — o eixo QUALIDADE da §46. null em registros anteriores
+   *  ao carimbo, ou quando o score não pôde ser calculado na abertura;
+   *  nunca fabricado como 0 (0 se leria como "péssima oportunidade"
+   *  em vez de "não medido"). */
+  institutionalScore: number | null;
   // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
   // passthrough literal de contextAtOpen.modelAgreement (Fase 2, fusão de
   // modelos orientada à direção do plano) — zero recomputação. null
@@ -133,8 +154,10 @@ export function simulateTradeCosts(
     fundingR,
     netR,
     holdingMs,
+    resolvedAt: tracked.resolvedAt,
     regime: tracked.contextAtOpen?.regime ?? null,
     fingerprint: computeScenarioFingerprint(tracked.contextAtOpen),
+    institutionalScore: tracked.contextAtOpen?.score ?? null,
     modelAgreement: tracked.contextAtOpen?.modelAgreement ?? null,
   };
 }

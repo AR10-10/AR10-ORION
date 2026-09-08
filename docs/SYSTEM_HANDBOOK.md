@@ -8824,6 +8824,94 @@ diferença entre um terminal que mede a si mesmo e um que se elogia.
 `npm run verify`: tsc limpo, **300 arquivos / 4928 testes** (11 novos),
 build ok.
 
+### 6.110 CALIBRATION STALE + o card para de repetir a mesma frase 3x
+
+Caça a defeitos sob carta branca do Operador, e o achado principal é da
+mesma família da §6.106: **o dado sempre esteve lá e morria na fronteira.**
+
+#### O defeito: a probabilidade não tinha idade
+
+`simulateTradeCosts()` (`trade-simulation.ts`) **lia** `tracked.resolvedAt`
+para calcular `holdingMs` — e descartava o instante absoluto na mesma
+linha. `TradeCostResult` sabia QUANTO cada trade durou, mas não QUANDO
+aconteceu.
+
+Consequência na tela: a "Prob. Calibrada" aparecia com a **mesma
+autoridade visual** tendo sido treinada em 40 trades resolvidos há três
+meses (noutro regime) ou em 40 da semana passada. O Operador não tinha
+como distinguir. Nada no repositório media frescor de calibração —
+confirmado por varredura (`stale|frescor|idade` na pilha de calibração:
+zero ocorrências reais).
+
+#### A regra, e por que ela não inventa número
+
+"Quando uma calibração fica velha?" não tem resposta universal, e este
+projeto proíbe fabricar limiar. Então a regra é **auto-referente**:
+
+> **ESTÁ EXTRAPOLANDO** quando `(agora − trade mais novo) > (trade mais
+> novo − trade mais antigo)`
+
+Se a amostra cobre 30 dias e o trade mais recente tem 60, você projeta
+para frente mais do que mediu para trás. Zero constante — é a comparação
+entre duas medições reais da própria amostra.
+
+Precedente de forma: `chart-integrity.ts` já decidiu que frescor se mede
+em **múltiplos de uma referência real**, nunca em ms fixo. Aqui a
+referência é o alcance da própria amostra. A idade também sai em **barras**
+do timeframe (`TIMEFRAME_MS`), que é a unidade em que o Operador pensa.
+
+`nexus/calibration-freshness.ts` (novo, puro, 19 testes de execução real).
+Fail-closed em toda ponta: `resolvedAt` ausente é **descartado**, nunca
+lido como 0 — um 0 dataria o trade em 1970 e inflaria o alcance em 56
+anos, fazendo o veredito ser sempre "dentro".
+
+#### O card para de repetir a mesma frase
+
+Defeito visto em tela na rodada anterior: **três** frases seguidas dizendo
+"amostra insuficiente", com três limiares (30, 30, 60).
+
+Colapsar às cegas perderia informação real — `calibrationResult.reason`
+nem sempre é escassez ("Sem plano ativo", "Falha no ajuste de Platt").
+`nexus/sample-maturity-line.ts` separa as duas coisas:
+
+1. A **escassez**, que é uma só, vira **uma** linha construída dos
+   CONTADORES reais: `0 trades resolvidos · falta: expectativa ≥30 ·
+   calibração ≥30 · validação ≥60`.
+2. Qualquer razão **não explicada pela contagem** continua aparecendo
+   intacta (`reasonStillNeeded()`).
+
+O contrato ficou mais forte, não mais frouxo: antes qualquer razão
+aparecia crua; agora ou ela aparece, ou a informação dela está na linha
+única — nunca sumir em silêncio é travado nos dois caminhos.
+
+#### Verificação visual: 3 viewports × 7 timeframes
+
+Medido no DOM renderizado, não argumentado:
+
+| | resultado |
+|---|---|
+| fundo da raiz | `rgb(1,3,8)` = `SURFACE.base` nos 3 perfis |
+| gradiente do painel | stops reancorados, idênticos nos 3 |
+| scroll horizontal | **zero** em 3 viewports e 7 timeframes (Regra de Ouro 7) |
+| menor fonte renderizada | **exatamente 6.4px** = o piso, em todos |
+
+`tools/visual-invariants.mjs` (novo) guarda esse passe no repo, executável
+por qualquer sessão futura. **Não roda no CI de propósito:**
+`testes.yml` verifica sem browser e sem segredos, e uma suíte de navegador
+em todo push mudaria o custo de cada PR.
+
+#### Achados limpos (reportados por honestidade, não corrigidos)
+
+- **Zero código morto.** A varredura de exports sem consumidor deu só
+  falsos positivos: são exports-para-teste, padrão documentado do projeto.
+- **Regra de Ouro 1 intacta:** nenhum `Math.random()` no fluxo de mercado
+  real (só menções em comentário).
+- `cross-exchange-book.ts:190` tem um `?? 0` **inalcançável** (guardado por
+  `status === "OK"`, onde o spread sempre existe). Defensivo, não defeito.
+
+`npm run verify`: tsc limpo, **302 arquivos / 4960 testes** (32 novos),
+build ok.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
@@ -8859,6 +8947,210 @@ qualidade · risco de duplicação · READ_ONLY · FAIL_CLOSED.
 
 Regra aplicada (§7): mais dados somente se produzirem melhor contexto —
 nenhuma integração nova nesta fase.
+
+### 6.111 Alcance por alvo — o denominador é onde mora a honestidade
+
+Item §49 da §2 da ordem "EVOLUÇÃO COMPLETA" (hit-rate por alvo).
+
+#### A pergunta que o Track Record nunca respondeu
+
+`TrackRecordState` já contava `targetHits` / `partialHits` / `stopHits` —
+quantos planos **bateram alvo**. O que nunca disse é o que o Operador
+precisa antes de dimensionar uma saída:
+
+> "dos planos que abriram, quantos chegaram no TP1? e no TP2? e no TP3?"
+
+Sem isso a escada TP1/TP2/TP3 parece **uniforme**, e quase nunca é: um TP3
+que raramente é alcançado tinha exatamente a mesma aparência de um TP1 que
+quase sempre é.
+
+#### O erro que a conta ingênua comete
+
+`acertos do TP3 ÷ todos os planos` está errado, e erra **sempre para o
+mesmo lado**: um plano que só tinha 2 alvos jamais poderia alcançar o TP3,
+e incluí-lo no denominador afunda a taxa do TP3 com planos que nunca a
+ofereceram — o alvo mais distante fica artificialmente pessimista.
+
+Então o denominador de cada alvo é **planos resolvidos que REALMENTE
+tinham aquele alvo** (`plan.targets.length > i`). É a única leitura que
+responde à pergunta real: *quando o sistema propôs este alvo, com que
+frequência ele chegou lá?* O numerador é `targetsHit > i` — `targetsHit`
+conta alvos provados **em ordem**, então a taxa é monotonicamente
+não-crescente por construção (travado em teste).
+
+Alvo nunca oferecido devolve `rate: null`, **nunca 0** — "nunca propôs" e
+"nunca chega" são fatos diferentes, e some da linha em vez de virar "0%".
+
+`nexus/target-hit-rate.ts` (novo, puro, 21 testes: 17 de execução real +
+4 de fiação). `MAX_TARGETS` é **importado** de `trade-plan.ts`, nunca
+redeclarado: uma constante paralela sairia de sincronia no dia em que o
+plano ganhasse um 4º alvo, e a tabela silenciosamente pararia de mostrá-lo.
+
+#### Por que a fonte NÃO é `trackRecordResults`
+
+Os três memos vizinhos (expectativa, calibração, frescor) consomem
+`trackRecordResults` — e este consome `trackRecordSlice.history` **direto**.
+Não é descuido: `TradeCostResult` é o resultado em R *depois* de custos, e
+nesse formato os dois campos de que esta leitura depende (`plan.targets` e
+`targetsHit`) já não existem. Enfiá-los lá só para reaproveitar o pipeline
+acoplaria custo de execução a uma pergunta puramente estrutural. Mesma
+amostra real, mesmo filtro de resolvido (`TARGET_HIT`/`PARTIAL_HIT`/
+`STOP_HIT`) aplicado dentro do módulo.
+
+#### Regra de Ouro 2
+
+É **frequência observada** sobre histórico já resolvido, com a contagem
+sempre ao lado do número (`TP1 8/10 · TP2 3/10 · TP3 0/4`) — nunca
+probabilidade de o próximo trade chegar lá. Quem quer essa afirmação usa
+`walk-forward-calibration.ts` (§6.109), que existe justamente para isso.
+
+### 6.112 Matriz de resultados — onde a expectativa agregada REALMENTE está
+
+Item §46 da §2 da ordem "EVOLUÇÃO COMPLETA".
+
+#### O problema com uma média
+
+A expectativa agregada responde *"este symbol:timeframe é viável?"*. O que
+ela nunca respondeu é **onde** a viabilidade está. Uma expectativa de
+`+0.10R` pode ser `+0.45R` nos LONG e `−0.25R` nos SHORT — agregada, essa
+informação some, e é exatamente a que muda decisão.
+
+#### Marginal, nunca produto cartesiano — e a razão é medida
+
+A §46 pede direção × timeframe × ativo × regime × volatilidade × qualidade
+× confluência. O **produto cartesiano** desses eixos daria centenas de
+células sobre um histórico de no máximo `TRACK_RECORD_HISTORY_CAP` (100)
+trades: ~0 a 1 trade por célula, ruído puro apresentado com cara de
+estatística — precisamente o que a Regra de Ouro 2 proíbe.
+
+Então a matriz é de **fatias marginais**: um eixo por vez, cada célula com
+o seu próprio `n` visível. O cruzamento de fatores continua existindo e
+continua sendo trabalho de `scenario-fingerprint.ts` (que agrupa pela
+conjunção dos 4 fatores). Não são redundantes: aqui se pergunta *"o eixo X
+importa?"*, lá *"esta configuração exata já aconteceu?"*.
+
+#### O eixo QUALIDADE existia e morria na fronteira
+
+Terceiro achado da mesma família (§6.106 `computeLevelStrength`, §6.110
+`resolvedAt`): `PlanOpenContext.score` — o Institutional Score congelado na
+abertura — **nunca chegava** ao `TradeCostResult`. `plan-markers.ts` já o
+lia para decidir se desenhava a seta de um plano; a camada de estatística
+não tinha como perguntar *"os trades de score alto renderam mais?"*.
+Corrigido com um passthrough literal, zero recomputação.
+
+#### Auditoria eixo a eixo (o que existe, e o que não)
+
+| Eixo §46 | Estado real |
+|---|---|
+| direção | **REAL** — `TradeCostResult.direction` |
+| regime | **REAL** — carimbado na abertura |
+| qualidade | **REAL nesta rodada** — passthrough de `contextAtOpen.score` |
+| confluência | **REAL** — `modelAgreement` |
+| ativo × timeframe | **REAL, em outra função** — `trackRecordArchive` é keyed por `symbol:timeframe`; a amostra ao vivo é de um só. Achado: a store escreve esse arquivo desde a Entrega "Memória real" e **nenhum consumidor o lia**. |
+| **volatilidade** | **NÃO EXISTE.** Nenhum motor congela leitura de volatilidade (ATR, largura de Bollinger) no instante da abertura. Derivá-la agora, do candle de hoje, seria olhar o futuro do trade. Fica declarada ausente — nunca preenchida com proxy. |
+
+#### Os cortes numéricos não inventam limiar
+
+Os dois eixos numéricos são cortados por fronteiras **já declaradas em
+outro módulo**, nunca por um número escolhido aqui:
+
+- **qualidade** → `DEFAULT_MIN_OPPORTUNITY_SCORE` (`institutional-score.ts`),
+  o mesmo piso que `plan-markers.ts` usa para decidir se desenha uma seta;
+- **confluência** → o **sinal** de `modelAgreement`, cuja semântica
+  `trade-simulation.ts` já declara ("positivo = modelos a favor da direção
+  efetivamente tomada"). Exatamente `0` é sua própria categoria (MODELOS
+  DIVIDIDOS), nunca somado a favor nem contra.
+
+Toda a matemática por célula é `computeExpectancy()` — zero segunda
+fórmula. Este módulo só **fatia**.
+
+#### O piso marca, nunca esconde
+
+Cada célula declara se cruzou `MIN_TRADES_FOR_VALID_EXPECTANCY` (30,
+importado). Abaixo do piso a célula **não some**: aparece esmaecida, com
+`?` e o `n` real — "12 trades, ainda não sei" é informação, e apagá-la
+faria o painel mentir por omissão. `establishedSpreadR()` vai além e
+**recusa** comparar uma célula firme com uma frágil: −5R em 3 trades daria
+um "spread" que é ruído com cara de achado.
+
+Na tela, só entra o que foi conquistado: um eixo com uma célula só (a
+agregada com outro nome) não aparece, e com Track Record vazio o bloco
+inteiro some.
+
+`nexus/outcome-matrix.ts` (novo, puro, 29 testes: 24 de execução real +
+5 de fiação).
+
+### 6.113 Modo Shadow — o reajuste está ajudando, ou perseguindo ruído?
+
+Item §53 da §2 da ordem "EVOLUÇÃO COMPLETA", o último em aberto dela.
+
+#### A pergunta que ninguém estava fazendo
+
+A calibração de Platt é **reajustada continuamente** conforme trades
+resolvem. Isso levanta uma pergunta que nenhuma camada respondia:
+
+> *reajustar está MELHORANDO a previsão, ou só perseguindo ruído?*
+
+É a pergunta da §55 (anti-overfitting) e a contraparte **por evidência**
+da §52: `calibration-freshness.ts` (§6.110) responde *"a amostra está
+velha?"* por uma regra auto-referente — heurística honesta, mas
+heurística. Aqui se responde *"o reajuste ajudou?"* por **medição**, sobre
+dados que nenhum dos dois ajustes viu.
+
+#### O desenho, e por que não vaza futuro
+
+```
+[0 .............................. N-30) [N-30 ........ N)
+ └─ CONGELADA: treina só nos 30 mais antigos
+ └─────────── AO VIVO: treina em tudo antes da janela
+                                        └─ AVALIAÇÃO: nenhuma das duas viu
+```
+
+- **CONGELADA** (incumbent): ajuste sobre os primeiros 30 trades — a menor
+  amostra que este repositório declara válida, deliberadamente parada no
+  tempo.
+- **AO VIVO** (challenger): ajuste sobre tudo que precede a janela — o mais
+  fresco possível sem olhar o futuro.
+- Ambas pontuadas por **Brier Score** sobre a **mesma** janela retida.
+
+O candidato **nunca decide nada** — nenhum consumidor lê daqui direção,
+filtro ou probabilidade exibida. É o que faz disto shadow e não uma troca
+de modelo pela porta dos fundos (LEI 24, travado por teste de fiação).
+
+#### Zero limiar inventado
+
+Os dois 30 são o mesmo `MIN_TRADES_FOR_VALID_EXPECTANCY` importado. O
+mínimo total é **2×30+1**, e o "+1" não é escolha estética: é a condição de
+existência da comparação. Se a AO VIVO treinasse com os mesmos 30 da
+CONGELADA, os dois ajustes seriam idênticos e o veredito seria vazio.
+
+#### O que isto NÃO é
+
+**Não é um teste de significância.** A janela tem 30 trades e
+`TRACK_RECORD_HISTORY_CAP` limita o histórico a 100 — a diferença entre
+dois Brier sobre 30 pontos carrega incerteza larga. O módulo reporta os
+dois números reais, os três `n` e um veredito que é literalmente *"qual
+dos dois errou menos nesta janela"*. Leitura **direcional**, nunca
+conclusiva — por isso os `n` aparecem em toda parte, inclusive na linha da
+UI.
+
+Empate conta como "não melhorou": reajustar tem custo real (o modelo muda
+sob o Operador) e um empate não o justifica.
+
+`nexus/shadow-calibration.ts` (novo, puro, 22 testes: 18 de execução real
++ 4 de fiação). Um dos testes prova que o veredito **responde ao dado**:
+com ruído na primeira metade e sinal limpo na segunda, o ajuste fresco
+ganha — sem isso o módulo poderia estar devolvendo sempre a mesma resposta.
+
+#### A linha de maturidade ganhou o 4º degrau
+
+`shadowGate` (≥61) entra em `buildSampleMaturity` junto dos outros três, e
+a razão de escassez do Shadow passa por `reasonStillNeeded()` — sem isso o
+card voltaria a ter uma frase solta de "amostra insuficiente", exatamente
+o defeito que §6.110 corrigiu. Um teste que fixava a lista de três degraus
+foi atualizado para travar a **forma** da chamada em vez do número de
+degraus: a lista cresce por capacidade, e travar o número faria toda
+capacidade nova quebrar um teste que não é sobre ela.
 
 ---
 

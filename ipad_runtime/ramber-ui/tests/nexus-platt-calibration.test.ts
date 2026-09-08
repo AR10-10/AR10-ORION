@@ -25,9 +25,11 @@ function result(netR: number, modelAgreement: number | null): TradeCostResult {
     fundingR: 0,
     netR,
     holdingMs: 0,
+    resolvedAt: 0,
     regime: null,
     fingerprint: null,
     modelAgreement,
+    institutionalScore: null,
   };
 }
 
