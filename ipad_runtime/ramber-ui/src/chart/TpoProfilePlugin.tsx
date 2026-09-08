@@ -33,6 +33,7 @@
 // para o espaço dele.
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { computeTpoProfile, type TpoProfileResult } from "../nexus/tpo-profile";
 import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";
@@ -111,8 +112,13 @@ export function TpoProfilePlugin({ chart, series, data, activeLanes }: TpoProfil
       const maxCount = result.rows.reduce((m, row) => Math.max(m, row.letters.length), 0);
       if (!(maxCount > 0)) return;
 
-      const laneRight = getProfileLaneRightEdgePx("tpo_profile", cssWidth, activeLanes);
-      const maxBarWidth = getProfileLaneMaxBarWidthPx("tpo_profile", cssWidth, activeLanes);
+      // Fronteira REAL do eixo (chart-plot-area.ts) — mesma correção
+      // aplicada à família inteira de perfis: ancorar no `cssWidth` cru
+      // pintava as letras/barras por baixo dos números do eixo. Medição
+      // sem `activeLanes` de propósito (ver contrato em chart-profile-lanes.ts).
+      const { plotRight } = measurePlotArea(chart, cssWidth);
+      const laneRight = getProfileLaneRightEdgePx("tpo_profile", plotRight, activeLanes);
+      const maxBarWidth = getProfileLaneMaxBarWidthPx("tpo_profile", plotRight, activeLanes);
       const rowWidthPrice = (result.rangeMax - result.rangeMin) / result.rowCount;
 
       for (let i = 0; i < result.rows.length; i++) {

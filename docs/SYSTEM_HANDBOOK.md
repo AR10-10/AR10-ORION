@@ -8211,6 +8211,92 @@ cobertura de teste, não a uma captura de tela real).
 
 ---
 
+### 6.102 ORDEM "VISUAL TERMINAL PROFESSIONAL" (38 seções) — auditoria
+obrigatória (§0/§29) + as 2 correções reais que ela encontrou
+
+A ordem manda, na própria §0, auditar ANTES de tocar em código. Feito — e
+a auditoria mudou o escopo do que valia a pena implementar: dois itens que
+o pedido descrevia como pendentes já estavam prontos, um descrevia algo
+que não existe, e um era um defeito real nunca diagnosticado.
+
+**§5 — DEFEITO REAL, causa raiz encontrada e corrigida.** Relato literal:
+"Volume Profile ficando ABAIXO DA NUMERAÇÃO". Não era percepção — é
+mensurável. `VolumeProfilePlugin`, `TpoProfilePlugin` e `DepthChartPlugin`
+ancoravam suas lanes no `cssWidth` CRU do canvas, que inclui a faixa do
+eixo de preço. Como `volume_profile` é a lane 0 (offset 0), sua borda
+direita era literalmente `cssWidth`: os ~72px mais à direita de CADA barra
+— e a linha inteira do POC — eram pintados POR BAIXO dos números do eixo
+(72px é medição real registrada no cabeçalho de `chart-plot-area.ts`,
+Chromium, viewport iPad 834px).
+
+O mais relevante do achado: é a MESMA classe de defeito que
+`chart-plot-area.ts` foi criado para corrigir, e a família de perfis tinha
+ficado **de fora** daquela correção — que cobriu só os outros 6 plugins
+(InstitutionalZone/LiquidityZones/NeuralMarketAura/SessionKeyLevels/
+StructureBreakMarkers/TradePlanZone). Correção: os 3 passam a ancorar em
+`measurePlotArea(chart, cssWidth).plotRight`, a fronteira real do eixo —
+zero arquitetura nova (§30: reutilizar, nunca inventar). A medição é
+deliberadamente feita SEM `activeLanes`: a reserva das lanes é justamente
+o que estas funções posicionam, passá-la de novo subtrairia a mesma faixa
+duas vezes. O contrato do parâmetro (`availableWidth` = largura
+DESENHÁVEL, nunca o container) ficou escrito no próprio
+`chart-profile-lanes.ts`, pra um plugin futuro não repetir o bug.
+
+**§6 — inconsistência real, menor.** O gráfico PRINCIPAL já tinha respiro
+adaptativo de verdade (`resolveAdaptiveRightOffset`: base por classe de
+monitor + ajuste pela carga REAL do Trade Plan, em larguras de barra) —
+§6 já estava satisfeita ali. Mas `TradFiRealChart` e `MexcRealChart`
+tinham `rightOffset: 8` cravado: exatamente a "margem fixa que funciona
+só numa resolução" que §6 proíbe, e uma quebra de §27 (consistência
+global). Os dois passam a usar a MESMA régua por monitor. Só a BASE, de
+propósito: nenhum dos dois desenha Trade Plan, então somar o ajuste por
+carga reservaria espaço para níveis que nunca existem — dado fabricado.
+
+**§4 — o pedido descreve algo que não existe.** "Volume comum não pode
+ficar embaixo do gráfico, mover para a lateral": varredura completa
+(`grep` por `Histogram`/série de volume em todo `src/`) confirma que o
+gráfico principal **nunca teve** faixa de volume inferior. As únicas
+ocorrências de "Histogram" no repositório são o histograma do MACD (um
+número num painel) e o motor `nexus/volume-profile.ts`. O volume já vive
+lateralmente — é o próprio Volume Profile. Nada a mover; registrado aqui
+em vez de "implementado" para não fabricar uma entrega.
+
+**§1/§2/§3/§10/§13 — já entregues em rodadas anteriores**, confirmado por
+leitura direta do código: TP/ST compactos com separador de milhar (§6.101),
+coluna de eixo com régua única e anti-colisão determinística
+(`PriceLabelStackPlugin` + `price-label-stack.ts`), fonte do eixo
+responsiva por classe de monitor (`resolveChartUltraWideScale`, 11/12/13px),
+Direction Arrow reduzida a 10px (ORDEM 3 Stage 1) e countdown da vela em
+todos os 14 timeframes reais (§6.100).
+
+**Testes**: 10 novos. A geometria do defeito ganhou **execução real** (o
+teste REPRODUZ a invasão antiga — `bordaAntiga - plotRight === 72 + 4` —
+e prova que nenhuma das 3 lanes cruza a fronteira depois da correção,
+mais o caso fail-closed de eixo não medido); a fiação dos 3 plugins e dos
+2 gráficos secundários ganhou padrão-no-código, incluindo a regressão
+travada ("`cssWidth` cru nunca mais"). `npm run verify`: tsc limpo,
+**292 arquivos / 4794 testes**, build ok. Playwright real nos **10 perfis**
+que §19/§38-E exigem (iPad Mini/iPad/iPad Pro 11/iPad Pro 13 em Portrait
+e Landscape + Desktop + Ultrawide): zero overflow horizontal, zero
+overflow vertical, zero page error em todos.
+
+**Preservação (§38-C), verificada por diff:** nenhum arquivo de
+`Decision Engine`, `Risk Engine`, Trade semantics, Entry, Trade Plan
+logic, fontes de dado, conectores, READ_ONLY/SHADOW/FAIL_CLOSED foi
+tocado. O diff inteiro é geometria de canvas + 2 opções de `timeScale` +
+testes + este registro.
+
+**O que continua pendente, honestamente** (§8/§9 hierarquia de peso de
+linha, §22/§29 varredura completa de menus/ícones/painéis, §14/§15
+unificação global de cor e tipografia): são reformas amplas que exigem o
+mesmo tipo de auditoria peça a peça que estes dois itens receberam —
+cada uma é sua própria rodada. Entregar uma varredura de "todos os
+ícones, menus, painéis e cores" numa tacada só produziria exatamente a
+mudança apressada que a Disciplina de trabalho item 5 do `CLAUDE.md`
+manda documentar em vez de forçar.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

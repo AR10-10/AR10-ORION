@@ -43,6 +43,7 @@ import {
 } from "lightweight-charts";
 import { Radio, Clock } from "lucide-react";
 import { getTradFiChartCandles } from "../engine-bridge";
+import { resolveChartUltraWideScale } from "../chart/chart-ultrawide-scale";
 import { TradingViewAdvancedChart } from "./TradingViewAdvancedChart";
 
 // Mesma cadência do ciclo cripto principal (ver comentário de
@@ -113,7 +114,12 @@ export function TradFiRealChart({
         borderColor: "rgba(138, 180, 248, 0.15)",
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 8,
+        // §6 da ordem "Visual Terminal Professional": respiro à direita
+        // nunca uma margem fixa de uma resolução só. Mesma régua por
+        // classe de monitor do gráfico principal (chart-ultrawide-scale.ts).
+        // Só a BASE por tela — este gráfico não desenha Trade Plan, então
+        // o ajuste por carga não teria níveis reais para contar.
+        rightOffset: resolveChartUltraWideScale(window.innerWidth).rightOffset,
       },
       handleScroll: {
         mouseWheel: true,

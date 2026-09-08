@@ -33,6 +33,7 @@
 // visualmente idêntico a antes; só o nome da fonte da fração mudou.
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { useVolumeProfileSnapshot } from "../store/unified-snapshot-store";
 import { bucketMidPrice } from "../nexus/volume-profile";
@@ -110,8 +111,16 @@ export function VolumeProfilePlugin({ chart, series, activeLanes }: VolumeProfil
       const maxVolume = vp.histogram.reduce((a, b) => (b > a ? b : a), 0);
       if (!(maxVolume > 0)) return;
 
-      const laneRight = getProfileLaneRightEdgePx("volume_profile", cssWidth, activeLanes);
-      const maxBarWidth = getProfileLaneMaxBarWidthPx("volume_profile", cssWidth, activeLanes);
+      // Fronteira REAL do eixo (chart-plot-area.ts). Sem isto o perfil era
+      // ancorado no `cssWidth` cru e os ~72px mais à direita de cada barra
+      // (mais a linha inteira do POC) eram pintados POR BAIXO dos números
+      // do eixo — o defeito que o Operador relatou como "Volume Profile
+      // ficando abaixo da numeração". `activeLanes` NÃO entra na medição de
+      // propósito: a reserva das lanes é o que estamos posicionando aqui,
+      // passá-la de novo subtrairia a mesma faixa duas vezes.
+      const { plotRight } = measurePlotArea(chart, cssWidth);
+      const laneRight = getProfileLaneRightEdgePx("volume_profile", plotRight, activeLanes);
+      const maxBarWidth = getProfileLaneMaxBarWidthPx("volume_profile", plotRight, activeLanes);
       const hvn = new Set(vp.hvnIndices);
       const lvn = new Set(vp.lvnIndices);
 

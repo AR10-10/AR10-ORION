@@ -38,6 +38,7 @@
 // única).
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { useOrderBookSnapshot, type OrderBookLevel } from "../store/unified-snapshot-store";
 import { detectWalls } from "../nexus/order-book-depth";
@@ -195,8 +196,14 @@ export function DepthChartPlugin({ chart, series, activeLanes }: DepthChartPlugi
       );
       if (!(maxSize > 0)) return;
 
-      const laneRight = getProfileLaneRightEdgePx("order_book_depth", cssWidth, activeLanes);
-      const maxBarWidth = getProfileLaneMaxBarWidthPx("order_book_depth", cssWidth, activeLanes);
+      // Fronteira REAL do eixo (chart-plot-area.ts) — mesma correção
+      // aplicada à família inteira de perfis: ancorar no `cssWidth` cru
+      // pintava níveis e etiquetas de parede por baixo dos números do
+      // eixo. Medição sem `activeLanes` de propósito (ver contrato em
+      // chart-profile-lanes.ts).
+      const { plotRight } = measurePlotArea(chart, cssWidth);
+      const laneRight = getProfileLaneRightEdgePx("order_book_depth", plotRight, activeLanes);
+      const maxBarWidth = getProfileLaneMaxBarWidthPx("order_book_depth", plotRight, activeLanes);
       const barHeight = Math.max(2, cssHeight / 40); // faixa fina real por nível
       const bidWalls = detectWalls(bids);
       const askWalls = detectWalls(asks);
