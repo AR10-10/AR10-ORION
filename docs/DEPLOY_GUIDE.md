@@ -1,5 +1,28 @@
 # Deploy Guide — AR10 Cyborg 2.0 iPad One-Tap Cloud Runtime
 
+**Correção (varredura de documentação viva, carta branca do Operador,
+2026-09-08): este documento é do kit de entrega original
+`AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1` (2026-06-20),
+anterior à migração do app vanilla (`index.html`+`js/app.js`+
+`css/ipad-runtime.css`, hoje removidos, ver `ipad_runtime/README.md`)
+para o app React real (`ramber-ui/`, Vite). A "Rota 1" abaixo (workflow +
+URL) continua correta na FORMA — o que mudou é o CONTEÚDO publicado. O
+mecanismo real e atual, confirmado por leitura direta de
+`.github/workflows/deploy-ipad-pwa.yml`: checkout → suíte de testes
+`ramber-ui` como portão (falha para o job) → `npm run build` (Vite) →
+`cp -r dist/. ../ipad_runtime/` → publica `ipad_runtime/` inteiro (build
+do React + `wasm/`/`workers/`/`icons/`/`manifest.webmanifest`/
+`service-worker.js`/o restante de `js/**` que sobrou, todos ainda reais)
+no GitHub Pages. **A linha "Status atual: bloqueado" abaixo é FALSA
+hoje** — corrigida no próprio lugar, Zero Delete. O restante deste
+documento (Rota 2/3, checklist pós-deploy) descreve passos e telas do app
+vanilla (Vault, Diagnóstico Offline, Replay BTC/USDT via UI própria) que
+**não foram re-verificados contra o app React atual nesta auditoria** —
+sinalizado aqui honestamente como não confirmado, não silenciosamente
+mantido como se ainda fosse exato (Disciplina §5). Para o estado real
+verificado do runtime público hoje, ver `ipad_runtime/README.md` e os
+últimos runs de `deploy-ipad-pwa.yml`.**
+
 Ponto de entrada único para publicar `ipad_runtime/` em HTTPS. Para o
 detalhe linha-a-linha de cada rota, ver também
 `ipad_runtime/DEPLOY.md` (mantido como fonte técnica original) — este
@@ -18,8 +41,12 @@ de ambiente sensível. Qualquer host HTTPS estático serve.
 - Dispara em push para `main` ou `claude/eloquent-cannon-qyt86y` que toque
   `ipad_runtime/**`, ou manualmente via Actions → Run workflow.
 - URL final: `https://ar10-10.github.io/AR10-ORION/`.
-- **Status atual: bloqueado** por um passo manual único de admin — ver
-  `docs/GITHUB_PAGES_FIX.md` para o diagnóstico completo e a correção.
+- ~~**Status atual: bloqueado** por um passo manual único de admin~~ —
+  **corrigido, ver nota no topo do arquivo (2026-09-08): o passo de admin
+  já foi feito, o deploy está ao vivo e publicando com sucesso a cada
+  push em `main`.** `docs/GITHUB_PAGES_FIX.md` preserva o diagnóstico
+  original como histórico (também já marcado RESOLVIDO no próprio
+  arquivo).
 
 ## Rota 2: Cloudflare Pages / Vercel / Netlify (manuais, sem GitHub Pages)
 

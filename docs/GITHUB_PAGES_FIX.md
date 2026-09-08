@@ -1,5 +1,21 @@
 # GitHub Pages Fix — por que o deploy ainda falha e como destravar
 
+**RESOLVIDO (achado numa varredura de documentação viva, carta branca do
+Operador, 2026-09-08 — não é o foco original desta tarefa, mas Disciplina
+§1 pede registrar toda limitação real encontrada mesmo assim): este
+documento é de 2026-06-20 e descreve um bloqueio que não existe mais. O
+humano com permissão de admin já fez a correção descrita abaixo (Settings
+→ Pages → Source → "GitHub Actions"); `deploy-ipad-pwa.yml` está publicando
+com sucesso a cada push em `main` há dezenas de PRs (confirmado nesta
+sessão: os 3 runs mais recentes, das PRs #45/#46/#47, todos
+`completed`/`success`; site ao vivo em
+`https://ar10-10.github.io/AR10-ORION/`). O resto deste documento (log de
+erro, diagnóstico, causa raiz) fica abaixo tal qual — Zero Delete, é
+memória real de um problema real — mas é histórico, não uma pendência
+ativa. Quem chegou aqui a partir de `docs/DEPLOY_GUIDE.md`,
+`docs/PROMOTION_CHECKLIST.md` ou `docs/FINAL_IPAD_ONE_LINK_GUIDE.md`: o
+bloqueio que essas referências descrevem já foi removido.**
+
 Documento técnico de apoio a `AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1`.
 Cobre exclusivamente o bloqueio de publicação HTTPS do sub-produto iPad
 (`ipad_runtime/`) via GitHub Pages.

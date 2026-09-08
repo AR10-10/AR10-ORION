@@ -33,6 +33,19 @@ não é uma pendência, é a arquitetura correta e final: o título da seção
 ("nunca caminho de produção") é uma garantia de design, não um alerta de
 trabalho pendente.**
 
+**Correção sobre a nota acima ("a única correção... foi de DOCUMENTAÇÃO",
+mesmo dia, 2026-09-08): não foi só uma. Uma segunda passada pela mesma
+área (motivada por continuar executando sob a mesma carta branca)
+encontrou que a nota de 2026-07-03 sobre `PRECACHE_URLS` (mais abaixo,
+seção `candlestick-patterns.js`) também tinha ficado pra trás — dizia que
+a app React não dependia de nenhum precache real, o que era verdade em
+2026-07-03 e deixou de ser depois que "Fase L" shippou um Service Worker
+real (`main.tsx`+`vite.config.ts`+`sw/build-sw.mjs`, testado). Corrigido
+na seção própria, mesma disciplina Zero Delete. Registrado aqui em vez de
+silenciosamente editado porque a frase "a única correção" já não era
+exata no instante em que foi escrita — Regra de Ouro 4 e Disciplina §1
+(toda limitação real encontrada entra no registro, mesmo sem ser o foco).**
+
 **Atualização (graduação de `hmm-regime-model.js`, 2026-09-07, pedido direto
 do Operador — "graduar HMM + backtest"): 15º engine. Auditoria antes de
 mexer (mesma disciplina de sempre) encontrou que "backtest" já estava
@@ -308,6 +321,32 @@ precache algum hoje. A regra de quarentena abaixo permanece escrita para
 `js/**` (a árvore vanilla, que ainda usa esse mecanismo); os dois engines
 acima foram importados por `ramber-ui/src/engine-bridge.ts` (TypeScript/React),
 não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
+
+**Correção (2ª parte da auditoria de fechamento "ativar tudo o que está em
+laboratório", carta branca do Operador, 2026-09-08 — a nota acima já não
+é mais verdade sobre um ponto, achado numa segunda passada depois do
+primeiro achado do dia sobre este mesmo assunto): a frase "a app React de
+produção não depende de cache-first precache algum hoje" era exata em
+2026-07-03 mas deixou de ser depois — "Fase L" (`ramber-ui/src/main.tsx`,
+`ramber-ui/vite.config.ts`, `ramber-ui/sw/build-sw.mjs`) SUBSTITUIU esse
+mesmo shim de autodestruição dentro do próprio `main.tsx` por um Service
+Worker real: `sw.js` é gerado no build (lista real de arquivos do
+`dist/`, nunca uma lista mantida à mão), registrado só em produção
+(`if (import.meta.env.PROD && 'serviceWorker' in navigator)`, fail-open
+se o registro falhar), com precache atômico do shell + stale-while-
+revalidate para workers/wasm/manifest/icons, e o `activate` do novo SW
+preserva a mesma garantia do shim antigo (apaga todo cache que não é o
+da versão atual, inclusive caches legados). Testado (`tests/production-
+seal.test.ts`, função pura `selectPrecacheFiles`/`generateSwSource`).
+Confirmado por leitura direta dos 3 arquivos, não pela prosa deste
+documento — mesma disciplina de sempre. Isso não muda a conclusão da
+nota de 2026-07-03 sobre a regra de quarentena abaixo (`js/**` continua
+sendo a árvore a que o passo 2 se aplicava; `ramber-ui` continua fora
+dela, agora por ter seu próprio mecanismo automático em vez de por não
+ter mecanismo nenhum) — só corrige o fato pontual que ficou pra trás
+quando Fase L mudou o que havia por baixo dele. Zero Delete: nota de
+2026-07-03 preservada acima tal qual, porque era verdade quando
+escrita.**
 
 ## Utilitários compartilhados (não são engines, não têm `metadata.status`)
 

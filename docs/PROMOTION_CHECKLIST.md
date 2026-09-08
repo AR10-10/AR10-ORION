@@ -35,18 +35,28 @@ e o que falta para destravar o próximo nível.
 - [ ] Painel premium visível em produção.
 - [ ] Permite testar o runtime ponta-a-ponta em produção.
 
-→ **PASS OPERACIONAL: ainda HOLD.** Ação necessária para destravar,
-nessa ordem:
+→ ~~**PASS OPERACIONAL: ainda HOLD.**~~ **Correção (varredura de
+documentação viva, carta branca do Operador, 2026-09-08): os passos 1-3
+abaixo já foram feitos** — o admin trocou Source para "GitHub Actions"
+(ver `docs/GITHUB_PAGES_FIX.md`, já marcado RESOLVIDO), e
+`https://ar10-10.github.io/AR10-ORION/` está ao vivo, publicando com
+sucesso a cada push em `main` (confirmado nesta sessão contra os últimos
+3 runs de `deploy-ipad-pwa.yml`). Isto por si só não promove
+automaticamente para `PASS`: o item 4 (checklist num iPad físico real,
+`docs/IPAD_DIRECT_GUIDE.md`) não foi reverificado nesta auditoria —
+continua genuinamente em aberto, agora só por falta do passo 4, não mais
+pelos passos 1-3. Passos originais preservados abaixo, Zero Delete:
 
-1. Um humano com permissão de **admin** do repositório
+1. ~~Um humano com permissão de **admin** do repositório
    `AR10-10/AR10-ORION` abre
    `https://github.com/AR10-10/AR10-ORION/settings/pages` e troca
-   **Source** para **"GitHub Actions"** (ver `docs/GITHUB_PAGES_FIX.md`
-   para o porquê isso não pode ser feito por nenhum token de Action).
-2. Reexecutar o workflow `deploy-ipad-pwa.yml` (push novo ou
-   `workflow_dispatch`).
-3. Confirmar `https://ar10-10.github.io/AR10-ORION/` responde 200.
-4. Rodar o checklist de `docs/IPAD_DIRECT_GUIDE.md` num iPad real.
+   **Source** para **"GitHub Actions"**~~ — feito.
+2. ~~Reexecutar o workflow `deploy-ipad-pwa.yml`~~ — roda a cada push em
+   `main`, sem intervenção manual, há dezenas de PRs.
+3. ~~Confirmar `https://ar10-10.github.io/AR10-ORION/` responde 200~~ —
+   confirmado.
+4. Rodar o checklist de `docs/IPAD_DIRECT_GUIDE.md` num iPad real. **Ainda
+   não feito — o item genuinamente pendente.**
 5. Só então promover este item de `HOLD` para `PASS` no próximo relatório.
 
 ## Critério de não-regressão (válido em qualquer promoção futura)
