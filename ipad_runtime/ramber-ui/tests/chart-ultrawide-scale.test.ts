@@ -266,3 +266,45 @@ describe('resolveCanvasLabelFontPx: uma decisão de tamanho, não duas', () => {
     }
   });
 });
+
+// ============================================================================
+// §6 da ordem "Visual Terminal Professional": respiro à direita NUNCA pode
+// ser margem fixa que só funciona numa resolução.
+// ============================================================================
+// Achado real desta auditoria: o gráfico PRINCIPAL já era adaptativo
+// (resolveAdaptiveRightOffset — base por monitor + carga real do Trade
+// Plan), mas os dois gráficos secundários (TradFi e MEXC) tinham
+// `rightOffset: 8` cravado — exatamente a margem fixa que §6 proíbe, e uma
+// inconsistência real com §27 (consistência global). Padrão de código:
+// o bug provável aqui é "esqueceram de ligar A com B", não matemática.
+describe('§6: respiro à direita dos gráficos secundários vem da MESMA régua por monitor', () => {
+  for (const [nome, caminho] of [
+    ['TradFiRealChart', '../src/omnibox/TradFiRealChart.tsx'],
+    ['MexcRealChart', '../src/omnibox/MexcRealChart.tsx'],
+  ] as const) {
+    it(`${nome} usa resolveChartUltraWideScale — nunca mais um rightOffset cravado`, () => {
+      const src = read(caminho);
+      expect(src).toContain('import { resolveChartUltraWideScale } from "../chart/chart-ultrawide-scale";');
+      expect(src).toContain('rightOffset: resolveChartUltraWideScale(window.innerWidth).rightOffset,');
+      expect(src).not.toContain('rightOffset: 8,');
+    });
+
+    it(`${nome} usa só a BASE por tela — nunca soma carga de Trade Plan que ele não desenha`, () => {
+      // resolveAdaptiveRightOffset conta Entry/Invalidation/TPs reais. Estes
+      // dois gráficos não têm Trade Plan nenhum: somar a carga aqui
+      // reservaria espaço para níveis que nunca existem (dado fabricado).
+      // Proíbe a CHAMADA e o IMPORT — nunca a palavra solta, que aparece de
+      // propósito no comentário que explica esta mesma decisão.
+      const src = read(caminho);
+      expect(src).not.toContain('resolveAdaptiveRightOffset(');
+      expect(src).not.toMatch(/import\s*\{[^}]*resolveAdaptiveRightOffset/);
+    });
+  }
+
+  it('a régua por monitor realmente varia (senão "adaptativo" seria só um nome)', () => {
+    expect(resolveChartUltraWideScale(834).rightOffset).toBe(8);
+    expect(resolveChartUltraWideScale(2560).rightOffset).toBe(12);
+    expect(resolveChartUltraWideScale(2560).rightOffset)
+      .toBeGreaterThan(resolveChartUltraWideScale(834).rightOffset);
+  });
+});

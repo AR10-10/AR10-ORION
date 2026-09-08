@@ -42,6 +42,7 @@ import {
 } from "lightweight-charts";
 import { Radio, Satellite } from "lucide-react";
 import { getMexcChartCandles } from "../engine-bridge";
+import { resolveChartUltraWideScale } from "../chart/chart-ultrawide-scale";
 import type { UniversalCryptoSymbol } from "./universal-symbol";
 
 // Mesma cadência do ciclo cripto principal e de TradFiRealChart (ver
@@ -105,7 +106,14 @@ export function MexcRealChart({
         borderColor: "rgba(138, 180, 248, 0.15)",
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 8,
+        // §6 da ordem "Visual Terminal Professional": o respiro à direita
+        // não pode ser margem fixa que só funciona numa resolução. Mesma
+        // régua por classe de monitor que o gráfico principal já usa
+        // (chart-ultrawide-scale.ts) — 8 larguras de barra até 1440px, 12
+        // acima. Só a BASE por tela: este gráfico não desenha Trade Plan,
+        // então somar o ajuste por carga (resolveAdaptiveRightOffset)
+        // reservaria espaço para níveis que nunca existem aqui.
+        rightOffset: resolveChartUltraWideScale(window.innerWidth).rightOffset,
       },
       handleScroll: {
         mouseWheel: true,

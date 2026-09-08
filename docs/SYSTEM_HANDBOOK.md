@@ -8211,6 +8211,211 @@ cobertura de teste, não a uma captura de tela real).
 
 ---
 
+### 6.102 ORDEM "VISUAL TERMINAL PROFESSIONAL" (38 seções) — auditoria
+obrigatória (§0/§29) + as 2 correções reais que ela encontrou
+
+A ordem manda, na própria §0, auditar ANTES de tocar em código. Feito — e
+a auditoria mudou o escopo do que valia a pena implementar: dois itens que
+o pedido descrevia como pendentes já estavam prontos, um descrevia algo
+que não existe, e um era um defeito real nunca diagnosticado.
+
+**§5 — DEFEITO REAL, causa raiz encontrada e corrigida.** Relato literal:
+"Volume Profile ficando ABAIXO DA NUMERAÇÃO". Não era percepção — é
+mensurável. `VolumeProfilePlugin`, `TpoProfilePlugin` e `DepthChartPlugin`
+ancoravam suas lanes no `cssWidth` CRU do canvas, que inclui a faixa do
+eixo de preço. Como `volume_profile` é a lane 0 (offset 0), sua borda
+direita era literalmente `cssWidth`: os ~72px mais à direita de CADA barra
+— e a linha inteira do POC — eram pintados POR BAIXO dos números do eixo
+(72px é medição real registrada no cabeçalho de `chart-plot-area.ts`,
+Chromium, viewport iPad 834px).
+
+O mais relevante do achado: é a MESMA classe de defeito que
+`chart-plot-area.ts` foi criado para corrigir, e a família de perfis tinha
+ficado **de fora** daquela correção — que cobriu só os outros 6 plugins
+(InstitutionalZone/LiquidityZones/NeuralMarketAura/SessionKeyLevels/
+StructureBreakMarkers/TradePlanZone). Correção: os 3 passam a ancorar em
+`measurePlotArea(chart, cssWidth).plotRight`, a fronteira real do eixo —
+zero arquitetura nova (§30: reutilizar, nunca inventar). A medição é
+deliberadamente feita SEM `activeLanes`: a reserva das lanes é justamente
+o que estas funções posicionam, passá-la de novo subtrairia a mesma faixa
+duas vezes. O contrato do parâmetro (`availableWidth` = largura
+DESENHÁVEL, nunca o container) ficou escrito no próprio
+`chart-profile-lanes.ts`, pra um plugin futuro não repetir o bug.
+
+**§6 — inconsistência real, menor.** O gráfico PRINCIPAL já tinha respiro
+adaptativo de verdade (`resolveAdaptiveRightOffset`: base por classe de
+monitor + ajuste pela carga REAL do Trade Plan, em larguras de barra) —
+§6 já estava satisfeita ali. Mas `TradFiRealChart` e `MexcRealChart`
+tinham `rightOffset: 8` cravado: exatamente a "margem fixa que funciona
+só numa resolução" que §6 proíbe, e uma quebra de §27 (consistência
+global). Os dois passam a usar a MESMA régua por monitor. Só a BASE, de
+propósito: nenhum dos dois desenha Trade Plan, então somar o ajuste por
+carga reservaria espaço para níveis que nunca existem — dado fabricado.
+
+**§4 — o pedido descreve algo que não existe.** "Volume comum não pode
+ficar embaixo do gráfico, mover para a lateral": varredura completa
+(`grep` por `Histogram`/série de volume em todo `src/`) confirma que o
+gráfico principal **nunca teve** faixa de volume inferior. As únicas
+ocorrências de "Histogram" no repositório são o histograma do MACD (um
+número num painel) e o motor `nexus/volume-profile.ts`. O volume já vive
+lateralmente — é o próprio Volume Profile. Nada a mover; registrado aqui
+em vez de "implementado" para não fabricar uma entrega.
+
+**§1/§2/§3/§10/§13 — já entregues em rodadas anteriores**, confirmado por
+leitura direta do código: TP/ST compactos com separador de milhar (§6.101),
+coluna de eixo com régua única e anti-colisão determinística
+(`PriceLabelStackPlugin` + `price-label-stack.ts`), fonte do eixo
+responsiva por classe de monitor (`resolveChartUltraWideScale`, 11/12/13px),
+Direction Arrow reduzida a 10px (ORDEM 3 Stage 1) e countdown da vela em
+todos os 14 timeframes reais (§6.100).
+
+**Testes**: 10 novos. A geometria do defeito ganhou **execução real** (o
+teste REPRODUZ a invasão antiga — `bordaAntiga - plotRight === 72 + 4` —
+e prova que nenhuma das 3 lanes cruza a fronteira depois da correção,
+mais o caso fail-closed de eixo não medido); a fiação dos 3 plugins e dos
+2 gráficos secundários ganhou padrão-no-código, incluindo a regressão
+travada ("`cssWidth` cru nunca mais"). `npm run verify`: tsc limpo,
+**292 arquivos / 4794 testes**, build ok. Playwright real nos **10 perfis**
+que §19/§38-E exigem (iPad Mini/iPad/iPad Pro 11/iPad Pro 13 em Portrait
+e Landscape + Desktop + Ultrawide): zero overflow horizontal, zero
+overflow vertical, zero page error em todos.
+
+**Preservação (§38-C), verificada por diff:** nenhum arquivo de
+`Decision Engine`, `Risk Engine`, Trade semantics, Entry, Trade Plan
+logic, fontes de dado, conectores, READ_ONLY/SHADOW/FAIL_CLOSED foi
+tocado. O diff inteiro é geometria de canvas + 2 opções de `timeScale` +
+testes + este registro.
+
+**O que continua pendente, honestamente** (§8/§9 hierarquia de peso de
+linha, §22/§29 varredura completa de menus/ícones/painéis, §14/§15
+unificação global de cor e tipografia): são reformas amplas que exigem o
+mesmo tipo de auditoria peça a peça que estes dois itens receberam —
+cada uma é sua própria rodada. Entregar uma varredura de "todos os
+ícones, menus, painéis e cores" numa tacada só produziria exatamente a
+mudança apressada que a Disciplina de trabalho item 5 do `CLAUDE.md`
+manda documentar em vez de forçar.
+
+---
+
+### 6.103 ORDEM "AUDITORIA INTEGRAL DO ORGANISMO" (§39-§60) — o mapa §60
+completo + a única lacuna fechada nesta rodada
+
+A ordem pede um mapa de dois mundos (camada visível + motor matemático) e
+22 seções sobre outcome/calibração/maturidade. A auditoria mostrou que a
+maior parte disso **já existe e é real** — e localizou com precisão o que
+não existe. Registrar isso honestamente vale mais que construir 22
+sistemas novos por cima de infraestrutura que já faz o trabalho.
+
+#### O que a auditoria encontrou JÁ CONSTRUÍDO
+
+| Seção | Estado real |
+|---|---|
+| §44 Rastreamento da decisão | **Real.** `signal-track-record.ts` congela `PlanOpenContext` na abertura: ETA (provável e piso), estado VWAP, estado Nexus Line, Institutional Score, **regime** real (`regime-engine.js`), **structureLabel** real (`market-structure-engine.js`) e a leitura de `model-fusion.ts` já orientada à direção tomada. É o "reconstruir o estado do mercado na hora da decisão" que a §44 pede. |
+| §45 Outcome tracking | **Real.** `TrackedPlan` grava `openedAt`, `status` (OPEN/TARGET_HIT/PARTIAL_HIT/STOP_HIT/REPLACED), `resolvedAt`, `resolvedPrice`, `targetsHit` em ordem, `breakEvenSuggested`. Histórico com teto (`TRACK_RECORD_HISTORY_CAP = 100`). |
+| §47 Score ≠ probabilidade | **Já é lei escrita**, não uma boa intenção: Regra de Ouro 2 do `CLAUDE.md`, repetida no cabeçalho de `institutional-score.ts`, `confluence-engine.ts` e `council.ts`. O Score é massa de confluência, rotulada como tal. |
+| §48 Calibração empírica | **Real.** `platt-calibration.ts` — Platt scaling sobre trades REALMENTE resolvidos, consumindo a confiança de modelo congelada na abertura, com piso de amostra `MIN_TRADES_FOR_VALID_EXPECTANCY` (30) importado de `expectancy.ts` — zero segunda constante "30". Abaixo do piso: fail-closed com razão real, nunca uma curva ajustada em 4 pontos. |
+| §49 Hit-rate | **Parcial.** `targetHits`/`partialHits`/`stopHits` são contadores reais e `targetsHit` por plano permite derivar TP1/TP2/TP3 — mas a taxa separada por alvo não é computada nem apresentada hoje. |
+| §57 Relatório de maturidade | **Parcial.** `self-diagnostics.ts` (sob demanda) + o relatório de expectancy (com amostra, janela recente via `RECENT_TRADES_MIN_SAMPLE`, e aviso explícito abaixo do piso) cobrem parte; o recorte completo da §57 não existe. |
+| §58 Honestidade estatística | **Já é o comportamento padrão** de todo motor desta base: `DADOS_INSUFICIENTES` com razão real em vez de número bonito. |
+
+#### §43 — a lacuna real, e a única fechada nesta rodada
+
+**O achado, medido e não suposto.** O princípio da §43 ("cinco indicadores
+derivados da mesma candle não são cinco fontes independentes") **já é
+confiável nesta base, num lugar só**: `institutional-zones.ts` conta
+`new Set(group.map(m => m.sourceKind)).size` — "quantas FERRAMENTAS
+diferentes (não instâncias) concordam aqui" — e descarta a zona abaixo de
+`MIN_DISTINCT_SOURCES_FOR_ZONE`. Ou seja: a §43 não é conceito novo aqui.
+
+Onde ele falta, com linha e razão:
+1. `src/consensus/ensemble-engine.js` pondera cada membro por
+   `getSensitivity(regime, familia)` — peso por **sensibilidade ao
+   regime**, nunca por independência. Dois membros da MESMA família entram
+   com peso cheio em `totalWeight`; o pool nunca pergunta se as duas vozes
+   descansam sobre a mesma evidência.
+2. Mais afiado: `council.ts` e `confluence-engine.ts` passam
+   `familia: null` **de propósito** (documentado em `weight-matrix.js`,
+   linhas 41-42). Nesses dois pools todo membro cai em
+   `UNMODULATED_WEIGHT` — não existe informação de família, então a
+   pergunta da §43 sequer PODE ser feita ali hoje.
+3. A sobreposição é real: a família `momentum` já embala "k-NN Lorentziano
+   + rótulos de estrutura 15m/1H"; o Conselho tem StructureAgent E
+   MomentumAgent votando como vozes separadas; a Matriz Multi-Timeframe
+   vota 15m e 1h de novo. **Estrutura derivada das mesmas velas é contada
+   nos três pools, cada vez como uma voz cheia.**
+
+**Construído:** `nexus/evidence-independence.ts` —
+`measureEvidenceIndependence(voices, now)`, função pura e determinística
+que converte o "7 concordam" da tela no honesto "7 vozes apoiadas em N
+famílias distintas": `agreeingVoices`, `assessedVoices`,
+`unknownFamilyVoices`, `distinctFamilies`, `independenceRatio`,
+`largestClusterFamily/Size`. Generaliza a primitiva já provada de
+`institutional-zones.ts` (contar ferramentas distintas, nunca instâncias)
+e reusa o mesmo piso 2 — nenhum limiar novo inventado.
+
+**Fail-closed (§58), e é o ponto mais importante do módulo:** voz sem
+família NUNCA é assumida independente — fica fora do índice, contada à
+parte. Se nenhuma voz tem família — que é **literalmente o estado de hoje
+do Conselho e do Confluence Engine** — a leitura devolve
+`DADOS_INSUFICIENTES` com a razão real. O módulo **relata o ponto cego do
+sistema em vez de encobri-lo**.
+
+**O que ele deliberadamente NÃO faz (§42/§51/LEI 24):** não altera peso
+nenhum do pool, não produz direção, score combinado nem probabilidade. A
+§42 manda IDENTIFICAR → DOCUMENTAR → COMPARAR → VALIDAR → DECIDIR, nunca
+reponderar automaticamente; a §51 (Learning Governor) proíbe mexer em
+silêncio no Decision Engine/Risk/thresholds. Mudar a matemática do pool a
+partir deste achado é decisão do Operador, com Shadow e validação
+(§53/§54) — não consequência automática de medir. **Medir primeiro é
+exatamente o que a própria ordem manda.**
+
+17 testes de execução real (o cenário literal da §43 — 5 vozes/1 família —
+mais discordância, família em branco, não-mutação, determinismo do
+desempate, e a guarda de que a leitura não expõe campo de direção/
+probabilidade).
+
+#### §60 — o mapa entregue
+
+- **VISUAL**: componente → fonte → camada → prioridade → estado. As 4
+  dimensões declaradas do gráfico já existem como módulos próprios:
+  `chart-profile-lanes.ts` (x), `chart-time-ribbon-lanes.ts` (y),
+  `chart-layer-depth.ts` (z), `chart-plot-area.ts` (fronteira com o eixo).
+  A tabela de papéis por fonte vive na seção 7 deste handbook (A-E).
+- **MATEMÁTICO**: 110 módulos em `nexus/` + 17 engines em
+  `research/engines/` (15 graduados, ver `QUARANTINE.md`), cada um com
+  cabeçalho declarando entrada/saída/consumidor.
+- **DECISÃO**: Evidence (`evidence-fusion.ts`, agora com
+  `evidence-independence.ts` medindo a diversidade real) → pools
+  (`ensemble-engine.js`/`council.ts`/`multi-timeframe-engine.ts`) →
+  `confluence-engine.ts` → **Core Engine (único emissor, LEI 24)** →
+  `trade-plan.ts` → `trade-plan-view.ts` → canvas.
+- **PERFORMANCE**: `signal-track-record.ts` → `expectancy.ts` (R-múltiplo
+  real após custos, `trade-simulation.ts`) → `platt-calibration.ts`.
+- **MATURIDADE**: Observação e Medição **existem**; Calibração **existe**
+  com piso de amostra; Shadow e Validação out-of-sample **não existem**.
+
+#### Lacunas reais que ficam declaradas (não fabricadas)
+
+- **§54 walk-forward / out-of-sample**: `platt-calibration.ts` ajusta sobre
+  TODOS os trades utilizáveis — não há split train/validation. Sem isso,
+  §55 (anti-overfitting) não tem como ser respondida com evidência.
+- **§52 `CALIBRATION STALE`**: existe a semente (janela recente vs. total
+  em `expectancy.ts`), não o estado declarado nem o gate que impede
+  apresentar um rank como calibrado depois que ele perdeu validade.
+- **§53 Shadow**: não há comparação versão-atual × nova-calibração.
+- **§46 matriz de resultados** completa (direção × timeframe × ativo ×
+  regime × volatilidade × qualidade × confluência): hoje a estratificação
+  real é por regime; o resto do recorte não existe.
+- **§49** hit-rate separado por TP1/TP2/TP3: derivável de `targetsHit`,
+  não computado.
+
+Cada uma é sua própria rodada, na ordem que a própria §50 estabelece —
+observar, medir, calibrar, validar, homologar. Construir as cinco de uma
+vez seria exatamente o "OBSERVAR → ASSUMIR → ALTERAR → DECLARAR QUE FICOU
+MELHOR" que o Princípio Central da ordem proíbe.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

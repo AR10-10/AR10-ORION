@@ -149,28 +149,50 @@ export function getProfileLaneOffsetFraction(
   return resolveProfileLanes(active).get(id)?.offsetFraction ?? 0;
 }
 
-/** Borda direita real (em px CSS) da lane deste plugin, dado o cssWidth
- *  real do canvas — cada plugin usa este valor no lugar do `cssWidth`
- *  puro em TODO desenho ancorado à direita (fillRect/strokeRect/moveTo/
- *  lineTo/posição de label). Para volume_profile (offset 0) o valor é
- *  idêntico a cssWidth — zero mudança visual para essa lane. */
+// ── CONTRATO DA LARGURA (`availableWidth`) ─────────────────────────────
+// ACHADO REAL, relatado pelo Operador com estas palavras: "Volume Profile
+// atualmente está desalinhado (ficando ABAIXO DA NUMERAÇÃO)".
+//
+// CAUSA RAIZ MEDIDA: as duas funções abaixo recebiam o `cssWidth` CRU do
+// canvas — que inclui a faixa do eixo de preço (72px reais medidos em
+// Chromium, viewport iPad 834px; ver o cabeçalho de chart-plot-area.ts).
+// Como a lane 0 (volume_profile) tem offset 0, sua borda direita era
+// literalmente `cssWidth`: os ~72px mais à direita de CADA barra, e a
+// linha inteira do POC, eram pintados POR BAIXO dos números do eixo.
+//
+// É exatamente a mesma classe de defeito que chart-plot-area.ts foi criado
+// para corrigir — e a família de perfis (VolumeProfile/TPO/Depth) tinha
+// ficado DE FORA daquela correção, que cobriu só os outros 6 plugins.
+//
+// CONTRATO A PARTIR DE AGORA: `availableWidth` é a largura DESENHÁVEL
+// (`measurePlotArea(chart, cssWidth).plotRight` — a fronteira real do
+// eixo), nunca o `cssWidth` do container. Chamar sem `activeLanes` na
+// medição é deliberado: a reserva das lanes é justamente o que estas
+// funções POSICIONAM — passá-la de novo subtrairia a mesma faixa duas
+// vezes.
+
+/** Borda direita real (px CSS) da lane deste plugin dentro da área
+ *  DESENHÁVEL — cada plugin usa este valor em TODO desenho ancorado à
+ *  direita (fillRect/strokeRect/moveTo/lineTo/posição de label). Ver o
+ *  contrato de `availableWidth` acima: passar o `cssWidth` cru aqui é o
+ *  bug de "perfil por baixo da numeração". */
 export function getProfileLaneRightEdgePx(
   id: ChartProfileLaneId,
-  cssWidth: number,
+  availableWidth: number,
   active: readonly ChartProfileLaneId[] = LANE_ORDER,
 ): number {
-  return cssWidth - getProfileLaneOffsetFraction(id, active) * cssWidth;
+  return availableWidth - getProfileLaneOffsetFraction(id, active) * availableWidth;
 }
 
-/** Largura máxima real (em px CSS) da maior barra/nível desta lane, dado
- *  o cssWidth real do canvas — substitui `cssWidth * MAX_BAR_WIDTH_FRACTION`. */
+/** Largura máxima real (px CSS) da maior barra/nível desta lane dentro da
+ *  área DESENHÁVEL — substitui `cssWidth * MAX_BAR_WIDTH_FRACTION`. */
 export function getProfileLaneMaxBarWidthPx(
   id: ChartProfileLaneId,
-  cssWidth: number,
+  availableWidth: number,
   active: readonly ChartProfileLaneId[] = LANE_ORDER,
 ): number {
   const resolved = resolveProfileLanes(active).get(id);
-  return (resolved?.widthFraction ?? LANE_WIDTH_FRACTION[id]) * cssWidth;
+  return (resolved?.widthFraction ?? LANE_WIDTH_FRACTION[id]) * availableWidth;
 }
 
 // ============================================================================

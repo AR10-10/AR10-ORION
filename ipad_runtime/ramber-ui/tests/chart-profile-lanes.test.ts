@@ -27,8 +27,59 @@ import {
   type ChartProfileLaneId,
 } from "../src/chart/chart-profile-lanes";
 
+import { resolvePlotArea, PLOT_AXIS_GAP_PX } from "../src/chart/chart-plot-area";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), "utf8");
+
+// ============================================================================
+// O DEFEITO RELATADO: "Volume Profile ficando ABAIXO DA NUMERAÇÃO"
+// ============================================================================
+// Execução real da geometria — a pergunta é "os números estão certos?",
+// então esta parte NÃO é teste de padrão de código: mede de verdade quantos
+// pixels do perfil caíam sob o eixo antes, e prova que agora são zero.
+describe("perfis nunca mais desenham por baixo do eixo de preço (achado real do Operador)", () => {
+  // Medição real registrada no cabeçalho de chart-plot-area.ts (Chromium,
+  // viewport iPad 834px, mesmas opções de rightPriceScale de produção).
+  const CSS_WIDTH = 834;
+  const AXIS_WIDTH = 72;
+
+  it("REPRODUZ o defeito: ancorado no cssWidth cru, a lane invadia a faixa do eixo", () => {
+    const { plotRight } = resolvePlotArea(CSS_WIDTH, AXIS_WIDTH);
+    const bordaAntiga = getProfileLaneRightEdgePx("volume_profile", CSS_WIDTH);
+    // A borda antiga era literalmente o container inteiro...
+    expect(bordaAntiga).toBe(CSS_WIDTH);
+    // ...e invadia a faixa do eixo (72px) + a folga padrão (4px).
+    const invasao = bordaAntiga - plotRight;
+    expect(invasao).toBe(AXIS_WIDTH + PLOT_AXIS_GAP_PX);
+    expect(invasao).toBeGreaterThan(0);
+  });
+
+  it("CORRIGIDO: ancorada no plotRight medido, nenhuma das 3 lanes cruza a fronteira do eixo", () => {
+    const { plotRight } = resolvePlotArea(CSS_WIDTH, AXIS_WIDTH);
+    const ativas: ChartProfileLaneId[] = ["volume_profile", "tpo_profile", "order_book_depth"];
+    for (const id of ativas) {
+      const bordaDireita = getProfileLaneRightEdgePx(id, plotRight, ativas);
+      const larguraMax = getProfileLaneMaxBarWidthPx(id, plotRight, ativas);
+      // A barra mais larga possível desta lane vai de (borda - largura) até borda.
+      expect(bordaDireita).toBeLessThanOrEqual(plotRight);
+      expect(bordaDireita - larguraMax).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("a lane 0 (volume_profile) encosta EXATAMENTE na fronteira do eixo — nem sobra, nem invade", () => {
+    const { plotRight } = resolvePlotArea(CSS_WIDTH, AXIS_WIDTH);
+    expect(getProfileLaneRightEdgePx("volume_profile", plotRight)).toBe(plotRight);
+  });
+
+  it("fail-closed herdado: eixo não medido cai no fallback e a lane continua dentro do desenhável", () => {
+    // axisWidth inválido => resolvePlotArea usa PLOT_AXIS_FALLBACK_WIDTH_PX,
+    // nunca 0 (que faria o perfil voltar a vazar por baixo do eixo).
+    const { plotRight } = resolvePlotArea(CSS_WIDTH, 0);
+    expect(plotRight).toBeLessThan(CSS_WIDTH);
+    expect(getProfileLaneRightEdgePx("volume_profile", plotRight)).toBeLessThan(CSS_WIDTH);
+  });
+});
 
 describe("chart-profile-lanes: matemática pura de offset/largura", () => {
   it("volume_profile é a lane 0 (rightmost) — offset zero, comportamento visual idêntico a antes", () => {
@@ -96,20 +147,35 @@ describe("chart-profile-lanes: fiação real nos 3 plugins (nunca cssWidth liter
   const tpoProfilePlugin = () => read("../src/chart/TpoProfilePlugin.tsx");
   const depthChartPlugin = () => read("../src/chart/DepthChartPlugin.tsx");
 
-  it("VolumeProfilePlugin importa e usa a lane compartilhada", () => {
+  // ACHADO REAL do Operador ("Volume Profile ficando ABAIXO DA NUMERAÇÃO"):
+  // os 3 plugins ancoravam a lane no `cssWidth` CRU — que inclui a faixa do
+  // eixo de preço (72px medidos, ver chart-plot-area.ts). A família de
+  // perfis tinha ficado de fora da correção que já cobria os outros 6
+  // plugins. Agora a âncora é o `plotRight` REAL medido, e estes testes
+  // travam justamente isso: `cssWidth` cru nunca mais pode voltar.
+  it("VolumeProfilePlugin ancora a lane no plotRight medido — nunca no cssWidth cru (que fica por baixo do eixo)", () => {
     const src = volumeProfilePlugin();
     expect(src).toContain('import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";');
-    expect(src).toContain('getProfileLaneRightEdgePx("volume_profile", cssWidth, activeLanes)');
-    expect(src).toContain('getProfileLaneMaxBarWidthPx("volume_profile", cssWidth, activeLanes)');
+    expect(src).toContain('import { measurePlotArea } from "./chart-plot-area";');
+    expect(src).toContain("const { plotRight } = measurePlotArea(chart, cssWidth);");
+    expect(src).toContain('getProfileLaneRightEdgePx("volume_profile", plotRight, activeLanes)');
+    expect(src).toContain('getProfileLaneMaxBarWidthPx("volume_profile", plotRight, activeLanes)');
+    // A regressão travada: a lane nunca mais pode ser medida do container.
+    expect(src).not.toContain('getProfileLaneRightEdgePx("volume_profile", cssWidth');
+    expect(src).not.toContain('getProfileLaneMaxBarWidthPx("volume_profile", cssWidth');
     expect(src).not.toContain("MAX_BAR_WIDTH_FRACTION");
     expect(src).not.toContain("ctx.fillRect(cssWidth - w,");
   });
 
-  it("TpoProfilePlugin importa e usa a lane compartilhada (bars + POC + Initial Balance)", () => {
+  it("TpoProfilePlugin ancora a lane no plotRight medido (bars + POC + Initial Balance)", () => {
     const src = tpoProfilePlugin();
     expect(src).toContain('import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";');
-    expect(src).toContain('getProfileLaneRightEdgePx("tpo_profile", cssWidth, activeLanes)');
-    expect(src).toContain('getProfileLaneMaxBarWidthPx("tpo_profile", cssWidth, activeLanes)');
+    expect(src).toContain('import { measurePlotArea } from "./chart-plot-area";');
+    expect(src).toContain("const { plotRight } = measurePlotArea(chart, cssWidth);");
+    expect(src).toContain('getProfileLaneRightEdgePx("tpo_profile", plotRight, activeLanes)');
+    expect(src).toContain('getProfileLaneMaxBarWidthPx("tpo_profile", plotRight, activeLanes)');
+    expect(src).not.toContain('getProfileLaneRightEdgePx("tpo_profile", cssWidth');
+    expect(src).not.toContain('getProfileLaneMaxBarWidthPx("tpo_profile", cssWidth');
     expect(src).not.toContain("MAX_BAR_WIDTH_FRACTION");
     expect(src).not.toContain("ctx.fillRect(cssWidth - w,");
     // As 2 linhas de Initial Balance (drawIbLine) também migraram do
@@ -117,14 +183,24 @@ describe("chart-profile-lanes: fiação real nos 3 plugins (nunca cssWidth liter
     expect(src).not.toContain("ctx.moveTo(cssWidth - maxBarWidth,");
   });
 
-  it("DepthChartPlugin importa e usa a lane compartilhada (bids/asks + wall + label)", () => {
+  it("DepthChartPlugin ancora a lane no plotRight medido (bids/asks + wall + label)", () => {
     const src = depthChartPlugin();
     expect(src).toContain('import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";');
-    expect(src).toContain('getProfileLaneRightEdgePx("order_book_depth", cssWidth, activeLanes)');
-    expect(src).toContain('getProfileLaneMaxBarWidthPx("order_book_depth", cssWidth, activeLanes)');
+    expect(src).toContain('import { measurePlotArea } from "./chart-plot-area";');
+    expect(src).toContain("const { plotRight } = measurePlotArea(chart, cssWidth);");
+    expect(src).toContain('getProfileLaneRightEdgePx("order_book_depth", plotRight, activeLanes)');
+    expect(src).toContain('getProfileLaneMaxBarWidthPx("order_book_depth", plotRight, activeLanes)');
+    expect(src).not.toContain('getProfileLaneRightEdgePx("order_book_depth", cssWidth');
+    expect(src).not.toContain('getProfileLaneMaxBarWidthPx("order_book_depth", cssWidth');
     expect(src).not.toContain("MAX_BAR_WIDTH_FRACTION");
     expect(src).not.toContain("ctx.fillRect(cssWidth - w,");
     expect(src).not.toContain("cssWidth - w - size.width - 4");
+  });
+
+  it("os 3 medem SEM activeLanes — passar a reserva de lanes ali subtrairia a mesma faixa duas vezes", () => {
+    for (const src of [volumeProfilePlugin(), tpoProfilePlugin(), depthChartPlugin()]) {
+      expect(src).not.toContain("measurePlotArea(chart, cssWidth, activeLanes)");
+    }
   });
 
   it("LiquidationHeatmapPlugin NUNCA vira uma LANE DE PERFIL (continua ancorado à esquerda, precedente OMEGA CORE V-MAX Fase 8.1)", () => {
