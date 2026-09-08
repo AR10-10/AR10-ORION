@@ -27,6 +27,7 @@ const trade = (modelAgreement: number | null, netR: number): TradeCostResult => 
   fundingR: 0,
   netR,
   holdingMs: 1000,
+  resolvedAt: 0,
   regime: null,
   fingerprint: null,
   modelAgreement,

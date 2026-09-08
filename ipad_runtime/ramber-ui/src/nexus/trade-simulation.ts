@@ -75,6 +75,16 @@ export interface TradeCostResult {
   fundingR: number; // sempre >= 0, sempre subtraído (nunca assume funding a favor)
   netR: number; // grossR - commissionR - slippageR - fundingR
   holdingMs: number;
+  /** Instante REAL de resolução do trade (epoch ms). Aditivo (rodada de
+   *  caça a defeitos da ordem "EVOLUÇÃO COMPLETA"): esta função já LIA
+   *  `tracked.resolvedAt` para calcular `holdingMs`, e descartava o
+   *  instante absoluto na mesma linha. Sem ele, nada a jusante consegue
+   *  perguntar QUE IDADE tem a amostra — e a "Prob. Calibrada" podia ser
+   *  exibida com a mesma autoridade visual tendo sido treinada em trades
+   *  de outro regime, meses atrás. Mesma classe de achado já corrigida em
+   *  computeLevelStrength() (support-resistance-engine.js): o dado sempre
+   *  esteve aqui, morria na fronteira. */
+  resolvedAt: number;
   regime: string | null; // engine.marketRegime.regime carimbado na abertura (pode ser null em registros antigos)
   // Escopo Cirúrgico (Operador, Fase 1): assinatura real do cenário
   // (nexus/scenario-fingerprint.ts) — permite agrupar por família de
@@ -133,6 +143,7 @@ export function simulateTradeCosts(
     fundingR,
     netR,
     holdingMs,
+    resolvedAt: tracked.resolvedAt,
     regime: tracked.contextAtOpen?.regime ?? null,
     fingerprint: computeScenarioFingerprint(tracked.contextAtOpen),
     modelAgreement: tracked.contextAtOpen?.modelAgreement ?? null,

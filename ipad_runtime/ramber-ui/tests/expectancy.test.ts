@@ -18,6 +18,7 @@ function mkResult(netR: number, status: TradeCostResult['status'] = netR > 0 ? '
     fundingR: 0,
     netR,
     holdingMs: 0,
+    resolvedAt: 0,
     regime: null,
     fingerprint: null,
     modelAgreement: null,

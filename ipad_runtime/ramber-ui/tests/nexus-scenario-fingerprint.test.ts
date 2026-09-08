@@ -67,6 +67,7 @@ function tradeResult(fingerprint: string | null, netR: number): TradeCostResult 
     fundingR: 0,
     netR,
     holdingMs: 0,
+    resolvedAt: 0,
     regime: null,
     fingerprint,
     modelAgreement: null,

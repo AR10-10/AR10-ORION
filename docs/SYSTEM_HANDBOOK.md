@@ -8824,6 +8824,94 @@ diferença entre um terminal que mede a si mesmo e um que se elogia.
 `npm run verify`: tsc limpo, **300 arquivos / 4928 testes** (11 novos),
 build ok.
 
+### 6.110 CALIBRATION STALE + o card para de repetir a mesma frase 3x
+
+Caça a defeitos sob carta branca do Operador, e o achado principal é da
+mesma família da §6.106: **o dado sempre esteve lá e morria na fronteira.**
+
+#### O defeito: a probabilidade não tinha idade
+
+`simulateTradeCosts()` (`trade-simulation.ts`) **lia** `tracked.resolvedAt`
+para calcular `holdingMs` — e descartava o instante absoluto na mesma
+linha. `TradeCostResult` sabia QUANTO cada trade durou, mas não QUANDO
+aconteceu.
+
+Consequência na tela: a "Prob. Calibrada" aparecia com a **mesma
+autoridade visual** tendo sido treinada em 40 trades resolvidos há três
+meses (noutro regime) ou em 40 da semana passada. O Operador não tinha
+como distinguir. Nada no repositório media frescor de calibração —
+confirmado por varredura (`stale|frescor|idade` na pilha de calibração:
+zero ocorrências reais).
+
+#### A regra, e por que ela não inventa número
+
+"Quando uma calibração fica velha?" não tem resposta universal, e este
+projeto proíbe fabricar limiar. Então a regra é **auto-referente**:
+
+> **ESTÁ EXTRAPOLANDO** quando `(agora − trade mais novo) > (trade mais
+> novo − trade mais antigo)`
+
+Se a amostra cobre 30 dias e o trade mais recente tem 60, você projeta
+para frente mais do que mediu para trás. Zero constante — é a comparação
+entre duas medições reais da própria amostra.
+
+Precedente de forma: `chart-integrity.ts` já decidiu que frescor se mede
+em **múltiplos de uma referência real**, nunca em ms fixo. Aqui a
+referência é o alcance da própria amostra. A idade também sai em **barras**
+do timeframe (`TIMEFRAME_MS`), que é a unidade em que o Operador pensa.
+
+`nexus/calibration-freshness.ts` (novo, puro, 19 testes de execução real).
+Fail-closed em toda ponta: `resolvedAt` ausente é **descartado**, nunca
+lido como 0 — um 0 dataria o trade em 1970 e inflaria o alcance em 56
+anos, fazendo o veredito ser sempre "dentro".
+
+#### O card para de repetir a mesma frase
+
+Defeito visto em tela na rodada anterior: **três** frases seguidas dizendo
+"amostra insuficiente", com três limiares (30, 30, 60).
+
+Colapsar às cegas perderia informação real — `calibrationResult.reason`
+nem sempre é escassez ("Sem plano ativo", "Falha no ajuste de Platt").
+`nexus/sample-maturity-line.ts` separa as duas coisas:
+
+1. A **escassez**, que é uma só, vira **uma** linha construída dos
+   CONTADORES reais: `0 trades resolvidos · falta: expectativa ≥30 ·
+   calibração ≥30 · validação ≥60`.
+2. Qualquer razão **não explicada pela contagem** continua aparecendo
+   intacta (`reasonStillNeeded()`).
+
+O contrato ficou mais forte, não mais frouxo: antes qualquer razão
+aparecia crua; agora ou ela aparece, ou a informação dela está na linha
+única — nunca sumir em silêncio é travado nos dois caminhos.
+
+#### Verificação visual: 3 viewports × 7 timeframes
+
+Medido no DOM renderizado, não argumentado:
+
+| | resultado |
+|---|---|
+| fundo da raiz | `rgb(1,3,8)` = `SURFACE.base` nos 3 perfis |
+| gradiente do painel | stops reancorados, idênticos nos 3 |
+| scroll horizontal | **zero** em 3 viewports e 7 timeframes (Regra de Ouro 7) |
+| menor fonte renderizada | **exatamente 6.4px** = o piso, em todos |
+
+`tools/visual-invariants.mjs` (novo) guarda esse passe no repo, executável
+por qualquer sessão futura. **Não roda no CI de propósito:**
+`testes.yml` verifica sem browser e sem segredos, e uma suíte de navegador
+em todo push mudaria o custo de cada PR.
+
+#### Achados limpos (reportados por honestidade, não corrigidos)
+
+- **Zero código morto.** A varredura de exports sem consumidor deu só
+  falsos positivos: são exports-para-teste, padrão documentado do projeto.
+- **Regra de Ouro 1 intacta:** nenhum `Math.random()` no fluxo de mercado
+  real (só menções em comentário).
+- `cross-exchange-book.ts:190` tem um `?? 0` **inalcançável** (guardado por
+  `status === "OK"`, onde o spread sempre existe). Defensivo, não defeito.
+
+`npm run verify`: tsc limpo, **302 arquivos / 4960 testes** (32 novos),
+build ok.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)

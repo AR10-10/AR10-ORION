@@ -97,7 +97,25 @@ describe('ExpectancyCard: mostra a probabilidade calibrada real (Fase 3) — nun
     expect(block).toContain('useContext(WidgetContext)');
     expect(block).toContain('calibrationResult?.calibrated && calibrationResult.probability !== null ? `${calibrationResult.probability}%` : DASH;');
     expect(block).toContain('label="Prob. Calibrada"');
-    // razão real (fail-closed) só aparece quando NÃO calibrado — nunca escondida, mesmo padrão do warning de expectancyFilter
-    expect(block).toContain('{calibrationResult && !calibrationResult.calibrated && calibrationResult.reason && (');
+    // A razão real NUNCA é escondida — invariante preservada, forma nova.
+    //
+    // ATUALIZADO na rodada de caça a defeitos: o card mostrava TRÊS frases
+    // seguidas dizendo "amostra insuficiente" com três limiares diferentes
+    // (calibração 30, expectativa 30, validação 60) — poluição real vista
+    // em tela. A escassez virou UMA linha de maturidade construída dos
+    // CONTADORES; a razão em prosa continua aparecendo sempre que NÃO for
+    // explicada pela contagem (ex.: "sem plano ativo", "o ajuste não
+    // convergiu"), que são motivos reais e distintos.
+    //
+    // O contrato ficou MAIS forte, não mais frouxo: antes qualquer razão
+    // aparecia crua; agora ou ela aparece, ou a informação dela está na
+    // linha única. Nunca sumir em silêncio é travado nos dois caminhos.
+    expect(block).toContain('reasonStillNeeded(calibrationResult?.reason, calibrationGate)');
+    expect(block).toContain('{calibrationResult!.reason}');
+    // A linha única existe e vem dos contadores reais, nunca de texto.
+    expect(block).toContain('const maturity = buildSampleMaturity([expectancyGate, calibrationGate, walkForwardGate]);');
+    expect(block).toContain('have: calibrationResult?.sampleSize ?? 0');
+    // E o limiar não é duplicado à mão aqui — vem do módulo que o declara.
+    expect(block).toContain('need: MIN_TRADES_FOR_VALID_EXPECTANCY');
   });
 });

@@ -299,8 +299,19 @@ import { calibrateConfidence, type CalibrationResult } from "./nexus/platt-calib
 // ele bate simplesmente repetir a taxa base? Ver header do módulo.
 import {
   evaluateWalkForwardCalibration,
+  MIN_WALK_FORWARD_TRAIN,
+  MIN_WALK_FORWARD_PREDICTIONS,
   type WalkForwardReport,
 } from "./nexus/walk-forward-calibration";
+// A IDADE da amostra que produz aquela probabilidade. Sem isto, 40 trades
+// resolvidos há três meses (noutro regime) e 40 da semana passada apareciam
+// com a MESMA autoridade visual. Ver header do módulo.
+import { buildSampleMaturity, reasonStillNeeded } from "./nexus/sample-maturity-line";
+import {
+  measureCalibrationFreshness,
+  describeCalibrationFreshness,
+  type CalibrationFreshness,
+} from "./nexus/calibration-freshness";
 import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
@@ -3354,6 +3365,19 @@ export default function App() {
     [trackRecordResults],
   );
 
+  // Frescor da MESMA amostra (zero segunda fonte, mesma disciplina dos dois
+  // memos acima). Diferente deles, este depende do RELÓGIO — e a idade
+  // congelaria se o memo só reagisse à amostra: num gráfico de 1m, 8h de
+  // terminal aberto sem trade novo seriam 480 barras de erro no número
+  // exibido. O balde de minuto entra nas deps para o recálculo acontecer no
+  // máximo 1x por minuto (granularidade muito mais fina que os dias/barras
+  // que a UI mostra, e barata: a função é dois passes sobre <=100 itens).
+  const freshnessMinuteBucket = Math.floor(Date.now() / 60_000);
+  const calibrationFreshness: CalibrationFreshness = useMemo(
+    () => measureCalibrationFreshness(trackRecordResults, freshnessMinuteBucket * 60_000, chartTimeframe),
+    [trackRecordResults, freshnessMinuteBucket, chartTimeframe],
+  );
+
   // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
   // NUNCA valor monetário (o sistema não conhece o capital do operador).
   // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
@@ -4232,6 +4256,7 @@ export default function App() {
       expectancyFilter,
       calibrationResult,
       walkForwardReport,
+      calibrationFreshness,
       contextualRecall,
       decisionDistance,
       directionalConsensus,
@@ -4310,6 +4335,7 @@ export default function App() {
       expectancyFilter,
       calibrationResult,
       walkForwardReport,
+      calibrationFreshness,
       decisionDistance,
       directionalConsensus,
       liquidityMap,
@@ -6682,11 +6708,13 @@ function ExpectancyCard() {
     expectancyFilter,
     calibrationResult,
     walkForwardReport,
+    calibrationFreshness,
     contextualRecall,
   }: {
     expectancyFilter?: FilterResult;
     calibrationResult?: CalibrationResult;
     walkForwardReport?: WalkForwardReport;
+    calibrationFreshness?: CalibrationFreshness;
     contextualRecall?: ContextualRecall | null;
   } = useContext(WidgetContext) || {};
   const stats = expectancyFilter?.stats ?? null;
@@ -6726,6 +6754,22 @@ function ExpectancyCard() {
   const calibratedTitle =
     "Probabilidade calibrada (Platt Scaling, Platt 1999) do score de fusão de modelos atual (SMC+Order Flow+Regime, orientado à direção do plano) contra o Track Record REAL deste symbol:timeframe — alvos suavizados (nunca 0/1 crus), nunca reivindica mais certeza do que a amostra sustenta.";
 
+  // Os degraus de maturidade, montados dos CONTADORES reais de cada
+  // capacidade — nunca de texto reprocessado. Cada `need` é o mínimo que o
+  // próprio módulo declara, importado dele (zero limiar duplicado aqui).
+  const expectancyGate = { label: "expectativa", have: stats?.totalTrades ?? 0, need: MIN_TRADES_FOR_VALID_EXPECTANCY };
+  const calibrationGate = {
+    label: "calibração",
+    have: calibrationResult?.sampleSize ?? 0,
+    need: MIN_TRADES_FOR_VALID_EXPECTANCY,
+  };
+  const walkForwardGate = {
+    label: "validação",
+    have: walkForwardReport?.usableTrades ?? 0,
+    need: MIN_WALK_FORWARD_TRAIN + MIN_WALK_FORWARD_PREDICTIONS,
+  };
+  const maturity = buildSampleMaturity([expectancyGate, calibrationGate, walkForwardGate]);
+
   return (
     <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
       <div className="flex items-center justify-between gap-2">
@@ -6750,8 +6794,24 @@ function ExpectancyCard() {
           title={calibratedTitle}
         />
       </div>
-      {calibrationResult && !calibrationResult.calibrated && calibrationResult.reason && (
-        <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{calibrationResult.reason}</span>
+      {/* UMA linha de maturidade no lugar de três frases redundantes.
+          Defeito visto em tela: calibração, validação e expectativa
+          escreviam três parágrafos para comunicar um fato só ("o histórico
+          ainda é curto") com três limiares diferentes.
+          Regra de Ouro 4: as razões em prosa NÃO foram apagadas — elas
+          continuam aparecendo abaixo sempre que NÃO forem explicadas pela
+          contagem (ex.: "sem plano ativo", "o ajuste não convergiu"), que
+          são motivos reais e distintos. Ver nexus/sample-maturity-line.ts. */}
+      {maturity.hasGap && (
+        <span
+          className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight"
+          title="Trades REAIS já resolvidos neste symbol:timeframe, contra o mínimo declarado por cada capacidade. Nenhuma delas é exibida antes do seu limiar — ausência de prova nunca vira número."
+        >
+          {maturity.line}
+        </span>
+      )}
+      {reasonStillNeeded(calibrationResult?.reason, calibrationGate) && (
+        <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{calibrationResult!.reason}</span>
       )}
       {/* VALIDAÇÃO FORA-DA-AMOSTRA da "Prob. Calibrada" logo acima.
           Fica AQUI, colado nela, e não num card próprio, porque é
@@ -6813,7 +6873,25 @@ function ExpectancyCard() {
               />
             </div>
           ) : (
-            <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{walkForwardReport.reason}</span>
+            reasonStillNeeded(walkForwardReport.reason, walkForwardGate) && (
+              <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{walkForwardReport.reason}</span>
+            )
+          )}
+          {/* FRESCOR da amostra que produz a probabilidade acima. Sem isto,
+              40 trades de três meses atrás (outro regime) e 40 da semana
+              passada apareciam com a MESMA autoridade visual. A regra é
+              auto-referente e não inventa limiar: está EXTRAPOLANDO quando
+              a lacuna desde o último trade passa do alcance que a própria
+              amostra cobre. Ver nexus/calibration-freshness.ts. */}
+          {calibrationFreshness && calibrationFreshness.status !== "DADOS_INSUFICIENTES" && (
+            <span
+              className={`text-[0.4rem] leading-tight ${
+                calibrationFreshness.status === "EXTRAPOLANDO" ? "text-[#f0d06f]/90" : "text-[#8ab4f8]/60"
+              }`}
+              title="A calibração vale para o período que ela mediu. Quando a lacuna desde o trade mais recente da amostra já passou do alcance que a amostra cobre, o número está sendo projetado além da evidência — e isso aparece aqui, nunca escondido."
+            >
+              Frescor · {describeCalibrationFreshness(calibrationFreshness)}
+            </span>
           )}
         </div>
       )}
@@ -6829,8 +6907,8 @@ function ExpectancyCard() {
           </span>
         </div>
       )}
-      {expectancyFilter?.warning && (
-        <span className="text-[0.4rem] text-[#f0d06f]/80 leading-tight">{expectancyFilter.warning}</span>
+      {reasonStillNeeded(expectancyFilter?.warning, expectancyGate) && (
+        <span className="text-[0.4rem] text-[#f0d06f]/80 leading-tight">{expectancyFilter!.warning}</span>
       )}
       {/* MEMÓRIA CONTEXTUAL — o que o histórico já resolvido diz sobre
           contextos como o de agora (regime + estrutura + VWAP + Nexus Line).
