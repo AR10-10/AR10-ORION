@@ -36,6 +36,26 @@ const engineBridge = read('../src/engine-bridge.ts');
 const appTsx = read('../src/App.tsx');
 const enhancedChart = read('../src/chart/EnhancedChart_110_Percent.tsx');
 const chartLayerDepth = read('../src/chart/chart-layer-depth.ts');
+const zigZagPlugin = read('../src/chart/ZigZagPlugin.tsx');
+const zigZagPluginCode = stripComments(zigZagPlugin);
+
+describe('ORDEM 3 ("Chart Visual Calibration"): ZigZag nunca compete visualmente com o Structure Trace primário', () => {
+  it('ZigZagPlugin usa a paleta canônica ("measurement") — nunca um triplo rgba redigitado à mão', () => {
+    // stripComments: o próprio comentário honesto do arquivo cita o tom
+    // antigo redigitado à mão como contexto histórico — citar os dígitos
+    // numa explicação não conta como redigitá-los de novo no CÓDIGO.
+    expect(zigZagPluginCode).toContain('chartPaletteRgba("measurement"');
+    expect(zigZagPluginCode).not.toMatch(/rgba\(\s*138\s*,\s*180\s*,\s*248/);
+  });
+
+  it('alpha do ZigZag fica visivelmente ABAIXO do Structure Trace — captura real do Operador (1D/1W/1M) mostrou as duas linhas "competindo" por serem quase igualmente fortes (0.55 vs 0.5)', () => {
+    const zigzagAlpha = Number(zigZagPlugin.match(/chartPaletteRgba\("measurement",\s*([\d.]+)\)/)?.[1]);
+    const structureAlpha = Number(structureTrace.match(/chartPaletteRgba\("projection",\s*([\d.]+)\)/)?.[1]);
+    expect(Number.isFinite(zigzagAlpha)).toBe(true);
+    expect(Number.isFinite(structureAlpha)).toBe(true);
+    expect(zigzagAlpha).toBeLessThan(structureAlpha);
+  });
+});
 
 describe('StructureTracePlugin: fonte real, nunca um segundo ZigZag', () => {
   it('importa computeStructuralSwings de engine-bridge.ts — nunca reimplementa fractal-swings', () => {
@@ -123,6 +143,14 @@ describe('ConfidenceDirectionArrowPlugin: fonte ÚNICA, nunca uma regra paralela
     // Clareia o footprint máximo da irmã (offset+H) por uma folga real —
     // nunca desenha por cima quando as duas caem na mesma vela.
     expect(confidenceOffset - confidenceH).toBeGreaterThan(harmonicOffset + harmonicH);
+  });
+
+  it('ORDEM 3 ("Precision Decision Arrow"): altura total do triângulo (2*H) nunca ultrapassa o limite absoluto de 12px pedido pelo Operador — captura real em 1D/1W/1M mostrou o triângulo "visualmente grande demais" antes desta calibração', () => {
+    const confidenceH = Number(confidenceArrow.match(/const H = (\d+);/)?.[1]);
+    expect(Number.isFinite(confidenceH)).toBe(true);
+    expect(confidenceH * 2).toBeLessThanOrEqual(12);
+    // STANDARD (~10px) é o tamanho real usado hoje — não apenas "dentro do limite".
+    expect(confidenceH * 2).toBe(10);
   });
 
   it('posicionamento OPOSTO de plan-markers.ts de propósito — DIRECTION ≠ ENTRY (item 7)', () => {

@@ -3804,8 +3804,8 @@ function EnhancedChart_110_PercentImpl({
               não pode dizer, é o que as LINHAS DO GRÁFICO são; é só isso
               que ela guarda agora. */}
           {engineFallbackLevels
-            ? "SEM PLANO DO CONSELHO · linhas abaixo são do Núcleo"
-            : `SEM TRADE PLAN · ${tradePlanAbsenceReason}`}
+            ? "NO COUNCIL PLAN · lines below are the Core's"
+            : `NO TRADE PLAN · ${tradePlanAbsenceReason}`}
         </div>
       )}
       {/* Diretriz Final de Lapidação Visual, Parte 2 ("organização das

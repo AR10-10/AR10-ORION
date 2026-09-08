@@ -24,16 +24,31 @@
 // matemática. Sem ATR real, cai no default clássico do motor (5%).
 //
 // "Fio de Seda" (Regra de Ouro 5): a linha poligonal é 1px sólida real —
-// nunca setLineDash. Cor azul-neutro (#8ab4f8), mesma família já usada
-// para "estrutura" no resto do HUD (ver TpoProfilePlugin) — deliberado:
-// ZigZag é leitura de estrutura de swing, nunca um nível de preço isolado
-// (que usaria a família âmbar/liquidez) nem uma direção (verde/vermelho).
+// nunca setLineDash. Cor da família canônica "measurement" (matiz 217,
+// canvas-palette.ts já cita "ZigZag" explicitamente entre os membros dela)
+// — via chartPaletteRgba(), nunca um triplo redigitado à mão (era o caso
+// antes desta rodada: "rgba(138, 180, 248, ...)" escrito de memória em vez
+// de importar a paleta, o mesmo drift que canvas-palette.ts existe para
+// impedir).
+//
+// PESO VISUAL (ORDEM 3, achado real com capturas ao vivo do Operador: o
+// ZigZag e o Structure Trace, roxo/"projection" — StructureTracePlugin.tsx
+// — ficavam "competindo" visualmente por serem quase igualmente fortes,
+// 0.55 vs 0.5). canvas-palette.ts já documenta a convenção deste projeto
+// ("opacidade = força real", nexus/visual-budget.ts): Structure Trace é a
+// linha de estrutura PRIMÁRIA da hierarquia pedida (item 2, "CURRENT
+// STRUCTURE TRACE — PURPLE"); ZigZag é uma leitura de swing adicional/
+// auxiliar (item 7-8, "secondary structure"/"auxiliary evidence"), nunca
+// mencionada como camada de topo. Alpha reduzido para 0.30 — visivelmente
+// abaixo do 0.5 do Structure Trace — sem remover a linha (Regra de Ouro 4:
+// realoca ênfase, nunca apaga dado real).
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeZigZag, atrScaledZigZagDeviationPct, type ZigZagPoint } from "../engine-bridge";
+import { chartPaletteRgba } from "./canvas-palette";
 
-const LINE_COLOR = "rgba(138, 180, 248, 0.55)";
+const LINE_COLOR = chartPaletteRgba("measurement", 0.3);
 
 interface ZigZagPluginProps {
   chart: IChartApi | null;
