@@ -9511,6 +9511,68 @@ argumento — o corte deles vem de limiar já declarado em outro módulo.
 `ALL_OUTCOME_AXES` agora tem 5 eixos marginais. A matriz da §46 está
 completa no que é honestamente mensurável.
 
+### 6.120 §29 CONCEPT DRIFT — a janela recente ainda se parece com a base?
+
+#### A semente já estava órfã
+
+`evaluateSignalFilter` já recortava os últimos `RECENT_TRADES_WINDOW` (20)
+trades e devolvia `recentStats` — e a auditoria por AST (§6.115) o
+classificou em **classe C: produzido e PERDIDO**. O insumo do detector de
+drift estava construído e jogado fora. Sexto achado desta família na
+sessão.
+
+#### A base e a recente são DISJUNTAS
+
+A base é tudo **antes** da janela recente. Comparar os últimos 20 contra
+"todos os trades" incluiria os próprios 20 na referência, **diluindo
+exatamente o sinal procurado**. Aqui as duas partes não se sobrepõem por
+construção, e um teste trava isso.
+
+#### A régua é a variabilidade da PRÓPRIA base
+
+Não existe "ΔR grande" universal: `0.2R` é ruído numa estratégia volátil e
+um terremoto numa estável. Então a escala é
+
+> `erro padrão = σ_base / √n_recente`
+
+— o desvio que se **espera** numa média de n sorteios da distribuição da
+base. A leitura vira *"a recente está a X erros padrão da base"*, adaptando
+-se sozinha à volatilidade real da estratégia. **Quarta** aplicação da
+técnica auto-referente nesta sessão.
+
+O teste central prova que a régua é real: *a MESMA diferença de médias muda
+de veredito quando a base muda de volatilidade*.
+
+Base sem dispersão medível → **recusa**, em vez de dividir por ~0 e fazer
+qualquer diferença parecer infinita.
+
+#### As bandas são convenção DECLARADA, não medição
+
+1σ / 2σ / 3σ são as bandas estatísticas **ordinárias**, usadas aqui como
+convenção explícita — exatamente como o repositório já faz com
+`slippageRFraction`, `WALL_VOLUME_MULTIPLIER` e `PROXIMITY_FULL_PCT`. **Não
+são calibradas contra o desempenho deste sistema**, e o módulo nunca afirma
+que sejam. Chamar 3σ de "drift confirmado" é uma **nomeação de banda**, não
+um teste de hipótese com p-valor.
+
+#### Os estados distinguem "mudou" de "piorou"
+
+- **RECOVERING** — mudou muito, mas **a favor** do Operador. O §29 lista
+  este estado separado justamente porque *mudou* não é sinônimo de *piorou*.
+- **DEGRADED** — subcaso honesto de DRIFT_CONFIRMED: não só mudou muito,
+  **passou a perder dinheiro** (`recentMeanR < 0`). Distinção real, não
+  sinônimo.
+
+`nexus/drift-detector.ts` (novo, puro, 25 testes: 20 de execução real + 5
+de fiação). O 5º degrau da linha de maturidade (`drift`, ≥20) entrou junto
+— exige as **duas** amostras, porque comparar precisa de duas.
+
+**Lição repetida:** um teste do Shadow fixava a lista de 4 degraus e
+quebrou. Já tinha acontecido com `platt-calibration-wiring`. Ambos agora
+travam a **forma** da chamada, não a contagem — a lista cresce por
+capacidade, e fixar o número faz toda capacidade nova quebrar um teste que
+não é sobre ela.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar

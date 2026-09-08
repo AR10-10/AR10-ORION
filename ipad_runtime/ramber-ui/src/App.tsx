@@ -281,6 +281,8 @@ import {
 } from "./nexus/microstructure-readout";
 import { bestLevel } from "./nexus/cross-exchange-book";
 import { readRegimeSecondary, describeRegimeSecondary } from "./nexus/regime-secondary";
+import { detectDrift, describeDrift, type DriftReading } from "./nexus/drift-detector";
+import { RECENT_TRADES_MIN_SAMPLE } from "./nexus/expectancy";
 import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
 import { computeDirectionalConsensus, describeDirectionalConsensus, normalizeSide, sideFromSigned, computeLiquidityMap, liquidityBias, type DirectionalSource, type DirectionalConsensusReading, type LiquidityTarget, type LiquidityMapReading } from "./nexus/directional-consensus";
 import { humanizeReasonCode } from "./nexus/reason-vocabulary";
@@ -3431,6 +3433,11 @@ export default function App() {
   // estatística. Ver o cabeçalho de nexus/outcome-matrix.ts.
   const outcomeMatrix: OutcomeMatrix = useMemo(() => buildOutcomeMatrix(trackRecordResults), [trackRecordResults]);
 
+  // §29 CONCEPT DRIFT: a janela recente ainda se parece com a base? O
+  // insumo (recentStats de expectancy.ts) já era computado e a auditoria
+  // por AST o achou órfão — ninguém lia. Mesma amostra, zero recomputação.
+  const driftReading: DriftReading = useMemo(() => detectDrift(trackRecordResults), [trackRecordResults]);
+
   // Modo Shadow (§53): o candidato roda AO LADO do incumbente sobre a
   // mesma amostra e nunca decide nada — nenhum consumidor lê daqui uma
   // direção, um filtro ou uma probabilidade exibida (LEI 24). Responde por
@@ -4374,6 +4381,7 @@ export default function App() {
       outcomeMatrix,
       shadowReport,
       independentReference,
+      driftReading,
       contextualRecall,
       decisionDistance,
       directionalConsensus,
@@ -4457,6 +4465,7 @@ export default function App() {
       outcomeMatrix,
       shadowReport,
       independentReference,
+      driftReading,
       decisionDistance,
       directionalConsensus,
       liquidityMap,
@@ -6904,6 +6913,7 @@ function ExpectancyCard() {
     calibrationFreshness,
     targetHitRates,
     shadowReport,
+    driftReading,
     contextualRecall,
   }: {
     expectancyFilter?: FilterResult;
@@ -6912,6 +6922,7 @@ function ExpectancyCard() {
     calibrationFreshness?: CalibrationFreshness;
     targetHitRates?: TargetHitRateReport;
     shadowReport?: ShadowCalibrationReport;
+    driftReading?: DriftReading;
     contextualRecall?: ContextualRecall | null;
   } = useContext(WidgetContext) || {};
   const stats = expectancyFilter?.stats ?? null;
@@ -6966,7 +6977,14 @@ function ExpectancyCard() {
     need: MIN_WALK_FORWARD_TRAIN + MIN_WALK_FORWARD_PREDICTIONS,
   };
   const shadowGate = { label: "shadow", have: shadowReport?.usableTrades ?? 0, need: MIN_SHADOW_SAMPLE };
-  const maturity = buildSampleMaturity([expectancyGate, calibrationGate, walkForwardGate, shadowGate]);
+  // 2x o mínimo: a janela recente E a base disjunta precisam cada uma do
+  // seu piso — comparar exige duas amostras, não uma.
+  const driftGate = {
+    label: "drift",
+    have: (driftReading?.baselineTrades ?? 0) + (driftReading?.recentTrades ?? 0),
+    need: RECENT_TRADES_MIN_SAMPLE * 2,
+  };
+  const maturity = buildSampleMaturity([expectancyGate, calibrationGate, walkForwardGate, shadowGate, driftGate]);
 
   return (
     <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
@@ -7109,6 +7127,31 @@ function ExpectancyCard() {
           ) : (
             reasonStillNeeded(shadowReport?.reason, shadowGate) && (
               <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{shadowReport!.reason}</span>
+            )
+          )}
+          {/* §29 CONCEPT DRIFT. A régua NÃO é um ΔR fixo: é a variabilidade
+              da própria base (erro padrão), então o mesmo salto é ruído numa
+              estratégia volátil e evento numa estável. As bandas 1/2/3σ são
+              convenção declarada, nunca calibradas contra este sistema — e o
+              módulo distingue "mudou" de "piorou". Ver nexus/drift-detector.ts. */}
+          {driftReading?.status === "OK" ? (
+            <span
+              className={`text-[0.4rem] leading-tight ${
+                driftReading.state === "DEGRADED"
+                  ? "text-[#ff0055]/90"
+                  : driftReading.state === "DRIFT_CONFIRMED" || driftReading.state === "POSSIBLE_DRIFT"
+                    ? "text-[#f0d06f]/90"
+                    : driftReading.state === "RECOVERING"
+                      ? "text-[#00ffaa]/80"
+                      : "text-[#8ab4f8]/60"
+              }`}
+              title={`Compara os ${driftReading.recentTrades} trades mais recentes contra os ${driftReading.baselineTrades} ANTERIORES a eles — as duas amostras são disjuntas de propósito, senão a base diluiria o próprio sinal procurado. A régua é o erro padrão da base, então a leitura se adapta à volatilidade real da estratégia. RECUPERANDO significa que mudou A FAVOR; DEGRADADO significa que mudou e passou a perder. Bandas 1/2/3σ são convenção estatística ordinária, não um teste de hipótese calibrado.`}
+            >
+              Drift · {describeDrift(driftReading)}
+            </span>
+          ) : (
+            reasonStillNeeded(driftReading?.reason, driftGate) && (
+              <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{driftReading!.reason}</span>
             )
           )}
         </div>
