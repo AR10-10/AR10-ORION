@@ -8363,7 +8363,12 @@ function TopBar({ data }: { data?: PriceState | null }) {
       : realCycle?.instrumentType === "crypto_spot"
         ? "Spot"
         : null;
-  const isPos = (data?.deltaPct ?? 0) >= 0;
+  // ORDEM DE SERVIÇO FINAL (auditoria de estados vazios, Golden Rule 3):
+  // antes do primeiro tick real, deltaPct é null — `?? 0` fazia `0 >= 0`
+  // pintar o preço/percentual de VERDE (alta) sem nenhuma leitura real por
+  // trás. null/undefined agora é seu próprio estado (nem alta, nem baixa).
+  const deltaPct = data?.deltaPct ?? null;
+  const isPos: boolean | null = num(deltaPct) ? deltaPct >= 0 : null;
 
   return (
     // Barra de comando — redesenho radical (modelo do Operador, imagem de
@@ -8554,13 +8559,13 @@ function TopBar({ data }: { data?: PriceState | null }) {
             <div className="flex items-baseline gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap">
               <span
                 className={`text-base md:text-lg font-black font-mono tracking-tight drop-shadow-[0_0_6px_currentColor] ${
-                  isPos ? "text-[#00ffaa]" : "text-[#ff0055]"
+                  isPos === null ? "text-[#8ab4f8]/60" : isPos ? "text-[#00ffaa]" : "text-[#ff0055]"
                 }`}
               >
                 {fmt(data?.price ?? null)}
               </span>
               <span
-                className={`text-[0.55rem] font-bold tabular-nums ${isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+                className={`text-[0.55rem] font-bold tabular-nums ${isPos === null ? "text-[#8ab4f8]/60" : isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
               >
                 {fmtSignedPct(data?.deltaPct ?? null)}
               </span>
@@ -9164,23 +9169,41 @@ class WidgetErrorBoundary extends React.Component<
     // a causa real fica no log do navegador (DevTools/Safari remoto no
     // iPad), nunca só o texto genérico da tela. Nunca envia rede, nunca
     // muda estado além do já capturado por getDerivedStateFromError.
-    console.error(`[WidgetErrorBoundary] ${this.props.title || "PAINEL"}:`, error, info.componentStack);
+    console.error(`[WidgetErrorBoundary] ${this.props.title || "PANEL"}:`, error, info.componentStack);
   }
+  // ORDEM DE SERVIÇO FINAL (auto-cura): achado real de auditoria — esta
+  // boundary isolava o erro (não derrubava o app inteiro) mas nunca dava ao
+  // Operador um jeito de tentar de novo SEM recarregar a página inteira
+  // (GlobalErrorBoundary tem "Recarregar", esta não tinha nada). Muitos
+  // erros reais de render são de uma janela ruim de dado (ex.: troca de
+  // ativo em voo) que já não existe mais no PRÓXIMO ciclo real — um retry
+  // manual aqui é o "isolar o erro" da ordem, nunca um retry automático
+  // (que arriscaria um loop se a causa for persistente): a decisão de
+  // tentar de novo continua do Operador, mesma filosofia do botão
+  // "Recarregar" da boundary global.
+  handleRetry = () => this.setState({ error: null });
   render() {
     if (this.state.error) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center gap-1 text-center px-2 overflow-y-auto">
+        <div className="flex-1 flex flex-col items-center justify-center gap-1.5 text-center px-2 overflow-y-auto">
           <span className="text-[0.5rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
-            {this.props.title || "PAINEL"} · ERRO DE RENDERIZAÇÃO
+            {this.props.title || "PANEL"} · RENDER ERROR
           </span>
           <span className="text-[0.45rem] text-[#8ab4f8]/50">
-            Os demais painéis continuam ativos.
+            Other panels remain active.
           </span>
           {this.state.error.message ? (
             <span className="text-[0.42rem] text-[#8ab4f8]/40 break-words max-w-full px-2">
               {this.state.error.message}
             </span>
           ) : null}
+          <button
+            type="button"
+            onClick={this.handleRetry}
+            className="mt-0.5 text-[0.4rem] font-bold uppercase tracking-wider px-2 py-1 rounded border border-[#8ab4f8]/30 text-[#8ab4f8]/70 hover:text-[#00f0ff] hover:border-[#00f0ff]/40"
+          >
+            Retry
+          </button>
         </div>
       );
     }
@@ -11194,14 +11217,24 @@ function OrderFlowWidget() {
         </div>
 
         <div className="w-full h-4 mt-1 flex relative bg-[#010308] border border-[#00f0ff15] rounded overflow-hidden shadow-[inset_0_0_10px_rgba(0,240,255,0.05)]">
-          <div
-            className="h-full bg-gradient-to-r from-[#00ffaa10] to-[#00ffaa60] border-r border-[#00ffaa] relative overflow-hidden transition-[background-color,opacity] duration-500"
-            style={{ width: `${num(buyPercent) ? buyPercent : 50}%` }}
-          ></div>
-          <div
-            className="h-full bg-gradient-to-l from-[#ff005510] to-[#ff005560] border-l border-[#ff0055] relative overflow-hidden transition-[background-color,opacity] duration-500"
-            style={{ width: `${num(sellPercent) ? sellPercent : 50}%` }}
-          ></div>
+          {/* ORDEM DE SERVIÇO FINAL (auditoria de estados vazios, Golden Rule
+              3): sem leitura real, esta barra caía num 50/50 fabricado — um
+              "mercado equilibrado" que ninguém mediu. Sem os dois lados reais,
+              mostra uma faixa neutra única, nunca um split inventado. */}
+          {num(buyPercent) && num(sellPercent) ? (
+            <>
+              <div
+                className="h-full bg-gradient-to-r from-[#00ffaa10] to-[#00ffaa60] border-r border-[#00ffaa] relative overflow-hidden transition-[background-color,opacity] duration-500"
+                style={{ width: `${buyPercent}%` }}
+              ></div>
+              <div
+                className="h-full bg-gradient-to-l from-[#ff005510] to-[#ff005560] border-l border-[#ff0055] relative overflow-hidden transition-[background-color,opacity] duration-500"
+                style={{ width: `${sellPercent}%` }}
+              ></div>
+            </>
+          ) : (
+            <div className="h-full w-full bg-[#8ab4f8]/10"></div>
+          )}
         </div>
 
         {/* Real Order Flow Engine (OFI/Absorption/Exhaustion) fed by real
@@ -12604,7 +12637,7 @@ function MultiTimeframeMatrixWidget() {
           const stanceColor = stance ? MTF_STANCE_COLOR[stance] : "text-[#8ab4f8]";
           const structureShort = ctx?.structureLabel ? ctx.structureLabel.replace("ESTRUTURA_", "") : null;
           const tooltip = insufficient
-            ? `${MTF_ROW_LABEL[tf]}: ${ctx?.reason ?? "sem_dados_reais"}`
+            ? `${MTF_ROW_LABEL[tf]}: ${humanizeReasonCode(ctx?.reason) ?? "sem dados reais"}`
             : [
                 ctx.regime ? `Regime ${ctx.regime}` : null,
                 ctx.rsi !== null ? `RSI ${ctx.rsi.toFixed(1)}` : null,

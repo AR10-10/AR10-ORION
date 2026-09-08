@@ -133,9 +133,16 @@ describe("App.tsx: WidgetErrorBoundary captura e mostra o erro real (achado inde
     const s = src();
     // Âncora na renderização real (JSX), não no comentário explicativo
     // acima dela — a mesma string aparece nos dois lugares.
-    const idx = s.indexOf('{this.props.title || "PAINEL"} · ERRO DE RENDERIZAÇÃO');
+    // Frente 3 §17 (padronização de idioma): texto traduzido pra English Technical.
+    const idx = s.indexOf('{this.props.title || "PANEL"} · RENDER ERROR');
     expect(idx).toBeGreaterThan(-1);
     const bloco = s.slice(idx, idx + 500);
     expect(bloco).toContain("this.state.error.message");
+  });
+
+  it("ORDEM DE SERVIÇO FINAL (auto-cura): dá ao Operador um retry manual, sem recarregar a página inteira", () => {
+    const s = src();
+    expect(s).toContain("handleRetry = () => this.setState({ error: null });");
+    expect(s).toContain("onClick={this.handleRetry}");
   });
 });

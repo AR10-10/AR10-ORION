@@ -34,6 +34,12 @@ const KNOWN_REASONS: Record<string, string> = {
   pool_sem_leitura_real: "pool de opinião sem leitura real para comparar",
   // ipad_runtime/src/research/engines/lorentzian-classifier.js (status DADOS_INSUFICIENTES)
   feature_atual_invalida_apos_warmup: "features do candle atual inválidas após o aquecimento",
+  // nexus/multi-timeframe-engine.ts (baseInsufficient, status DADOS_INSUFICIENTES)
+  // — achado real da ORDEM DE SERVIÇO FINAL (auditoria de auto-cura/estados
+  // vazios): o tooltip da Multi-Timeframe Matrix mostrava este código cru
+  // (App.tsx), snake_case sem passar por este tradutor.
+  sem_candles_reais_para_este_timeframe: "sem candles reais para este prazo agora",
+  nenhum_motor_real_teve_leitura_nesta_janela: "nenhum motor real teve leitura nesta janela",
 };
 
 // Padrões paramétricos reais — o número/limiar É o dado, não pode virar
