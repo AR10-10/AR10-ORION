@@ -599,46 +599,36 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     // EN âmbar, direção real (LONG/SHORT) no texto — "bater o olho"
     // (EPC FINAL §8: nomenclatura curta EN/ST/TP1-3 nos objetos gráficos).
     // Ordem "FECHAMENTO" §3: o MOTIVO estrutural (basis) é Nível 2 — saiu
-    // do primário para o secundário (fonte menor), nunca foi apagado.
+    // do primário para o secundário (fonte menor), nunca foi apagado. EN
+    // não foi tocado pelo pedido "lateral direita compacta" (o Operador
+    // nomeou só TP1/TP2/TP3/ST) — continua com secondaryText.
     expect(block).toContain('text: `EN ${tradePlan.direction}`, secondaryText: withScore(tradePlan.entry.basis), color: entryColor');
     expect(block).toContain('const entryColor = "rgba(240, 193, 111, 0.75)";');
-    // STOP vermelho no preço EFETIVO (ratchet real), BREACHED do preço vivo
+    // STOP vermelho no preço EFETIVO (ratchet real).
     expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
     expect(block).toContain('color: "rgba(242, 54, 69, 0.75)"');
-    // TARGET verde, REACHED do targetsHit autoritativo — Ordem "Lapidação
-    // das Etiquetas TP1/TP2" §3/§4: texto primário só label+distância,
-    // REACHED (como o resto do estado) migrou pro secundário.
-    expect(block).toContain('const reached = i < hits;');
-    expect(block).toContain('reached ? "REACHED" : null,');
-    // Pedido do Operador ("deixar só as iniciais, sem a numeração na
-    // frente nem a porcentagem"): o PRIMÁRIO é só a sigla. A distância
-    // não sumiu — desceu para o secundário, e o teste prova as DUAS
-    // coisas: sigla pura no primário E distância presente no secundário
-    // (Regra de Ouro 4: realocar, nunca apagar).
-    expect(block).toContain('text: `TP${i + 1}`,');
-    // REVERTIDO POR PEDIDO REPETIDO DO OPERADOR (duas rodadas, com captura
-    // real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" na tela): a
-    // porcentagem de DISTÂNCIA até o alvo saiu do canvas de vez. Regra de
-    // Ouro 4 satisfeita — a distância percentual continua real e visível no
-    // painel do Trade Plan (App.tsx), que já a renderizava antes desta
-    // mudança. `distPct` nunca volta — mas withScore() (rodada posterior,
-    // ver refinamento-final-wiring.test.ts) traz de volta um número
-    // DIFERENTE: a % de confluência do plano, um só token por etiqueta.
+    // Pedido direto do Operador ("lateral direita compacta", exemplo
+    // literal "TP1   79,405.00"): ST/TP1-3 voltam a ser NOME + PREÇO só,
+    // com separador de milhar (formatPriceGrouped) — REACHED/BREACHED/
+    // distância/R:R saíram do canvas (continuam reais no command bar/
+    // painel do Trade Plan, Regra de Ouro 4).
+    expect(block).toContain('text: `ST ${formatPriceGrouped(effectiveStopPrice)}`,');
+    expect(block).toContain('text: `TP${i + 1} ${formatPriceGrouped(target.price)}`,');
     expect(block).not.toContain('distPct');
+    expect(block).not.toContain('reached ? "REACHED"');
     expect(block).toContain('color: "rgba(8, 153, 129, 0.75)"');
   });
 
-  it('estado/texto vivo (BREACHED/REACHED/distância %/ETA/compactação) é o MESMO que a lib desenhava — mesmas funções puras reais, nunca uma segunda formatação divergente', () => {
+  it('fail-closed intacto: cada push continua guardado por Number.isFinite do preço real — a simplificação "lateral direita compacta" removeu só o segmento secundário, nunca a guarda', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
     const end = s.indexOf('return out;', idx);
     const block = s.slice(idx, end);
-    expect(block).toContain('const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);');
-    expect(block).toContain('const compactLabels = shouldCompactLabels(levels);');
-    expect(block).toContain('formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)');
-    // fail-closed: cada push guardado por Number.isFinite do preço real
     expect(block).toContain('if (Number.isFinite(effectiveStopPrice)) {');
     expect(block).toContain('if (!Number.isFinite(target.price)) return;');
+    expect(block).not.toContain('stopHitNow');
+    expect(block).not.toContain('compactLabels');
+    expect(block).not.toContain('formatEtaRange');
   });
 
   it('o efeito de mutação da LINHA nunca mais escreve title (só a LINHA: price/color) — o texto é 100% do overlay agora', () => {
@@ -706,37 +696,27 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
   // continua existindo por COR (0.5/0.35 — sempre mais apagada que o
   // Trade Plan do Conselho, 0.75) — nunca confundível, só sem repetir a
   // mesma palavra 3x.
-  it('rótulos entram em priceAxisLabels SEM "(Núcleo)" no texto (redundante — o overlay do canto já diz uma vez) — distinção real continua por cor mais apagada (0.5/0.35 vs. 0.75 do Conselho)', () => {
+  it('rótulos entram em priceAxisLabels SEM "(Núcleo)" no texto (redundante — o overlay do canto já diz uma vez) — distinção real continua por cor mais apagada (0.5/0.35/0.2 vs. 0.75 do Conselho)', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
     const end = s.indexOf('return out;', idx);
     const block = s.slice(idx, end);
     expect(block).toContain('if (engineFallbackLevels) {');
     // EPC FINAL §8: ST/TP1/TP2 (nomenclatura curta), sempre numerado.
-    // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4: primário = "ST"/
-    // "TP1<distância>" sozinho; BREACHED/força/R:R/obstáculo/REACHED
-    // migraram pro secundário (fonte menor, PriceLabelStackPlugin).
-    expect(block).toContain('text: "ST",');
-    expect(block).toContain('secondaryText: breached ? "BREACHED" : undefined,');
+    // Pedido direto do Operador ("lateral direita compacta"): primário =
+    // NOME + PREÇO com separador de milhar (formatPriceGrouped) só;
+    // BREACHED/força/R:R/obstáculo/REACHED saíram do canvas por completo
+    // (continuam reais no painel/command bar).
+    expect(block).toContain('text: `ST ${formatPriceGrouped(engineFallbackLevels.stop)}`,');
     expect(block).toContain('color: "rgba(242, 54, 69, 0.5)",');
-    // distPct1/2 (Ordem "Lapidação Visual Final e Sincronia Operacional"
-    // §4 — "distância até o alvo, quando já houver cálculo real
-    // disponível"): mesma fórmula que o Trade Plan do Conselho já usa
-    // (Math.abs(target-p)*100/p), reaproveitada aqui — zero cálculo novo.
+    expect(block).not.toContain('secondaryText: breached');
 
-    expect(block).toContain('text: "TP1",');
-    // REVERTIDO POR PEDIDO REPETIDO DO OPERADOR (duas rodadas, com captura
-    // real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" na tela): a
-    // porcentagem saiu do canvas de vez. Regra de Ouro 4 satisfeita — a
-    // distância percentual continua real e visível no painel do Trade Plan
-    // (App.tsx), que já a renderizava antes desta mudança.
+    expect(block).toContain('text: `TP1 ${formatPriceGrouped(engineFallbackLevels.target1)}`,');
     expect(block).not.toContain('distPct1');
-    expect(block).toContain('strengthSuffix(engineFallbackLevels.target1Strength).trim() || null,');
-    expect(block).toContain('rr !== null ? `1:${rr.toFixed(2)}` : null,');
+    expect(block).not.toContain('strengthSuffix');
 
-    expect(block).toContain('text: "TP2",');
+    expect(block).toContain('text: `TP2 ${formatPriceGrouped(engineFallbackLevels.target2)}`,');
     expect(block).not.toContain('distPct2');
-    expect(block).toContain('strengthSuffix(engineFallbackLevels.target2Strength).trim() || null,');
     // tier:"critical" (§3, Nível A): plano ATIVO do Núcleo quando não há
     // plano do Conselho — mesmo destaque grande/negrito do preço vivo.
     expect(block).toContain('tier: "critical"');
@@ -747,54 +727,38 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
   // todo ciclo antes desta correção — nunca chegava ao gráfico. Mais simples
   // que TP1/TP2 DE PROPÓSITO: a fonte não calcula strength/obstacleCount
   // para este nível, então o rótulo nunca finge um metadado que não existe.
-  it('TP3 (extensão de Fibonacci) usa preço puro no rótulo — sem strengthSuffix/obstacleSuffix, honesto sobre o que a fonte realmente calcula', () => {
+  it('TP3 (extensão de Fibonacci) usa preço puro no rótulo, mesma simplificação nome+preço dos outros alvos — nunca teve strengthSuffix/obstacleSuffix (a fonte não calcula esses metadados para este nível)', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
     const end = s.indexOf('return out;', idx);
     const block = s.slice(idx, end);
     expect(block).toContain('if (engineFallbackLevels.target3 != null && Number.isFinite(engineFallbackLevels.target3)) {');
-    // distPct3 (§4): mesma fórmula real de distância, TP3 continua sem
-    // strengthSuffix/obstacleSuffix (a fonte não calcula esses metadados
-    // para este nível — honesto sobre o que existe, nunca fabricado).
-
-    expect(block).toContain('text: "TP3",');
+    expect(block).toContain('text: `TP3 ${formatPriceGrouped(engineFallbackLevels.target3)}`,');
     expect(block).not.toContain('distPct3');
-    // TP3 passou a ter lista secundária (antes só REACHED) porque a
-    // distância desceu para lá junto — continua sem strengthSuffix/
-    // obstacleSuffix, que a fonte (support-resistance-engine.js) de fato
-    // não calcula para este nível.
-    expect(block).toContain('const secondary3 = [reached ? "REACHED" : null].filter(');
-    expect(block).not.toContain('strengthSuffix(engineFallbackLevels.target3');
+    expect(block).not.toContain('secondary3');
     expect(block).not.toContain('strengthSuffix(engineFallbackLevels.target3');
     expect(block).not.toContain('obstacleSuffix(engineFallbackLevels.target3');
   });
 
-  it('EPC MODO ELITE §4: rótulos dos alvos do Núcleo carregam ⚠ N (obstáculos estruturais reais no caminho) — só quando N>0, mesmo glifo ⚠ da zona destacada; o Núcleo não tem painel, então o rótulo é o único lugar dessa contagem', () => {
+  it('EPC MODO ELITE §4 (obstáculos) e o sufixo de força (FORTE/FRACA) saíram do canvas junto com o resto do segmento secundário — pedido "lateral direita compacta"; a contagem de obstáculos real continua na zona destacada do LiquidityZonesPlugin, a força real continua no painel', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
     const end = s.indexOf('return out;', idx);
     const block = s.slice(idx, end);
-    expect(block).toContain('const obstacleSuffix = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? ` ⚠ ${n}` : "");');
-    expect(block).toContain('obstacleSuffix(engineFallbackLevels.target1ObstacleCount).trim() || null,');
-    expect(block).toContain('obstacleSuffix(engineFallbackLevels.target2ObstacleCount).trim() || null,');
+    expect(block).not.toContain('obstacleSuffix');
+    expect(block).not.toContain('strengthSuffix');
+    expect(block).not.toContain('⚠');
   });
 
-  it('strengthSuffix alinhado ao estilo tight de levelTitle() (S1/R1) — espaço, nunca "·", mesmo padrão de rótulo em todo o eixo', () => {
-    const s = chart();
-    const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const end = s.indexOf('return out;', idx);
-    const block = s.slice(idx, end);
-    expect(block).toContain('const strengthSuffix = (s: { label: "FORTE" | "FRACA"; touches: number } | null) => (s ? ` ${s.label}` : "");');
-  });
-
-  it('REACHED/BREACHED é derivação simples do preço vivo — nunca usa o ratchet effectiveStopForTargetsHit nem o Track Record autoritativo (que rastreiam o Trade Plan do Conselho, não este fallback)', () => {
+  it('fallback do Núcleo nunca usa o ratchet effectiveStopForTargetsHit nem o Track Record autoritativo (que rastreiam o Trade Plan do Conselho, não este fallback) — e não deriva mais REACHED/BREACHED do preço vivo, removido junto do segmento secundário', () => {
     const s = chart();
     const idx = s.indexOf('if (engineFallbackLevels) {', s.indexOf('const priceAxisLabels = useMemo'));
     const end = s.indexOf('return out;', idx);
     const block = s.slice(idx, end);
     expect(block).not.toContain('effectiveStopForTargetsHit');
     expect(block).not.toContain('targetsHit');
-    expect(block).toContain('const longFb = engineFallbackLevels.direction === "LONG";');
+    expect(block).not.toContain('longFb');
+    expect(block).not.toContain('breached');
   });
 
   it('engineFallbackLevels entra nas deps de priceAxisLabels — recalcula quando o Núcleo muda de leitura', () => {

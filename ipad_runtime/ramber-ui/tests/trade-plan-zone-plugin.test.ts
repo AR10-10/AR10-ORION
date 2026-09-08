@@ -174,19 +174,23 @@ describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Auton
     expect(chart()).toContain('}, [tradePlan, livePrice, targetsHit]);');
   });
 
-  it('as literais base de EN/ST/TP continuam consistentes — em priceAxisLabels (sistema anti-colisão), nomenclatura curta real (EPC FINAL §8); Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4 moveu basis/estado pro secundário, texto primário ficou só EN/ST/TP (a porcentagem saiu do canvas de vez)', () => {
+  it('as literais base de EN/ST/TP continuam consistentes — em priceAxisLabels (sistema anti-colisão), nomenclatura curta real (EPC FINAL §8); pedido "lateral direita compacta" simplificou ST/TP1-3 pra NOME + PREÇO com separador de milhar (EN não foi tocado — o Operador nomeou só TP1/TP2/TP3/ST)', () => {
     const s = chart();
     expect(s).toContain('`EN ${tradePlan.direction}');
-    expect(s).toContain('text: "ST",');
-    expect(s).toContain(': tradePlan.stop.basis;');
-    expect(s).toContain('compactLabels ? null : target.basis,');
-    // Sigla pura no primário (pedido do Operador).
-    expect(s).toContain('text: `TP${i + 1}`,');
-    // E a porcentagem NÃO volta ao canvas: pedido repetido em duas rodadas,
+    // stopSecondary (que incluía tradePlan.stop.basis) saiu junto do
+    // segmento secundário — o basis do stop continua real no painel do
+    // Trade Plan (App.tsx), nunca apagado.
+    expect(s).not.toContain('tradePlan.stop.basis');
+    // Sigla + preço agrupado no primário (pedido "lateral direita
+    // compacta", exemplo literal "TP1   79,405.00").
+    expect(s).toContain('text: `ST ${formatPriceGrouped(effectiveStopPrice)}`,');
+    expect(s).toContain('text: `TP${i + 1} ${formatPriceGrouped(target.price)}`,');
+    // A porcentagem NÃO volta ao canvas: pedido repetido em várias rodadas,
     // com captura real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" sobre
     // as velas. A distância real continua no painel do Trade Plan
     // (App.tsx) — realocada, nunca apagada (Regra de Ouro 4).
     expect(s).not.toContain('distPct');
+    expect(s).not.toContain('compactLabels');
   });
 
   it('v2: "REACHED" is driven by the AUTHORITATIVE targetsHit prop, never re-derived from livePrice alone — a target stays marked reached even if price later pulls back', () => {

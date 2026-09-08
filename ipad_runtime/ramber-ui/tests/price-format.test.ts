@@ -15,7 +15,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { formatPrice, priceDecimals, nativePriceDecimals } from "../src/nexus/price-format";
+import { formatPrice, priceDecimals, nativePriceDecimals, formatPriceGrouped } from "../src/nexus/price-format";
 
 describe("o defeito relatado — preço baixo perdia dígito", () => {
   it("ativo de centavos mostra os dígitos reais, nunca arredondado para 2 casas", () => {
@@ -210,5 +210,42 @@ describe("nativePriceDecimals — o eixo nativo nunca perde os centavos", () => 
     const src = readFileSync(resolve(__dirname, "../src/chart/EnhancedChart_110_Percent.tsx"), "utf-8");
     expect(src).toContain("nativePriceDecimals(ref)");
     expect(src).not.toContain("const precision = priceDecimals(ref)");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatPriceGrouped — pedido direto do Operador ("padrão de terminal
+// profissional"): vírgula de milhar + ponto decimal, casas SEMPRE visíveis,
+// pra TP1/TP2/TP3/ST lerem como coluna alinhada no canvas do gráfico.
+// ---------------------------------------------------------------------------
+describe("formatPriceGrouped — separador de milhar + casas decimais nunca cortadas", () => {
+  it("exemplo literal do Operador: preços de 5 dígitos ganham vírgula de milhar e 2 casas fixas", () => {
+    expect(formatPriceGrouped(79405)).toBe("79,405.00");
+    expect(formatPriceGrouped(80300)).toBe("80,300.00");
+    expect(formatPriceGrouped(80700)).toBe("80,700.00");
+    expect(formatPriceGrouped(78700.1)).toBe("78,700.10");
+  });
+
+  it("preços de 4 dígitos também recebem vírgula de milhar (mesmo padrão, sem exceção por faixa)", () => {
+    expect(formatPriceGrouped(1188.65)).toBe("1,188.65");
+    expect(formatPriceGrouped(1150.1)).toBe("1,150.10");
+  });
+
+  it("decimais vêm do PISO nativo (≥2 casas), nunca da régua de rótulo compacto que zera acima de 1000", () => {
+    // priceDecimals(79405) devolve 0 (rótulo de eixo: "79405") — mas TP/ST
+    // é o plano ATIVO, mesma razão do preço vivo nunca perder centavos.
+    expect(priceDecimals(79405)).toBe(0);
+    expect(formatPriceGrouped(79405)).not.toBe("79,405");
+  });
+
+  it("abaixo de 1, decimais continuam SEMPRE visíveis — nunca corta zero à direita (diferente de formatPrice, que corta pra leitura de painel)", () => {
+    expect(formatPriceGrouped(0.06)).toBe("0.06000");
+    expect(formatPrice(0.06)).toBe("0.06"); // formatPrice corta — comportamento de painel, intacto
+  });
+
+  it("fail-closed: valor não-finito nunca vira 'NaN'/'Infinity' na tela", () => {
+    expect(formatPriceGrouped(NaN)).toBe("—");
+    expect(formatPriceGrouped(Infinity)).toBe("—");
+    expect(formatPriceGrouped(-Infinity)).toBe("—");
   });
 });
