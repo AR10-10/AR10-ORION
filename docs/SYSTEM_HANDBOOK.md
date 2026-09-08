@@ -8781,6 +8781,49 @@ a tela.
 `npm run verify`: tsc limpo, **299 arquivos / 4917 testes** (10 novos),
 build ok.
 
+### 6.109 "EVOLUÇÃO COMPLETA" rodada 3 — a validação sai do laboratório
+
+A §6.107 construiu `walk-forward-calibration.ts` como módulo puro e
+declarou honestamente: *"não está graduado"*. Esta rodada gradua.
+
+**Onde ele foi colocado, e por quê.** Não num card próprio: dentro do
+**Motor de Lucratividade**, colado no MiniStat "Prob. Calibrada". Esse é
+exatamente o número que ele qualifica — `calibrateConfidence()` treina o
+Platt em todos os trades e aplica ao score atual (in-sample), e este bloco
+responde a pergunta seguinte: *prevendo sem ter visto o resultado, bate
+repetir a taxa base?* Um card separado teria deixado a pergunta longe da
+resposta.
+
+**Zero segunda fonte.** Reusa o `trackRecordResults` que já existia e já é
+compartilhado por `expectancyFilter` e `calibrationResult` —
+`simulateTradeCostsBatch()` continua sendo chamado **uma vez só** (travado
+por teste).
+
+**O contrato de ordem foi VERIFICADO, não suposto.** O walk-forward só é
+honesto se a lista vier em ordem cronológica; fora de ordem, ele vaza
+futuro no treino **sem erro, sem teste vermelho, só um número inflado**.
+Verificado nos três elos: `TrackRecordState.history` é documentado como
+*"newest last"*, `pushHistory()` faz `[...history, entry]`, e
+`simulateTradeCostsBatch()` itera preservando a ordem. O porquê está
+escrito **no ponto de uso** — onde uma sessão futura iria quebrá-lo (ex.:
+reordenar o history para "newest first" na UI) — e um teste trava que essa
+explicação continue lá.
+
+**O que o Operador vê.** Três estados, e nenhum deles é um número
+fabricado:
+
+| estado | selo | corpo |
+|---|---|---|
+| < 60 trades resolvidos | `AINDA NÃO SEI` | o motivo real, em prosa |
+| BSS > 0 | `BATE A TAXA BASE` | Brier Skill, Brier, previsões OOS, taxa base |
+| BSS ≤ 0 | `SEM VALOR DEMONSTRADO` | as mesmas 4 métricas |
+
+O veredito negativo é **exibido**, não escondido — travado por teste. É a
+diferença entre um terminal que mede a si mesmo e um que se elogia.
+
+`npm run verify`: tsc limpo, **300 arquivos / 4928 testes** (11 novos),
+build ok.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)

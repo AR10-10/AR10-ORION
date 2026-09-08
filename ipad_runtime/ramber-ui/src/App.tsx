@@ -292,6 +292,15 @@ import { resolveFloatingWidgetOrigin } from "./nexus/floating-widget-origin";
 // arquivos para a auditoria completa.
 import { councilVotesToModelVotes, regimeModelVote, fuseModelVotes, alignFusedConfidence } from "./nexus/model-fusion";
 import { calibrateConfidence, type CalibrationResult } from "./nexus/platt-calibration";
+// A VALIDAÇÃO da probabilidade acima. calibrateConfidence() treina o Platt
+// em TODOS os trades e aplica ao score atual — ajuste IN-SAMPLE, que sempre
+// parece melhor do que é. Este módulo responde a pergunta seguinte, que é a
+// que decide se aquele número vale algo: prevendo sem ter visto o resultado,
+// ele bate simplesmente repetir a taxa base? Ver header do módulo.
+import {
+  evaluateWalkForwardCalibration,
+  type WalkForwardReport,
+} from "./nexus/walk-forward-calibration";
 import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
@@ -3329,6 +3338,22 @@ export default function App() {
     [liveModelAgreement, trackRecordResults],
   );
 
+  // GRADUAÇÃO (rodada 3 da ordem "EVOLUÇÃO COMPLETA"): validação
+  // fora-da-amostra da probabilidade calibrada acima. Reusa o MESMO
+  // `trackRecordResults` — zero segunda amostra, zero recomputação de
+  // simulateTradeCostsBatch (mesma disciplina de calibrationResult).
+  //
+  // A ORDEM CRONOLÓGICA é o contrato do walk-forward, e foi VERIFICADA, não
+  // suposta: `TrackRecordState.history` é documentado como "newest last",
+  // `pushHistory()` faz `[...history, entry]` e `simulateTradeCostsBatch()`
+  // itera preservando a ordem. Se qualquer um dos três mudar, o
+  // walk-forward passa a vazar futuro no treino — por isso está escrito
+  // aqui, no ponto de uso.
+  const walkForwardReport: WalkForwardReport = useMemo(
+    () => evaluateWalkForwardCalibration(trackRecordResults),
+    [trackRecordResults],
+  );
+
   // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
   // NUNCA valor monetário (o sistema não conhece o capital do operador).
   // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
@@ -4206,6 +4231,7 @@ export default function App() {
       institutionalScore,
       expectancyFilter,
       calibrationResult,
+      walkForwardReport,
       contextualRecall,
       decisionDistance,
       directionalConsensus,
@@ -4283,6 +4309,7 @@ export default function App() {
       institutionalScore,
       expectancyFilter,
       calibrationResult,
+      walkForwardReport,
       decisionDistance,
       directionalConsensus,
       liquidityMap,
@@ -6654,10 +6681,12 @@ function ExpectancyCard() {
   const {
     expectancyFilter,
     calibrationResult,
+    walkForwardReport,
     contextualRecall,
   }: {
     expectancyFilter?: FilterResult;
     calibrationResult?: CalibrationResult;
+    walkForwardReport?: WalkForwardReport;
     contextualRecall?: ContextualRecall | null;
   } = useContext(WidgetContext) || {};
   const stats = expectancyFilter?.stats ?? null;
@@ -6723,6 +6752,70 @@ function ExpectancyCard() {
       </div>
       {calibrationResult && !calibrationResult.calibrated && calibrationResult.reason && (
         <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{calibrationResult.reason}</span>
+      )}
+      {/* VALIDAÇÃO FORA-DA-AMOSTRA da "Prob. Calibrada" logo acima.
+          Fica AQUI, colado nela, e não num card próprio, porque é
+          exatamente o que qualifica aquele número: calibrateConfidence()
+          treina o Platt em TODOS os trades e aplica ao score atual —
+          ajuste in-sample, que sempre parece melhor do que é. Este bloco
+          responde "prevendo sem ter visto o resultado, bate repetir a taxa
+          base?" (walk-forward, Brier Skill Score).
+          LEI 24: display only. Mede a qualidade de uma leitura existente;
+          não emite direção e não altera o Núcleo. */}
+      {walkForwardReport && (
+        <div className="flex flex-col gap-1 border-t border-[#8ab4f8]/15 pt-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[0.4rem] tracking-[0.12em] text-[#8ab4f8]/50 uppercase">
+              Validação fora-da-amostra
+            </span>
+            <span
+              className={`text-[0.4rem] font-black uppercase tracking-wide ${
+                walkForwardReport.verdict === "MELHOR_QUE_A_TAXA_BASE"
+                  ? "text-[#00ffaa]"
+                  : walkForwardReport.verdict === "SEM_VALOR_PREDITIVO_DEMONSTRADO"
+                    ? "text-[#f0d06f]"
+                    : "text-[#8ab4f8]/40"
+              }`}
+              title="Walk-forward de origem móvel: treina só no passado e prevê o próximo, então cada previsão é genuinamente fora-da-amostra (zero look-ahead). O veredito vem do Brier Skill Score, cuja referência é a estratégia trivial de repetir a taxa base observada."
+            >
+              {walkForwardReport.verdict === "MELHOR_QUE_A_TAXA_BASE"
+                ? "BATE A TAXA BASE"
+                : walkForwardReport.verdict === "SEM_VALOR_PREDITIVO_DEMONSTRADO"
+                  ? "SEM VALOR DEMONSTRADO"
+                  : "AINDA NÃO SEI"}
+            </span>
+          </div>
+          {walkForwardReport.status === "OK" ? (
+            <div className="grid grid-cols-2 gap-1.5">
+              <MiniStat
+                label="Brier Skill"
+                value={walkForwardReport.brierSkillScore!.toFixed(3)}
+                color={walkForwardReport.brierSkillScore! > 0 ? "text-[#00ffaa]" : "text-[#f0d06f]"}
+                title="Brier Skill Score = 1 − BS/BS_ref, com a referência sendo repetir a taxa base observada. ZERO significa literalmente 'não é melhor que chutar a média'; negativo é pior que isso; 1 seria perfeito."
+              />
+              <MiniStat
+                label="Brier"
+                value={walkForwardReport.brierScore!.toFixed(4)}
+                color="text-[#8ab4f8]"
+                title="Brier Score (Brier 1950): erro quadrático médio das previsões probabilísticas fora-da-amostra. Menor é melhor; 0 é perfeito."
+              />
+              <MiniStat
+                label="Previsões OOS"
+                value={`${walkForwardReport.predictions}`}
+                color="text-[#8ab4f8]/70"
+                title="Previsões feitas SEM que o resultado previsto tivesse participado do treino que o previu. É a amostra real que sustenta o veredito."
+              />
+              <MiniStat
+                label="Taxa Base"
+                value={`${(walkForwardReport.baseRate! * 100).toFixed(0)}%`}
+                color="text-[#8ab4f8]/70"
+                title="Fração de acertos do conjunto retido. É o que a estratégia trivial de referência acertaria repetindo sempre este mesmo número."
+              />
+            </div>
+          ) : (
+            <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{walkForwardReport.reason}</span>
+          )}
+        </div>
       )}
       {/* LEI 24 — exceção pontual autorizada pelo Operador (ver CLAUDE.md,
           seção "LEI 24"): quando expectancyFilter.show é false, o
