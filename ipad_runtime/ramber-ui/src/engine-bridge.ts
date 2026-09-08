@@ -328,6 +328,12 @@ export interface RealCycleResult {
     direction: 'ALTA' | 'BAIXA' | null;
     adx: number;
     bandwidthPercentile: number | null;
+    /** Percentil de largura de banda do ciclo ANTERIOR. Passthrough aditivo:
+     *  regime-engine.js já o calculava e devolvia em `evidence`, e ele morria
+     *  nesta fronteira — sem ele não há como dizer se a banda está
+     *  comprimindo ou expandindo (REGIME_TRANSITION, §18 da MASTER ORDER).
+     *  Mesma classe de achado de resolvedAt e contextAtOpen.score. */
+    prevBandwidthPercentile: number | null;
     // Fase H: ATR% real da evidência do regime — insumo do Risk Engine
     // (unidade de risco = max(dist. do stop, ATR%)). Puro passthrough.
     atrPercent: number | null;
@@ -746,6 +752,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
         direction: regimeResult.direction,
         adx: regimeResult.evidence.adx,
         bandwidthPercentile: regimeResult.evidence.bandwidth_percentile,
+        prevBandwidthPercentile: regimeResult.evidence.prev_bandwidth_percentile ?? null,
         atrPercent: regimeResult.evidence.atr_percent ?? null,
         changedAt: startedAt,
       };

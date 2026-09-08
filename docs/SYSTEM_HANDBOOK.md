@@ -9411,6 +9411,61 @@ não pode regredir em silêncio.
 LEI 24 intacta: leitura de evidência, travada por teste contra alimentar
 Núcleo ou Trade Plan.
 
+### 6.118 Phase C — o regime secundário que a cascata descartava
+
+MASTER ORDER §18 pede `PRIMARY_REGIME`, `SECONDARY_REGIME`,
+`REGIME_TRANSITION` e `REGIME_CONFIDENCE`. Só o primeiro existia.
+
+#### O achado
+
+`classifyMarketRegime` é uma cascata **if/else winner-take-all**: testa
+BREAKOUT → TENDENCIA_FORTE → COMPRESSAO → TENDENCIA_MODERADA e devolve o
+**primeiro** que casa. Quando `ADX >= 30` **e** a banda está comprimida ao
+mesmo tempo, o motor reporta TENDENCIA_FORTE e a COMPRESSAO some — mesmo
+sendo igualmente verdadeira.
+
+E a evidência para reconstruir tudo **já vinha de graça** no retorno:
+`adx`, `bandwidth_percentile`, `prev_bandwidth_percentile`,
+`close_position`. Mesma família de `resolvedAt` (§6.110),
+`contextAtOpen.score` (§6.112) e `absorptionState` (§6.115) — aqui a
+fronteira era a própria cascata, que colapsa evidência rica num rótulo só.
+
+#### Mais um passthrough que morria na ponte
+
+`engine-bridge.ts` carregava `adx` e `bandwidthPercentile`, mas **não**
+`prev_bandwidth_percentile` — e sem ele não existe transição. Corrigido
+aditivamente: `prevBandwidthPercentile`.
+
+#### "Margem", nunca "probabilidade" (Regra de Ouro 2)
+
+O §18 chama de `REGIME_CONFIDENCE`. O que é honestamente calculável é a
+**margem relativa ao limiar que decidiu**: ADX 40 com piso 30 → `+0.33`.
+Um ADX de **30.1** e um de **45** produzem o **mesmo rótulo**, e a margem é
+o que os separa.
+
+O campo **não** se chama `confidence` nem vira porcentagem de acerto —
+nomear assim convidaria exatamente a leitura que a Regra de Ouro 2 proíbe.
+Um teste trava o contrato (nenhum campo `confidence`/`probability`).
+Regimes sem limiar numérico próprio (BREAKOUT, decidido por posição de
+fechamento; CONSOLIDACAO, o "nenhum dos outros") devolvem `null` em vez de
+uma régua inventada.
+
+#### Zero limiar novo
+
+`ADX_STRONG` (30), `ADX_MODERATE` (20) e `SQUEEZE_PERCENTILE` (0.25) são
+**importados** do motor que os declara. Redeclarar criaria duas verdades
+que sairiam de sincronia, e a leitura secundária passaria a discordar do
+primário sem ninguém notar.
+
+Sem leitura anterior, a transição é `DESCONHECIDA` — **nunca "ESTAVEL"
+fabricado**: ausência de histórico não é estabilidade observada.
+
+LEI 24: `primary` é passthrough **literal**; a linha oficial do motor nunca
+muda. Travado por teste.
+
+`nexus/regime-secondary.ts` (novo, puro, 23 testes: 19 de execução real +
+4 de fiação).
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar
