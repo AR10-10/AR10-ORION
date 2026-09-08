@@ -8297,6 +8297,125 @@ manda documentar em vez de forçar.
 
 ---
 
+### 6.103 ORDEM "AUDITORIA INTEGRAL DO ORGANISMO" (§39-§60) — o mapa §60
+completo + a única lacuna fechada nesta rodada
+
+A ordem pede um mapa de dois mundos (camada visível + motor matemático) e
+22 seções sobre outcome/calibração/maturidade. A auditoria mostrou que a
+maior parte disso **já existe e é real** — e localizou com precisão o que
+não existe. Registrar isso honestamente vale mais que construir 22
+sistemas novos por cima de infraestrutura que já faz o trabalho.
+
+#### O que a auditoria encontrou JÁ CONSTRUÍDO
+
+| Seção | Estado real |
+|---|---|
+| §44 Rastreamento da decisão | **Real.** `signal-track-record.ts` congela `PlanOpenContext` na abertura: ETA (provável e piso), estado VWAP, estado Nexus Line, Institutional Score, **regime** real (`regime-engine.js`), **structureLabel** real (`market-structure-engine.js`) e a leitura de `model-fusion.ts` já orientada à direção tomada. É o "reconstruir o estado do mercado na hora da decisão" que a §44 pede. |
+| §45 Outcome tracking | **Real.** `TrackedPlan` grava `openedAt`, `status` (OPEN/TARGET_HIT/PARTIAL_HIT/STOP_HIT/REPLACED), `resolvedAt`, `resolvedPrice`, `targetsHit` em ordem, `breakEvenSuggested`. Histórico com teto (`TRACK_RECORD_HISTORY_CAP = 100`). |
+| §47 Score ≠ probabilidade | **Já é lei escrita**, não uma boa intenção: Regra de Ouro 2 do `CLAUDE.md`, repetida no cabeçalho de `institutional-score.ts`, `confluence-engine.ts` e `council.ts`. O Score é massa de confluência, rotulada como tal. |
+| §48 Calibração empírica | **Real.** `platt-calibration.ts` — Platt scaling sobre trades REALMENTE resolvidos, consumindo a confiança de modelo congelada na abertura, com piso de amostra `MIN_TRADES_FOR_VALID_EXPECTANCY` (30) importado de `expectancy.ts` — zero segunda constante "30". Abaixo do piso: fail-closed com razão real, nunca uma curva ajustada em 4 pontos. |
+| §49 Hit-rate | **Parcial.** `targetHits`/`partialHits`/`stopHits` são contadores reais e `targetsHit` por plano permite derivar TP1/TP2/TP3 — mas a taxa separada por alvo não é computada nem apresentada hoje. |
+| §57 Relatório de maturidade | **Parcial.** `self-diagnostics.ts` (sob demanda) + o relatório de expectancy (com amostra, janela recente via `RECENT_TRADES_MIN_SAMPLE`, e aviso explícito abaixo do piso) cobrem parte; o recorte completo da §57 não existe. |
+| §58 Honestidade estatística | **Já é o comportamento padrão** de todo motor desta base: `DADOS_INSUFICIENTES` com razão real em vez de número bonito. |
+
+#### §43 — a lacuna real, e a única fechada nesta rodada
+
+**O achado, medido e não suposto.** O princípio da §43 ("cinco indicadores
+derivados da mesma candle não são cinco fontes independentes") **já é
+confiável nesta base, num lugar só**: `institutional-zones.ts` conta
+`new Set(group.map(m => m.sourceKind)).size` — "quantas FERRAMENTAS
+diferentes (não instâncias) concordam aqui" — e descarta a zona abaixo de
+`MIN_DISTINCT_SOURCES_FOR_ZONE`. Ou seja: a §43 não é conceito novo aqui.
+
+Onde ele falta, com linha e razão:
+1. `src/consensus/ensemble-engine.js` pondera cada membro por
+   `getSensitivity(regime, familia)` — peso por **sensibilidade ao
+   regime**, nunca por independência. Dois membros da MESMA família entram
+   com peso cheio em `totalWeight`; o pool nunca pergunta se as duas vozes
+   descansam sobre a mesma evidência.
+2. Mais afiado: `council.ts` e `confluence-engine.ts` passam
+   `familia: null` **de propósito** (documentado em `weight-matrix.js`,
+   linhas 41-42). Nesses dois pools todo membro cai em
+   `UNMODULATED_WEIGHT` — não existe informação de família, então a
+   pergunta da §43 sequer PODE ser feita ali hoje.
+3. A sobreposição é real: a família `momentum` já embala "k-NN Lorentziano
+   + rótulos de estrutura 15m/1H"; o Conselho tem StructureAgent E
+   MomentumAgent votando como vozes separadas; a Matriz Multi-Timeframe
+   vota 15m e 1h de novo. **Estrutura derivada das mesmas velas é contada
+   nos três pools, cada vez como uma voz cheia.**
+
+**Construído:** `nexus/evidence-independence.ts` —
+`measureEvidenceIndependence(voices, now)`, função pura e determinística
+que converte o "7 concordam" da tela no honesto "7 vozes apoiadas em N
+famílias distintas": `agreeingVoices`, `assessedVoices`,
+`unknownFamilyVoices`, `distinctFamilies`, `independenceRatio`,
+`largestClusterFamily/Size`. Generaliza a primitiva já provada de
+`institutional-zones.ts` (contar ferramentas distintas, nunca instâncias)
+e reusa o mesmo piso 2 — nenhum limiar novo inventado.
+
+**Fail-closed (§58), e é o ponto mais importante do módulo:** voz sem
+família NUNCA é assumida independente — fica fora do índice, contada à
+parte. Se nenhuma voz tem família — que é **literalmente o estado de hoje
+do Conselho e do Confluence Engine** — a leitura devolve
+`DADOS_INSUFICIENTES` com a razão real. O módulo **relata o ponto cego do
+sistema em vez de encobri-lo**.
+
+**O que ele deliberadamente NÃO faz (§42/§51/LEI 24):** não altera peso
+nenhum do pool, não produz direção, score combinado nem probabilidade. A
+§42 manda IDENTIFICAR → DOCUMENTAR → COMPARAR → VALIDAR → DECIDIR, nunca
+reponderar automaticamente; a §51 (Learning Governor) proíbe mexer em
+silêncio no Decision Engine/Risk/thresholds. Mudar a matemática do pool a
+partir deste achado é decisão do Operador, com Shadow e validação
+(§53/§54) — não consequência automática de medir. **Medir primeiro é
+exatamente o que a própria ordem manda.**
+
+17 testes de execução real (o cenário literal da §43 — 5 vozes/1 família —
+mais discordância, família em branco, não-mutação, determinismo do
+desempate, e a guarda de que a leitura não expõe campo de direção/
+probabilidade).
+
+#### §60 — o mapa entregue
+
+- **VISUAL**: componente → fonte → camada → prioridade → estado. As 4
+  dimensões declaradas do gráfico já existem como módulos próprios:
+  `chart-profile-lanes.ts` (x), `chart-time-ribbon-lanes.ts` (y),
+  `chart-layer-depth.ts` (z), `chart-plot-area.ts` (fronteira com o eixo).
+  A tabela de papéis por fonte vive na seção 7 deste handbook (A-E).
+- **MATEMÁTICO**: 110 módulos em `nexus/` + 17 engines em
+  `research/engines/` (15 graduados, ver `QUARANTINE.md`), cada um com
+  cabeçalho declarando entrada/saída/consumidor.
+- **DECISÃO**: Evidence (`evidence-fusion.ts`, agora com
+  `evidence-independence.ts` medindo a diversidade real) → pools
+  (`ensemble-engine.js`/`council.ts`/`multi-timeframe-engine.ts`) →
+  `confluence-engine.ts` → **Core Engine (único emissor, LEI 24)** →
+  `trade-plan.ts` → `trade-plan-view.ts` → canvas.
+- **PERFORMANCE**: `signal-track-record.ts` → `expectancy.ts` (R-múltiplo
+  real após custos, `trade-simulation.ts`) → `platt-calibration.ts`.
+- **MATURIDADE**: Observação e Medição **existem**; Calibração **existe**
+  com piso de amostra; Shadow e Validação out-of-sample **não existem**.
+
+#### Lacunas reais que ficam declaradas (não fabricadas)
+
+- **§54 walk-forward / out-of-sample**: `platt-calibration.ts` ajusta sobre
+  TODOS os trades utilizáveis — não há split train/validation. Sem isso,
+  §55 (anti-overfitting) não tem como ser respondida com evidência.
+- **§52 `CALIBRATION STALE`**: existe a semente (janela recente vs. total
+  em `expectancy.ts`), não o estado declarado nem o gate que impede
+  apresentar um rank como calibrado depois que ele perdeu validade.
+- **§53 Shadow**: não há comparação versão-atual × nova-calibração.
+- **§46 matriz de resultados** completa (direção × timeframe × ativo ×
+  regime × volatilidade × qualidade × confluência): hoje a estratificação
+  real é por regime; o resto do recorte não existe.
+- **§49** hit-rate separado por TP1/TP2/TP3: derivável de `targetsHit`,
+  não computado.
+
+Cada uma é sua própria rodada, na ordem que a própria §50 estabelece —
+observar, medir, calibrar, validar, homologar. Construir as cinco de uma
+vez seria exatamente o "OBSERVAR → ASSUMIR → ALTERAR → DECLARAR QUE FICOU
+MELHOR" que o Princípio Central da ordem proíbe.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
