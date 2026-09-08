@@ -9750,6 +9750,67 @@ escondê-los daria a impressão de que não existem.
 
 ---
 
+### 6.124 §74-B → aplicado: o limite de Hoeffding (ADWIN) no drift-detector
+
+A pesquisa da §6.121 tinha identificado a própria fraqueza do
+`drift-detector.ts` que ela mesma acabara de entregar: as bandas 1σ/2σ/3σ
+são **convenção declarada**, não derivada. Perguntei ao Operador se
+deveria trocá-las pelo bound de Hoeffding do ADWIN antes de mexer sozinho
+no núcleo estatístico de um módulo recém-entregue; a resposta foi a
+autorização geral de finalização. Implementado **aditivamente** — nada foi
+trocado, algo novo foi somado (Regra de Ouro 4).
+
+**A fórmula, do próprio artigo (Bifet & Gavaldà 2007):**
+
+```
+ε_cut = amplitude · √( ln(4/δ') / 2m ),  m = média harmônica de n₀,n₁,  δ' = δ/n
+```
+
+**A correção que a fórmula publicada esconde, e que quase entrou errada.**
+Hoeffding só vale para variável LIMITADA, e o `ε_cut` do artigo assume
+valores em `[0,1]` — onde a amplitude é 1 e some da fórmula. R-múltiplo
+não é limitado em `[0,1]` (um trade pode render −1R ou +4R). Copiar o
+`ε_cut` literal teria dado um corte calibrado para uma escala errada —
+apertado demais, com falso alarme muito acima do δ prometido. A correção:
+a AMPLITUDE REAL da base (max − min) volta explicitamente como fator.
+Quinta aplicação da técnica auto-referente deste projeto (depois de
+calibration-freshness, referência independente, mediana de volatilidade e
+o próprio erro padrão do drift): a régua sai dos dados, nunca de um
+número meu.
+
+**Honestidade sobre "parameter-free".** A literatura descreve ADWIN assim,
+e a §6.121 repetiu — precisa de qualificação. O que ADWIN elimina é o
+LIMIAR escolhido à mão; δ continua sendo uma escolha. A diferença real é
+que δ tem SIGNIFICADO OPERACIONAL (a taxa de falso alarme aceita, 5% por
+convenção estatística ordinária), enquanto "2σ" é só um número de
+desvios. É uma troca por algo com significado, não uma eliminação —
+dizer que a convenção sumiu seria a desonestidade que este projeto evita.
+`DRIFT_HOEFFDING_DELTA = 0.05`, com essa qualificação escrita no módulo.
+
+**As bandas convencionais continuam existindo.** O bound é BINÁRIO ("a
+diferença passa do que o acaso explica?"); as bandas dão a MAGNITUDE
+graduada (1σ/2σ/3σ), que é o que separa "começou a se mexer" de "mudou
+completamente". Complementares, não redundantes — remover uma delas
+perderia informação real. `describeDrift()` mostra as duas juntas de
+propósito: quando discordam, isso já é informação.
+
+**A amplitude vem da BASE, nunca da janela recente.** A base é a
+distribuição de referência que define a escala do que é surpresa; usar a
+amplitude da própria janela recente deixaria o evento sendo medido
+esticar a régua que deveria julgá-lo.
+
+Aditivo em três pontas: `TrackedPlan`/`DriftReading` ganham campos novos
+(`hoeffdingBound`, `hoeffdingExceeded`, `baselineRange`), zero campo
+removido; `describeDrift()` concatena o veredito derivado ao final da
+linha existente; o tooltip do painel ganha uma frase explicando os dois
+lados. Fail-closed: ausência de leitura nunca vira `hoeffdingExceeded:
+false` (que se leria como "testado, sem drift" em vez de "não medido").
+
+LEI 24 intacto: diagnóstico puro, mesma exceção já registrada em
+`drift-detector.ts` — nada aqui alimenta Núcleo, Trade Plan ou risco.
+
+---
+
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar
 (mesma disciplina da seção Arquitetura do `CLAUDE.md`); a seção 6 só
 cresce — uma pendência nova entra com destino declarado, nunca fica vaga.*

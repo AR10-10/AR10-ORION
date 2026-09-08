@@ -7185,7 +7185,7 @@ function ExpectancyCard() {
                       ? "text-[#00ffaa]/80"
                       : "text-[#8ab4f8]/60"
               }`}
-              title={`Compara os ${driftReading.recentTrades} trades mais recentes contra os ${driftReading.baselineTrades} ANTERIORES a eles — as duas amostras são disjuntas de propósito, senão a base diluiria o próprio sinal procurado. A régua é o erro padrão da base, então a leitura se adapta à volatilidade real da estratégia. RECUPERANDO significa que mudou A FAVOR; DEGRADADO significa que mudou e passou a perder. Bandas 1/2/3σ são convenção estatística ordinária, não um teste de hipótese calibrado.`}
+              title={`Compara os ${driftReading.recentTrades} trades mais recentes contra os ${driftReading.baselineTrades} ANTERIORES a eles — as duas amostras são disjuntas de propósito, senão a base diluiria o próprio sinal procurado. A régua é o erro padrão da base, então a leitura se adapta à volatilidade real da estratégia. RECUPERANDO significa que mudou A FAVOR; DEGRADADO significa que mudou e passou a perder. Bandas 1/2/3σ são convenção estatística ordinária, não um teste de hipótese calibrado — o "Hoeffding" ao lado é o veredito DERIVADO (§74-B, ADWIN): a diferença passa do que o acaso, dada a amplitude real da base, explicaria com 95% de confiança? Os dois viajam juntos de propósito — quando discordam, isso já é informação real.`}
             >
               Drift · {describeDrift(driftReading)}
             </span>

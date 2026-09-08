@@ -229,3 +229,117 @@ describe('drift: fiação real em App.tsx', () => {
     expect(app).toContain('describeDrift(driftReading)');
   });
 });
+
+// ─── §74-B: LIMITE DE HOEFFDING (ADWIN, Bifet & Gavaldà 2007) ────────────
+// A pergunta destes testes não é "o número bate?" — é "o corte é DERIVADO
+// dos dados, e não escolhido?". Cada teste ataca uma forma de ele voltar a
+// ser uma convenção disfarçada. Reusa o MESMO `serie()` do resto do
+// arquivo — nenhuma fixture nova nasce só para o bound.
+describe('drift: o corte de Hoeffding é derivado, não escolhido', () => {
+  it('a fórmula do artigo, conferida à mão: ε = amplitude·√(ln(4/δ\')/2m)', () => {
+    // serie(80, 0.5, 0.3): 60 na base, 20 na recente, ambas alternando
+    // simetricamente em torno do mesmo centro — dispersão real na base,
+    // sem exigir uma segunda fixture só para o cálculo.
+    const r = detectDrift(serie(80, 0.5, 0.3));
+    expect(r.status).toBe('OK');
+
+    const n0 = r.baselineTrades;
+    const n1 = r.recentTrades;
+    const m = 1 / (1 / n0 + 1 / n1);
+    const deltaLinha = 0.05 / (n0 + n1);
+    const esperado = r.baselineRange! * Math.sqrt(Math.log(4 / deltaLinha) / (2 * m));
+    expect(r.hoeffdingBound).toBeCloseTo(esperado, 10);
+    expect(r.baselineRange).toBeCloseTo(0.6, 10); // (0.5+0.3) - (0.5-0.3)
+  });
+
+  it('o bound ESCALA com a amplitude real da base — a régua sai dos dados', () => {
+    // Hoeffding só vale para variável LIMITADA, e o ε_cut publicado assume
+    // [0,1]. Se a amplitude não entrasse, duas amostras com dispersões
+    // muito diferentes teriam o MESMO corte — que é justamente o erro.
+    const estreita = detectDrift(serie(80, 0.5, 0.1));
+    const larga = detectDrift(serie(80, 0.5, 1.0));
+    expect(estreita.status).toBe('OK');
+    expect(larga.status).toBe('OK');
+    expect(larga.baselineRange!).toBeGreaterThan(estreita.baselineRange!);
+    expect(larga.hoeffdingBound!).toBeGreaterThan(estreita.hoeffdingBound!);
+    // E a razão entre os cortes é a razão entre as amplitudes (mesmos n).
+    expect(larga.hoeffdingBound! / estreita.hoeffdingBound!).toBeCloseTo(
+      larga.baselineRange! / estreita.baselineRange!,
+      10,
+    );
+  });
+
+  it('mais amostra => corte MENOR (mais evidência, menos tolerância ao acaso)', () => {
+    // Mesma amplitude (0.3) nas duas — só o TAMANHO da base muda
+    // (RECENT_TRADES_WINDOW fica fixo, o resto vira base).
+    const pequena = detectDrift(serie(50, 0.5, 0.3));
+    const grande = detectDrift(serie(200, 0.5, 0.3));
+    expect(pequena.status).toBe('OK');
+    expect(grande.status).toBe('OK');
+    expect(grande.baselineTrades).toBeGreaterThan(pequena.baselineTrades);
+    expect(grande.hoeffdingBound!).toBeLessThan(pequena.hoeffdingBound!);
+  });
+
+  it('o veredito derivado é exatamente |Δmédias| > ε, nunca outra coisa', () => {
+    // Base centrada em 0.5, recente centrada em 0.7 — Δ real e conhecido.
+    const deslocada = [...serie(30, 0.5, 0.3), ...serie(RECENT_TRADES_WINDOW, 0.7, 0.3)];
+    const r = detectDrift(deslocada);
+    expect(r.status).toBe('OK');
+    expect(r.recentMeanR).toBeCloseTo(0.7, 10);
+    expect(r.baselineMeanR).toBeCloseTo(0.5, 10);
+    const delta = Math.abs(r.recentMeanR! - r.baselineMeanR!);
+    expect(r.hoeffdingExceeded).toBe(delta > r.hoeffdingBound!);
+  });
+
+  it('uma mudança GRANDE de verdade passa do corte; ruído não', () => {
+    // Mesmo centro na base e na recente: Δ é exatamente 0 => nunca excede.
+    const soRuido = detectDrift(serie(120, 0.5, 0.3));
+    expect(soRuido.status).toBe('OK');
+    expect(soRuido.recentMeanR).toBeCloseTo(soRuido.baselineMeanR!, 10);
+    expect(soRuido.hoeffdingExceeded).toBe(false);
+
+    // MESMA base (dispersão real), janela recente deslocada para um valor
+    // muito distante — inequívoco, bem acima de qualquer corte plausível.
+    const deslocada = detectDrift([
+      ...serie(100, 0.5, 0.3),
+      ...Array.from({ length: RECENT_TRADES_WINDOW }, () => t(5)),
+    ]);
+    expect(deslocada.status).toBe('OK');
+    expect(deslocada.hoeffdingExceeded).toBe(true);
+  });
+
+  it('ausência nunca vira `false` — sem leitura, o veredito é null', () => {
+    const r = detectDrift([]);
+    expect(r.hoeffdingBound).toBeNull();
+    expect(r.hoeffdingExceeded).toBeNull(); // nunca false, que se leria como "testado, sem drift"
+    expect(r.baselineRange).toBeNull();
+  });
+
+  it('as bandas convencionais CONTINUAM existindo (Regra de Ouro 4)', () => {
+    const r = detectDrift(serie(80, 0.5, 0.3));
+    expect(r.status).toBe('OK');
+    expect(r.deviations).not.toBeNull();
+    expect(DRIFT_BAND_WATCH).toBe(1);
+    expect(DRIFT_BAND_POSSIBLE).toBe(2);
+    expect(DRIFT_BAND_CONFIRMED).toBe(3);
+    // O bound é binário; as bandas dão a magnitude graduada. Complementares.
+    expect(['STABLE', 'WATCH', 'POSSIBLE_DRIFT', 'DRIFT_CONFIRMED', 'DEGRADED', 'RECOVERING']).toContain(r.state);
+  });
+
+  it('describeDrift mostra os DOIS: a magnitude em σ e o veredito derivado', () => {
+    const linha = describeDrift(detectDrift(serie(80, 0.5, 0.3)));
+    expect(linha).toContain('σ');
+    expect(linha).toContain('Hoeffding');
+    expect(linha).toContain('ε=');
+  });
+
+  it('δ é declarado com significado (taxa de falso alarme), não um σ escolhido', () => {
+    const src = readFileSync(new URL('../src/nexus/drift-detector.ts', import.meta.url), 'utf-8');
+    expect(src).toContain('DRIFT_HOEFFDING_DELTA = 0.05');
+    // E o módulo NÃO pode afirmar que virou parameter-free: δ é uma troca,
+    // não uma eliminação — dizer o contrário seria a desonestidade exata
+    // que este projeto evita.
+    expect(src).toContain('é uma troca');
+    expect(src).toContain('não uma eliminação');
+  });
+});

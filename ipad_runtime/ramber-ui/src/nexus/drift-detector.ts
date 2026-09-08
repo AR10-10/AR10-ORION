@@ -42,10 +42,32 @@ import { RECENT_TRADES_WINDOW, RECENT_TRADES_MIN_SAMPLE } from "./expectancy";
 import type { TradeCostResult } from "./trade-simulation";
 
 /** Bandas em erros padrão. Convenção declarada (ver cabeçalho) — as bandas
- *  estatísticas ordinárias, nunca calibradas contra este sistema. */
+ *  estatísticas ordinárias, nunca calibradas contra este sistema.
+ *
+ *  Preservadas (Regra de Ouro 4) mesmo depois de o limite de Hoeffding
+ *  entrar: elas respondem uma pergunta que o bound NÃO responde. O bound
+ *  é binário ("a diferença passa do que o acaso explica?"); as bandas dão
+ *  a MAGNITUDE graduada (1σ/2σ/3σ), que é o que separa "começou a se
+ *  mexer" de "mudou completamente". São complementares, não redundantes. */
 export const DRIFT_BAND_WATCH = 1;
 export const DRIFT_BAND_POSSIBLE = 2;
 export const DRIFT_BAND_CONFIRMED = 3;
+
+/** Probabilidade de FALSO POSITIVO admitida pelo teste de Hoeffding
+ *  (§74-B / ADWIN, Bifet & Gavaldà 2007).
+ *
+ *  ── HONESTIDADE SOBRE "PARAMETER-FREE" ────────────────────────────────
+ *  A literatura descreve ADWIN como parameter-free, e
+ *  docs/PESQUISA_REFERENCIAS_EXTERNAS.md repetiu isso. É preciso
+ *  qualificar: o que ADWIN elimina é o LIMIAR escolhido à mão — δ
+ *  continua sendo uma escolha. O ganho é real e grande, mas é uma troca,
+ *  não uma eliminação: δ tem SIGNIFICADO OPERACIONAL (a taxa de falso
+ *  alarme que se aceita), enquanto "2σ" é só um número de desvios. Trocar
+ *  uma convenção sem significado por um parâmetro com significado é a
+ *  melhoria; dizer que a convenção sumiu seria falso.
+ *
+ *  0.05 é a convenção estatística ordinária de 5%. */
+export const DRIFT_HOEFFDING_DELTA = 0.05;
 
 export type DriftState =
   | "STABLE"
@@ -68,6 +90,36 @@ export interface DriftReading {
   deviations: number | null;
   /** true quando a janela recente está PIOR que a base. */
   worse: boolean | null;
+  /** §74-B — LIMITE DE HOEFFDING (ADWIN, Bifet & Gavaldà 2007), em R.
+   *
+   *  O corte acima do qual a diferença entre as duas médias deixa de ser
+   *  explicável pelo acaso, DERIVADO em vez de escolhido:
+   *
+   *      ε_cut = amplitude · √( ln(4/δ') / 2m )
+   *
+   *  com m = média harmônica dos dois tamanhos e δ' = δ/n (correção de
+   *  Bonferroni pelos cortes possíveis) — exatamente a fórmula do artigo.
+   *
+   *  ── A CORREÇÃO QUE A FÓRMULA PUBLICADA ESCONDE ────────────────────
+   *  A desigualdade de Hoeffding SÓ VALE para variável LIMITADA, e o
+   *  ε_cut publicado assume valores em [0,1], onde a amplitude é 1 e
+   *  some da fórmula. R-múltiplo NÃO é limitado em [0,1]: um trade pode
+   *  render −1R ou +4R. Copiar o ε_cut literal aqui daria um corte
+   *  calibrado para uma escala que não é esta — apertado demais, com
+   *  falso alarme muito acima do δ prometido.
+   *
+   *  Por isso a `amplitude` volta explicitamente: é a amplitude REAL
+   *  observada na base (max − min). Quinta aplicação da técnica
+   *  auto-referente deste projeto — a régua sai dos próprios dados, e não
+   *  de um número meu. */
+  hoeffdingBound: number | null;
+  /** |média recente − média base| > ε_cut? O veredito DERIVADO. null
+   *  quando não pôde ser calculado — nunca `false` fabricado, que se
+   *  leria como "testado e não há drift". */
+  hoeffdingExceeded: boolean | null;
+  /** Amplitude real da base (max − min), em R. É o que torna o bound
+   *  válido para uma variável fora de [0,1] (ver `hoeffdingBound`). */
+  baselineRange: number | null;
   baselineTrades: number;
   recentTrades: number;
 }
@@ -80,6 +132,9 @@ const INSUFICIENTE = (reason: string, baselineTrades: number, recentTrades: numb
   recentMeanR: null,
   deviations: null,
   worse: null,
+  hoeffdingBound: null,
+  hoeffdingExceeded: null,
+  baselineRange: null,
   baselineTrades,
   recentTrades,
 });
@@ -95,6 +150,33 @@ function sampleStdev(xs: readonly number[]): number | null {
   const m = mean(xs);
   const varianca = xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1);
   return Math.sqrt(varianca);
+}
+
+/**
+ * Limite de Hoeffding no formato do ADWIN (Bifet & Gavaldà 2007,
+ * "Learning from Time-Changing Data with Adaptive Windowing"):
+ *
+ *     ε_cut = amplitude · √( ln(4/δ') / 2m ),  m = 1/(1/n₀ + 1/n₁),  δ' = δ/n
+ *
+ * `m` é a média harmônica dos dois tamanhos, e δ' aplica a correção de
+ * Bonferroni sobre os n pontos de corte possíveis — as duas coisas vêm do
+ * artigo, não são invenção daqui.
+ *
+ * `amplitude` é a adaptação declarada: o ε_cut publicado assume valores em
+ * [0,1] (amplitude 1, que some da fórmula), e Hoeffding SÓ vale para
+ * variável limitada. R-múltiplo não é limitado em [0,1], então a amplitude
+ * real da amostra volta como fator — ver o comentário de `hoeffdingBound`.
+ *
+ * Devolve null quando qualquer insumo é degenerado, nunca um corte
+ * fabricado (Regra de Ouro 3).
+ */
+function hoeffdingCut(n0: number, n1: number, amplitude: number, delta: number): number | null {
+  if (!(n0 > 0) || !(n1 > 0) || !(amplitude > 0) || !(delta > 0) || !(delta < 1)) return null;
+  const n = n0 + n1;
+  const m = 1 / (1 / n0 + 1 / n1); // média harmônica, como no artigo
+  const deltaLinha = delta / n; // Bonferroni sobre os cortes possíveis
+  const cut = amplitude * Math.sqrt(Math.log(4 / deltaLinha) / (2 * m));
+  return Number.isFinite(cut) && cut > 0 ? cut : null;
 }
 
 /**
@@ -147,6 +229,16 @@ export function detectDrift(results: readonly TradeCostResult[] | null | undefin
   const deviations = Math.abs(recentMeanR - baselineMeanR) / erroPadrao;
   const worse = recentMeanR < baselineMeanR;
 
+  // §74-B: o veredito DERIVADO, ao lado da magnitude convencional acima.
+  // A amplitude sai da BASE (a distribuição de referência), não da janela
+  // recente: é o comportamento conhecido que define a escala do que é
+  // surpresa. Usar a amplitude da janela recente deixaria o próprio
+  // evento sendo medido esticar a régua que deveria julgá-lo.
+  const baselineRange = Math.max(...baseR) - Math.min(...baseR);
+  const hoeffdingBound = hoeffdingCut(baseline.length, recent.length, baselineRange, DRIFT_HOEFFDING_DELTA);
+  const hoeffdingExceeded =
+    hoeffdingBound === null ? null : Math.abs(recentMeanR - baselineMeanR) > hoeffdingBound;
+
   let state: DriftState;
   if (deviations < DRIFT_BAND_WATCH) {
     state = "STABLE";
@@ -172,6 +264,9 @@ export function detectDrift(results: readonly TradeCostResult[] | null | undefin
     recentMeanR,
     deviations,
     worse,
+    hoeffdingBound,
+    hoeffdingExceeded,
+    baselineRange: Number.isFinite(baselineRange) && baselineRange > 0 ? baselineRange : null,
     baselineTrades: baseline.length,
     recentTrades: recent.length,
   };
@@ -191,5 +286,12 @@ const STATE_LABEL: Record<DriftState, string> = {
 export function describeDrift(r: DriftReading): string {
   if (r.status !== "OK") return r.reason ?? "sem leitura de drift";
   const sinal = r.recentMeanR! >= 0 ? "+" : "";
-  return `${STATE_LABEL[r.state]} · recente ${sinal}${r.recentMeanR!.toFixed(3)}R (${r.recentTrades}) vs base ${r.baselineMeanR! >= 0 ? "+" : ""}${r.baselineMeanR!.toFixed(3)}R (${r.baselineTrades}) · ${r.deviations!.toFixed(1)}σ`;
+  // O veredito DERIVADO (Hoeffding) viaja junto da magnitude convencional
+  // (σ). Quando os dois discordam, isso é informação real sobre o quanto a
+  // leitura depende da convenção — e some se só um dos dois for exibido.
+  const derivado =
+    r.hoeffdingExceeded === null
+      ? ""
+      : ` · Hoeffding ${r.hoeffdingExceeded ? "passou" : "não passou"} (ε=${r.hoeffdingBound!.toFixed(3)}R)`;
+  return `${STATE_LABEL[r.state]} · recente ${sinal}${r.recentMeanR!.toFixed(3)}R (${r.recentTrades}) vs base ${r.baselineMeanR! >= 0 ? "+" : ""}${r.baselineMeanR!.toFixed(3)}R (${r.baselineTrades}) · ${r.deviations!.toFixed(1)}σ${derivado}`;
 }
