@@ -5305,7 +5305,7 @@ function RadarPanel() {
               <span className="text-[0.5rem] text-[#8ab4f8]/50 tracking-[0.1em] uppercase">
                 Nenhuma oportunidade validada agora
               </span>
-              <span className="text-[0.42rem] text-[#8ab4f8]/35 max-w-[220px]">
+              <span className="text-[0.4rem] text-[#8ab4f8]/35 max-w-[220px]">
                 O organismo varre o universo curado (Binance) + o universo real da MEXC em segundo plano — volte em alguns minutos, ou aguarde o próximo ciclo automático.
               </span>
             </div>
@@ -5449,7 +5449,7 @@ function MarketAnalysisPainelTab({ analysis }: { analysis: MarketAnalysis }) {
       {analysis.retest && (
         <ModulePanel title="Reteste">
           <ModuleStat label="Zona" value={`${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`} />
-          <span className="text-[0.42rem] text-[#8ab4f8]/50">
+          <span className="text-[0.4rem] text-[#8ab4f8]/50">
             {analysis.retest.condition} ({analysis.retest.context})
           </span>
         </ModulePanel>
@@ -5573,7 +5573,7 @@ function MarketAnalysisPublicationTab({ snapshot }: { snapshot: PublicationSnaps
                 key={a.format}
                 type="button"
                 onClick={() => setActiveFormat(a.format)}
-                className={`px-2 py-1 rounded text-[0.42rem] font-black tracking-[0.1em] uppercase cursor-pointer transition-colors ${
+                className={`px-2 py-1 rounded text-[0.4rem] font-black tracking-[0.1em] uppercase cursor-pointer transition-colors ${
                   activeFormat === a.format
                     ? "bg-[#00f0ff1a] text-[#00f0ff] border border-[#00f0ff40]"
                     : "text-[#8ab4f8]/50 border border-transparent hover:text-[#8ab4f8]"
@@ -5595,7 +5595,7 @@ function MarketAnalysisPublicationTab({ snapshot }: { snapshot: PublicationSnaps
               <button
                 type="button"
                 onClick={() => downloadAsset(active)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#00f0ff40] bg-[#00f0ff1a] text-[#00f0ff] text-[0.48rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:bg-[#00f0ff2a]"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#00f0ff40] bg-[#00f0ff1a] text-[#00f0ff] text-[0.5rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:bg-[#00f0ff2a]"
               >
                 <Download size={12} />
                 Baixar {PUBLICATION_FORMAT_SPECS[active.format].label}
@@ -5604,14 +5604,14 @@ function MarketAnalysisPublicationTab({ snapshot }: { snapshot: PublicationSnaps
           )}
 
           <div className="flex flex-col gap-1">
-            <span className="text-[0.42rem] text-[#8ab4f8]/50 uppercase tracking-[0.1em]">Legenda sugerida para X</span>
-            <pre className="whitespace-pre-wrap break-words text-[0.46rem] leading-relaxed text-[#a0f0ff] bg-[#010205] border border-[#00f0ff15] rounded p-2 font-mono">
+            <span className="text-[0.4rem] text-[#8ab4f8]/50 uppercase tracking-[0.1em]">Legenda sugerida para X</span>
+            <pre className="whitespace-pre-wrap break-words text-[0.45rem] leading-relaxed text-[#a0f0ff] bg-[#010205] border border-[#00f0ff15] rounded p-2 font-mono">
               {formatMarketAnalysisForX(snapshot.analysis)}
             </pre>
             <button
               type="button"
               onClick={handleCopyCaption}
-              className="self-end flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#00f0ff40] bg-[#00f0ff1a] text-[#00f0ff] text-[0.48rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:bg-[#00f0ff2a]"
+              className="self-end flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#00f0ff40] bg-[#00f0ff1a] text-[#00f0ff] text-[0.5rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:bg-[#00f0ff2a]"
             >
               {captionCopyState === "copied" ? <Check size={12} /> : <Copy size={12} />}
               {captionCopyState === "copied" ? "Copiado" : captionCopyState === "failed" ? "Falhou — copie manualmente" : "Copiar legenda"}
@@ -5638,7 +5638,7 @@ function MarketAnalysisPublicationTab({ snapshot }: { snapshot: PublicationSnaps
             </button>
           </div>
           {shareState === "unsupported" && (
-            <span className="text-[0.42rem] text-[#8ab4f8]/50 text-center">
+            <span className="text-[0.4rem] text-[#8ab4f8]/50 text-center">
               Compartilhamento nativo não disponível neste navegador — use Baixar Todas.
             </span>
           )}
@@ -5771,14 +5771,14 @@ function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState |
             <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">
               <Share2 size={22} className="text-[#8ab4f8]/30" />
               <span className="text-[0.5rem] text-[#8ab4f8]/50 tracking-[0.1em] uppercase">DADOS INSUFICIENTES</span>
-              <span className="text-[0.42rem] text-[#8ab4f8]/35 max-w-[260px]">
+              <span className="text-[0.4rem] text-[#8ab4f8]/35 max-w-[260px]">
                 O Núcleo ainda não tem leitura real suficiente para {selectedAsset || "este ativo"} agora — nenhum
                 cenário publicável até que exista viés/estrutura reais.
               </span>
             </div>
           ) : (
             <>
-              <span className="text-[0.42rem] text-[#8ab4f8]/50 tracking-[0.1em] uppercase">
+              <span className="text-[0.4rem] text-[#8ab4f8]/50 tracking-[0.1em] uppercase">
                 {analysis.symbol} · {analysis.timeframe.toUpperCase()} · fotografia congelada há {ageLabelOf(analysis.generatedAt)}
               </span>
               <span className="text-[0.4rem] text-[#8ab4f8]/35 leading-tight">
@@ -5968,7 +5968,7 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
                 />
               </label>
               {Number(leverageInput) > 1 && (
-                <div className="text-[#f0d06f]/70 text-[0.62rem] leading-relaxed">
+                <div className="text-[#f0d06f]/70 text-[0.6rem] leading-relaxed">
                   Com {Number(leverageInput)}x, a margem é {fmt(Number(sizeInput) / Math.max(1, Number(leverageInput)), 2)} USDT
                   e a posição tem preço de liquidação — o prejuízo simulado nunca passa da margem.
                   O nível é ESTIMADO (margem isolada, taxa de manutenção declarada de{" "}
@@ -6040,7 +6040,7 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
               {liq?.breached && (
                 <div className="cyber-panel bg-[#ff4d6d]/10 border-[#ff4d6d]/40 p-2 text-center text-[#ff4d6d] leading-relaxed">
                   PREÇO JÁ CRUZOU O NÍVEL ESTIMADO DE LIQUIDAÇÃO.
-                  <div className="text-[0.62rem] text-[#ff4d6d]/70 mt-1">
+                  <div className="text-[0.6rem] text-[#ff4d6d]/70 mt-1">
                     Numa corretora real esta posição já teria sido encerrada. O prejuízo mostrado está travado no
                     teto da margem. Nada aqui fecha sozinho — a decisão continua sua.
                   </div>
@@ -6309,7 +6309,7 @@ function AlertToastStack({ alerts, onDismiss }: { alerts: AlertEvent[]; onDismis
                       {emphasis.marker && <span className="mr-1 opacity-80">{emphasis.marker}</span>}
                       {a.title}
                     </div>
-                    <div className="text-[0.48rem] text-[#8ab4f8]/80 mt-0.5 leading-snug">{a.message}</div>
+                    <div className="text-[0.5rem] text-[#8ab4f8]/80 mt-0.5 leading-snug">{a.message}</div>
                   </div>
                   <button
                     type="button"
@@ -6722,7 +6722,7 @@ function ExpectancyCard() {
         />
       </div>
       {calibrationResult && !calibrationResult.calibrated && calibrationResult.reason && (
-        <span className="text-[0.42rem] text-[#8ab4f8]/60 leading-tight">{calibrationResult.reason}</span>
+        <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{calibrationResult.reason}</span>
       )}
       {/* LEI 24 — exceção pontual autorizada pelo Operador (ver CLAUDE.md,
           seção "LEI 24"): quando expectancyFilter.show é false, o
@@ -6731,13 +6731,13 @@ function ExpectancyCard() {
           silenciosa, nunca só no tooltip do badge. */}
       {expectancyFilter?.show === false && (
         <div className="flex items-start gap-1.5 bg-[#ff00550f] border border-[#ff005530] rounded px-2 py-1.5">
-          <span className="text-[0.42rem] text-[#ff0055] leading-tight">
+          <span className="text-[0.4rem] text-[#ff0055] leading-tight">
             Expectativa líquida real negativa nesta amostra — badge principal exibe NEUTRO no lugar da direção real do Núcleo (LEI 24, exceção autorizada pelo Operador). O Núcleo em si não foi alterado.
           </span>
         </div>
       )}
       {expectancyFilter?.warning && (
-        <span className="text-[0.42rem] text-[#f0d06f]/80 leading-tight">{expectancyFilter.warning}</span>
+        <span className="text-[0.4rem] text-[#f0d06f]/80 leading-tight">{expectancyFilter.warning}</span>
       )}
       {/* MEMÓRIA CONTEXTUAL — o que o histórico já resolvido diz sobre
           contextos como o de agora (regime + estrutura + VWAP + Nexus Line).
@@ -6753,9 +6753,9 @@ function ExpectancyCard() {
           className="flex items-start gap-1.5 border-t border-[#8ab4f8]/15 pt-1.5"
           title={`Memória contextual. Assinatura procurada: ${contextualRecall.fingerprint}. Fatores realmente casados: ${contextualRecall.matchedFactors.join(", ") || "nenhum"}. Força da amostra: ${contextualRecall.strength}. Contagem observada sobre o Track Record real já resolvido — nunca uma probabilidade de acerto futuro.`}
         >
-          <span className="text-[0.42rem] tracking-[0.12em] text-[#8ab4f8]/50 shrink-0 uppercase">Memória</span>
+          <span className="text-[0.4rem] tracking-[0.12em] text-[#8ab4f8]/50 shrink-0 uppercase">Memória</span>
           <span
-            className={`text-[0.42rem] leading-tight ${
+            className={`text-[0.4rem] leading-tight ${
               contextualRecall.strength === "AMOSTRA_INSUFICIENTE"
                 ? "text-[#8ab4f8]/45"
                 : contextualRecall.matchLevel === "EXATO"
@@ -7450,7 +7450,7 @@ function BarField({
   return (
     <div className="flex flex-col justify-center leading-none px-1.5" title={title}>
       <span className={`text-[0.4rem] tracking-[0.15em] font-bold uppercase whitespace-nowrap ${labelClass}`}>{label}</span>
-      <span className={`text-[0.62rem] font-bold font-mono tabular-nums whitespace-nowrap ${hit && hitClass ? hitClass : valueClass}`}>
+      <span className={`text-[0.6rem] font-bold font-mono tabular-nums whitespace-nowrap ${hit && hitClass ? hitClass : valueClass}`}>
         {value}
       </span>
     </div>
@@ -7688,11 +7688,11 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
           />
         );
       })()}
-      {targetHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#00ffaa] pl-1">TARGET REACHED</span>}
-      {stopHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#ff0055] pl-1">STOP BREACHED</span>}
+      {targetHit && <span className="self-center text-[0.5rem] font-black tracking-widest text-[#00ffaa] pl-1">TARGET REACHED</span>}
+      {stopHit && <span className="self-center text-[0.5rem] font-black tracking-widest text-[#ff0055] pl-1">STOP BREACHED</span>}
       {!targetHit && !stopHit && diverging && (
         <span
-          className="self-center text-[0.48rem] font-black tracking-widest text-[#f0d06f] pl-1"
+          className="self-center text-[0.5rem] font-black tracking-widest text-[#f0d06f] pl-1"
           title={`Confluência real (Confluence Engine): ${convictionForThisPlan!.agreeingCount}/${convictionForThisPlan!.totalReadable} subsistemas concordam com ${plan.direction} agora — verdict ${convictionForThisPlan!.verdict}. Nunca altera o plano (LEI 24), só contexto.`}
         >
           CONVICTION {convictionForThisPlan!.verdict}
@@ -9195,7 +9195,7 @@ class WidgetErrorBoundary extends React.Component<
             Other panels remain active.
           </span>
           {this.state.error.message ? (
-            <span className="text-[0.42rem] text-[#8ab4f8]/40 break-words max-w-full px-2">
+            <span className="text-[0.4rem] text-[#8ab4f8]/40 break-words max-w-full px-2">
               {this.state.error.message}
             </span>
           ) : null}
@@ -9500,10 +9500,10 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
         >
           {estado.rodando ? "MEDINDO…" : `MEDIR ${symbol} ${timeframe}`}
         </button>
-        <span className="text-[0.42rem] text-[#8ab4f8]/40">2000 candles reais · READ_ONLY</span>
+        <span className="text-[0.4rem] text-[#8ab4f8]/40">2000 candles reais · READ_ONLY</span>
       </div>
 
-      {estado.fase && <span className="text-[0.42rem] text-[#8ab4f8]/60">{estado.fase}</span>}
+      {estado.fase && <span className="text-[0.4rem] text-[#8ab4f8]/60">{estado.fase}</span>}
 
       {estado.erro && (
         <span className="text-[0.45rem] text-[#ff0055] leading-tight">
@@ -9533,11 +9533,11 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
           {taxa.ressalva && (
             <span className="text-[0.45rem] text-[#ffaa00] leading-tight">⚠ {taxa.ressalva}</span>
           )}
-          {prov && <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight">{avisoObrigatorio(prov)}</span>}
+          {prov && <span className="text-[0.4rem] text-[#8ab4f8]/50 leading-tight">{avisoObrigatorio(prov)}</span>}
           <button
             type="button"
             onClick={() => setBaseline(r)}
-            className="self-start text-[0.42rem] px-1.5 py-0.5 rounded border border-[#8ab4f8]/30 text-[#8ab4f8] font-bold uppercase tracking-wider hover:border-[#8ab4f8]/60"
+            className="self-start text-[0.4rem] px-1.5 py-0.5 rounded border border-[#8ab4f8]/30 text-[#8ab4f8] font-bold uppercase tracking-wider hover:border-[#8ab4f8]/60"
           >
             Salvar como baseline
           </button>
@@ -9546,7 +9546,7 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
 
       {baselineAgg && baselineProv && (
         <div className="border-t border-[#8ab4f8]/10 pt-1 mt-1 flex flex-col gap-0.5">
-          <span className="text-[0.42rem] text-[#8ab4f8]/50 uppercase tracking-wider">
+          <span className="text-[0.4rem] text-[#8ab4f8]/50 uppercase tracking-wider">
             Baseline salva: {baselineProv.symbol} {baselineProv.timeframe} · {formatarFracao(baselineAgg.taxaAlvoAmostra)} ({baselineAgg.resolved} resolvidos)
           </span>
           {comparison && veredito ? (
@@ -9556,17 +9556,17 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
                 <ModuleStat label="z-score / Δ taxa" value={`${comparison.zScore.toFixed(2)} / ${formatarFracao(comparison.delta)}`} />
               )}
               {comparison.sameContext === false && (
-                <span className="text-[0.42rem] text-[#ffaa00] leading-tight">
+                <span className="text-[0.4rem] text-[#ffaa00] leading-tight">
                   ⚠ Baseline e corrida atual são de símbolo/timeframe diferentes — comparação entre contextos distintos.
                 </span>
               )}
               {comparison.reason && (
-                <span className="text-[0.42rem] text-[#8ab4f8]/60 leading-tight">{humanizeReasonCode(comparison.reason)}</span>
+                <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{humanizeReasonCode(comparison.reason)}</span>
               )}
               <span className="text-[0.4rem] text-[#8ab4f8]/45 leading-tight">{COMPARE_RUNS_AVISO}</span>
             </>
           ) : (
-            <span className="text-[0.42rem] text-[#8ab4f8]/40">Meça a corrida atual (status OK) para comparar com a baseline.</span>
+            <span className="text-[0.4rem] text-[#8ab4f8]/40">Meça a corrida atual (status OK) para comparar com a baseline.</span>
           )}
         </div>
       )}
@@ -9641,8 +9641,8 @@ function SecondaryModuleView({ tab }: { tab: string }) {
       {Array.isArray(scannerData) && scannerData.length > 0 ? (
         scannerData.map((row: any) => (
           <div key={row.p} className="flex justify-between items-center gap-2">
-            <span className="text-[0.48rem] font-mono text-[#8ab4f8]">{row.p}</span>
-            <span className={`text-[0.48rem] font-mono font-black ${row.s === "LONG" ? "text-[#00ffaa]" : row.s === "SHORT" ? "text-[#ff0055]" : "text-[#8ab4f8]/70"}`}>
+            <span className="text-[0.5rem] font-mono text-[#8ab4f8]">{row.p}</span>
+            <span className={`text-[0.5rem] font-mono font-black ${row.s === "LONG" ? "text-[#00ffaa]" : row.s === "SHORT" ? "text-[#ff0055]" : "text-[#8ab4f8]/70"}`}>
               {row.s} · {typeof row.chg === "number" ? `${row.chg >= 0 ? "+" : ""}${row.chg.toFixed(2)}%` : MODULE_EMPTY} · strength {Math.round(row.str)}
             </span>
           </div>
@@ -9663,7 +9663,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
             const state = connections[ex] ?? "IDLE";
             return <ModuleStat key={ex} label={ex} value={state} tone={state === "LIVE" ? "long" : state === "DEGRADED" || state === "OFFLINE" ? "short" : "neutral"} />;
           })}
-          <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
+          <span className="text-[0.4rem] text-[#8ab4f8]/40 leading-tight">
             IDLE = source connected on demand; the primary Binance Futures WebSocket feed drives the cockpit and is shown on the top bar.
           </span>
         </ModulePanel>
@@ -10003,7 +10003,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
             value={nexusConfluence ?? "SEM VEREDITO (leitura incompleta ou AGUARDAR)"}
             tone={nexusConfluence === "ALINHADA" ? "long" : nexusConfluence === "CONFLITO_ESTRUTURAL" ? "short" : "neutral"}
           />
-          <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
+          <span className="text-[0.4rem] text-[#8ab4f8]/40 leading-tight">
             Informativo (LEI 24): confluência nunca altera nem bloqueia a operação do Core Engine.
           </span>
         </ModulePanel>
@@ -10031,7 +10031,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
             value={riskSuggestion?.status === "OK" ? `${riskSuggestion.effective_risk_pct.toFixed(2)}%` : MODULE_EMPTY}
             title={riskSuggestion?.status !== "OK" ? humanizeReasonCode(riskSuggestion?.reason) : undefined}
           />
-          <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
+          <span className="text-[0.4rem] text-[#8ab4f8]/40 leading-tight">
             Advisory only — order execution is permanently disabled in this terminal (read-only by design).
           </span>
         </ModulePanel>
@@ -10094,7 +10094,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
             );
           })()}
           <ModuleStat label="Superseded" value={String(trackRecord.replaced)} />
-          <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
+          <span className="text-[0.4rem] text-[#8ab4f8]/40 leading-tight">
             First-touch evaluation, conservative on gaps (stop wins). Superseded plans never count as wins or losses.
           </span>
         </ModulePanel>
@@ -10147,7 +10147,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     body = (
       <>
         <ModulePanel title="News Feed">
-          <span className="text-[0.48rem] text-[#8ab4f8]/60 leading-relaxed">
+          <span className="text-[0.5rem] text-[#8ab4f8]/60 leading-relaxed">
             NO REAL NEWS FEED CONNECTED. This terminal never fabricates headlines — this panel stays
             empty (fail-closed) until a real news source is integrated.
           </span>
@@ -10167,7 +10167,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     // EXECUTION — permanently empty by design, not "waiting".
     body = (
       <ModulePanel title="Order Execution">
-        <span className="text-[0.48rem] text-[#8ab4f8]/60 leading-relaxed">
+        <span className="text-[0.5rem] text-[#8ab4f8]/60 leading-relaxed">
           ORDER EXECUTION IS PERMANENTLY DISABLED. This terminal is read-only by design (fail-closed):
           no exchange API keys, no order-routing code paths exist in this codebase. Long/Short readings,
           Entry/Target/Stop levels and position sizing shown anywhere in this terminal are analytical
@@ -11302,7 +11302,7 @@ function OrderFlowWidget() {
             </div>
           ) : (
             signals.slice(0, 4).map((s, i) => (
-              <div key={i} className="flex justify-between items-center text-[0.42rem] py-[1px]">
+              <div key={i} className="flex justify-between items-center text-[0.4rem] py-[1px]">
                 <span className={`font-bold tracking-wider ${signalColor(s.type)}`}>{s.type}</span>
                 <span className="text-[#a0f0ff]/80 font-mono">{fmt(s.price)}</span>
                 <span className="text-[#8ab4f8]/60 font-mono">
@@ -11650,7 +11650,7 @@ function MarketBiasDecisionCard() {
         <span className="text-[0.45rem] text-[#8ab4f8]/60 tracking-[0.15em] font-bold uppercase">
           Sinal Institucional
         </span>
-        <span className={`text-[0.75rem] font-black tracking-wide -mt-1 ${dirLabelColor}`}>
+        <span className={`text-[0.7rem] font-black tracking-wide -mt-1 ${dirLabelColor}`}>
           {direction ?? AWAIT}
           {biasOutcomeQualifier && (
             <span className="ml-1.5 text-[0.4rem] font-bold tracking-[0.1em] text-[#8ab4f8]/60 uppercase align-middle">
@@ -11797,7 +11797,7 @@ function OrderBookWidget({ data, book }: any) {
 
             <div className="flex justify-between items-center px-1 pt-1 mt-[2px] border-t border-[#00f0ff1a] shrink-0 gap-2">
               <div className="flex items-center gap-1">
-                <span className="text-[0.42rem] text-[#8ab4f8]/60 font-bold tracking-wide uppercase">RATIO B/A</span>
+                <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-wide uppercase">RATIO B/A</span>
                 <span
                   className={`text-[0.5rem] font-mono font-black ${bidAskRatio === null ? "text-[#8ab4f8]/40" : bidAskRatio >= 1 ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
                 >
@@ -11805,7 +11805,7 @@ function OrderBookWidget({ data, book }: any) {
                 </span>
               </div>
               <div className="flex items-center gap-1">
-                <span className="text-[0.42rem] text-[#8ab4f8]/60 font-bold tracking-wide uppercase">IMBALANCE</span>
+                <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-wide uppercase">IMBALANCE</span>
                 <span
                   className={`text-[0.5rem] font-mono font-black ${imbalance === null ? "text-[#8ab4f8]/40" : imbalance >= 0 ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
                 >
@@ -12529,7 +12529,7 @@ function CouncilWidget() {
                   {v.confidence !== null ? <span className="text-[#8ab4f8]/60 font-normal"> {Math.round(v.confidence * 100)}%</span> : null}
                 </span>
               </div>
-              <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight truncate">{v.rationale}</span>
+              <span className="text-[0.4rem] text-[#8ab4f8]/50 leading-tight truncate">{v.rationale}</span>
             </div>
           );
         })}
@@ -12555,13 +12555,13 @@ function CouncilWidget() {
           >
             <div className="flex justify-between items-center">
               <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">SCENARIO A</span>
-              <span className={`text-[0.48rem] font-mono font-black ${scenario.pathA.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
+              <span className={`text-[0.5rem] font-mono font-black ${scenario.pathA.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
                 {formatScenarioPathLabel(scenario.pathA)}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">SCENARIO B</span>
-              <span className={`text-[0.48rem] font-mono font-black ${scenario.pathB.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
+              <span className={`text-[0.5rem] font-mono font-black ${scenario.pathB.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
                 {formatScenarioPathLabel(scenario.pathB)}
               </span>
             </div>
@@ -12725,7 +12725,7 @@ function MultiTimeframeMatrixWidget() {
               <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide w-7 shrink-0">
                 {MTF_ROW_LABEL[tf]}
               </span>
-              <span className="text-[0.42rem] text-[#8ab4f8]/50 flex-1 text-center truncate px-1">
+              <span className="text-[0.4rem] text-[#8ab4f8]/50 flex-1 text-center truncate px-1">
                 {insufficient ? AWAIT : structureShort ?? "—"}
               </span>
               <span className={`text-[0.5rem] font-mono font-black shrink-0 ${stanceColor}`}>
@@ -13049,7 +13049,7 @@ function TelemetryHealthWidget() {
                 {diagnosticReport.overallSeverity}
               </span>
             </div>
-            <pre className="text-[0.42rem] text-[#8ab4f8]/80 leading-relaxed whitespace-pre-wrap font-mono max-h-[160px] overflow-y-auto scrollbar-hide">
+            <pre className="text-[0.4rem] text-[#8ab4f8]/80 leading-relaxed whitespace-pre-wrap font-mono max-h-[160px] overflow-y-auto scrollbar-hide">
               {formatDiagnosticReportMarkdown(diagnosticReport)}
             </pre>
           </div>
@@ -13733,7 +13733,7 @@ function NeuralCoreWidget() {
                 orquestração está tentando um nível mais leve, isso fica
                 visível aqui — nunca um retry silencioso do mesmo modelo. */}
             {loadProgress && loadProgress.tier > 1 && (
-              <span className="text-[0.42rem] text-[#f0d06f]/70 uppercase tracking-[0.1em]">
+              <span className="text-[0.4rem] text-[#f0d06f]/70 uppercase tracking-[0.1em]">
                 Nível anterior indisponível neste dispositivo — tentando modelo mais leve.
               </span>
             )}
@@ -13757,7 +13757,7 @@ function NeuralCoreWidget() {
                 </span>
               )}
             </div>
-            <span className="text-[0.42rem] text-[#8ab4f8]/40 uppercase tracking-[0.15em]">
+            <span className="text-[0.4rem] text-[#8ab4f8]/40 uppercase tracking-[0.15em]">
               {activeModelId ?? "Llama (local)"} · leitura analítica, não é ordem — decisão sempre
               humana.
             </span>
@@ -13769,7 +13769,7 @@ function NeuralCoreWidget() {
             <span className="text-[0.45rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
               {errorMsg || "FALHA DESCONHECIDA"}
             </span>
-            <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-relaxed">
+            <span className="text-[0.4rem] text-[#8ab4f8]/50 leading-relaxed">
               A leitura sintética acima continua funcionando normalmente — só a síntese por IA
               generativa não carregou neste navegador.
             </span>

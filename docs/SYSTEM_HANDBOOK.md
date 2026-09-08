@@ -8615,6 +8615,111 @@ comentário agora diz isso e traz a contagem real medida.
 `npm run verify`: tsc limpo, **297 arquivos / 4868 testes** (35 novos),
 build ok.
 
+### 6.107 ORDEM "EVOLUÇÃO COMPLETA" — rodada 1 (inteligência + visual)
+
+Ordem do Operador: evolução completa, visual **e** de inteligência, com
+autonomia de estratégia. Esta é a primeira rodada; ela ataca a **fundação**
+de cada frente, não a superfície.
+
+#### §2 INTELIGÊNCIA — o achado que muda o valor da probabilidade
+
+`calibrateConfidence()` (`nexus/platt-calibration.ts`) faz, literalmente:
+
+```
+const samples = usable.map(...);        // TODOS os trades resolvidos
+const params  = trainPlattScaling(samples);
+const p       = applyPlattScaling(rawScore, params);
+```
+
+Treina o Platt Scaling em **todos** os trades e usa esse mesmo ajuste para
+produzir a probabilidade exibida. Isso é calibração **in-sample**: o modelo
+é avaliado nos dados em que aprendeu. Um ajuste in-sample sempre parece
+melhor do que é — no limite, um modelo que só memorizasse a amostra teria
+erro zero e valor preditivo zero. **Nada no repositório media essa
+diferença.**
+
+Isso não torna `calibrateConfidence()` errada — ela faz o que diz, e o
+número continua sendo o melhor ajuste sobre o histórico real. Faltava a
+pergunta seguinte, que é a que decide se o número vale algo: *quando o
+modelo previu sem ter visto o resultado, acertou melhor do que repetir a
+taxa base?*
+
+**`nexus/walk-forward-calibration.ts` (novo, puro).** Walk-forward de
+origem móvel: para cada `i ≥ 30`, treina em `[0, i)` e prevê `i`. O
+resultado previsto nunca participa do treino que o previu — zero
+look-ahead, a mesma disciplina que o gráfico já aplica. Sobre o conjunto
+retido, métricas de nome próprio e definição pública confirmada
+(Disciplina §2), nunca caseiras:
+
+| Métrica | Definição | Leitura |
+|---|---|---|
+| **Brier Score** | `BS = (1/N) Σ (pᵢ − oᵢ)²` (Brier 1950) | menor é melhor; 0 = perfeito |
+| **Brier Skill Score** | `BSS = 1 − BS/BS_ref`, referência = repetir a taxa base | **0 = não é melhor que a taxa base**; < 0 = pior |
+| **Curva de confiabilidade** | 5 faixas de 20pp | "quando disse 70%, acertou quantas?" |
+
+Identidade usada na referência, derivada e travada em teste (não é
+aproximação): prevendo sempre a taxa base `b` sobre a mesma amostra em que
+`b` é a média, `BS_ref = b(1−b)` exatamente.
+
+**Por que isto é a fundação.** A Regra de Ouro 2 proíbe chamar confluência
+de probabilidade porque *"este repositório não tem histórico de backtest
+real que sustente essa afirmação honestamente"*. Este módulo é o
+instrumento que pode, um dia, derrubar essa limitação — não por decreto,
+por **medição**: com BSS > 0 fora-da-amostra sobre amostra real, a palavra
+"probabilidade" passa a ser defensável para aquele escopo. Com BSS ≤ 0, o
+sistema é obrigado a dizer isso em voz alta.
+
+**Fail-closed, e é o mais importante:** exige 60 trades resolvidos com
+leitura de modelo (30 treino + 30 teste, ambos reusando
+`MIN_TRADES_FOR_VALID_EXPECTANCY` — zero número novo). Abaixo disso devolve
+`DADOS_INSUFICIENTES` e **nenhuma** métrica. Um Brier sobre 4 previsões
+seria pior que a ausência dele: pareceria evidência. É muito mais do que o
+Track Record típico tem hoje, e é proposital.
+
+O teste que prova que o módulo não é carimbo de aprovação: uma série de
+**ruído** (score sem relação com o resultado) recebe
+`SEM_VALOR_PREDITIVO_DEMONSTRADO`.
+
+#### §1 VISUAL — a tipografia vira escala
+
+Varredura do app inteiro: **12 tamanhos tipográficos distintos**, **40
+cores hex** em 1330 ocorrências, **zero arquivo de tokens**. Doze tamanhos
+não são uma escala — são acúmulo. `0.45`, `0.46` e `0.48rem` diferem em
+0.16px e 0.32px: nenhum olho distingue, mas cada um foi uma decisão
+separada que ninguém podia revisar como conjunto. A imprecisão não estava
+em nenhum tamanho isolado; estava em **não existir sistema**.
+
+**`nexus/terminal-design-tokens.ts` (novo).** Escala derivada, não
+inventada: os degraus são os tamanhos que o app já usava em massa (0.40 /
+0.45 / 0.50 / 0.55 / 0.60 concentravam 295 dos 350 usos), estendidos com
+passo **constante de 0.05rem**:
+
+`0.40 · 0.45 · 0.50 · 0.55 · 0.60 · 0.65 · 0.70`
+
+Saem só os degraus que ninguém consegue ver (0.42, 0.46, 0.48, 0.62) e um
+extremo solto (0.75) — 52 usos migrados para o degrau **mais próximo**, de
+modo que cada mudança individual é ≤ 0.05rem (0.8px). Imperceptível numa
+etiqueta; decisiva no conjunto. A escala começa **no** piso de
+legibilidade de 0.40rem já documentado, nunca abaixo.
+
+`TYPE_SCALE_MIGRATIONS` guarda a tabela `de → para` no próprio código: uma
+sessão futura que encontre `text-[0.48rem]` num trecho antigo tem ali a
+resposta, em vez de reintroduzi-lo. Um teste varre o app e reprova
+qualquer tamanho fora dos 7 degraus.
+
+#### Honestamente pendente
+
+- **`walk-forward-calibration.ts` não está graduado.** É módulo puro com
+  suíte real; ligá-lo à UI (painel de maturidade) é a próxima rodada.
+  Disciplina §3: nunca escrever direto no caminho ao vivo.
+- **As 40 cores continuam sem sistema.** Esta rodada fez a tipografia; a
+  paleta é a próxima e é maior (1330 ocorrências).
+- **§52 CALIBRATION STALE, §53 Shadow, §46 matriz de resultados, §49
+  hit-rate por alvo** seguem abertos — o walk-forward é a fundação deles.
+
+`npm run verify`: tsc limpo, **299 arquivos / 4907 testes** (39 novos),
+build ok.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
