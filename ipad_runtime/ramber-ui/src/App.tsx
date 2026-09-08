@@ -272,6 +272,7 @@ import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, descri
 import { computeDirectionalConsensus, describeDirectionalConsensus, normalizeSide, sideFromSigned, computeLiquidityMap, liquidityBias, type DirectionalSource, type DirectionalConsensusReading, type LiquidityTarget, type LiquidityMapReading } from "./nexus/directional-consensus";
 import { humanizeReasonCode } from "./nexus/reason-vocabulary";
 import { formatRiskSuggestionLabel } from "./nexus/risk-suggestion-label";
+import { computeCandleCountdown } from "./nexus/candle-countdown";
 import { computeZoneSignificance, formatZoneAtrWidth, selectSharedZoneHighlights } from "./nexus/liquidity-significance";
 // "constrói uma bola... um só aparece, tipo longa ou short, com essa
 // porcentagem, bem profissional" (pedido direto do Operador) — geometria
@@ -517,6 +518,7 @@ import {
   SlidersHorizontal,
   MoreHorizontal,
   Gauge,
+  Timer,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -10214,6 +10216,46 @@ function fmtVolume(v: number): string {
   if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
   return v.toFixed(2);
 }
+
+// CandleCountdownBadge — achado real do Operador ("não mostra quanto
+// tempo um [candle de] 1 minuto tá mostrando"): confirmado por leitura de
+// código que o app não tinha nenhum cronômetro até a vela ATUAL (ainda se
+// formando) fechar — recurso padrão de qualquer terminal profissional
+// (Binance/TradingView/Bybit todos mostram isso). Motor real:
+// nexus/candle-countdown.ts (mesma disciplina de OhlcReadout abaixo: zero
+// segundo cálculo, lê o MESMO chartData que o gráfico desenha).
+//
+// Tick de 1s LOCAL a este badge — mesmo padrão já usado por FooterBar/
+// DataFreshnessBanner (Regra de Ouro 6): o intervalo nunca re-renderiza o
+// resto da árvore (App/Widgets), só este span pequeno.
+function CandleCountdownBadge({
+  candles,
+  timeframe,
+}: {
+  candles?: Array<{ time?: number }>;
+  timeframe?: string;
+}) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const last = Array.isArray(candles) && candles.length > 0 ? candles[candles.length - 1] : null;
+  const countdown = computeCandleCountdown(last?.time, timeframe, nowMs);
+  if (!countdown) return null;
+
+  return (
+    <span
+      className="hidden sm:flex items-center gap-1 text-[#f0d06f]/80 font-mono shrink-0"
+      title={`Tempo até a vela atual (${timeframe}) fechar — mesmo candle real que o gráfico desenha, nunca um segundo cálculo.`}
+    >
+      <Timer size={9} strokeWidth={2} />
+      {countdown.label}
+    </span>
+  );
+}
+
 function OhlcReadout({
   candles,
   hoverCandle,
@@ -11023,6 +11065,11 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
               0.45rem do seletor de timeframe irmão, rótulos a 40% de opacidade,
               escondido abaixo de lg para não espremer o seletor no iPad Mini. */}
           <OhlcReadout candles={chartData} hoverCandle={hoveredCandle} />
+          {/* Achado real do Operador ("não mostra quanto tempo um [candle
+              de] 1 minuto tá mostrando"): cronômetro até a vela ATUAL
+              fechar — ver CandleCountdownBadge acima para o raciocínio
+              completo (motor puro em nexus/candle-countdown.ts). */}
+          <CandleCountdownBadge candles={chartData} timeframe={chartTimeframe} />
           {/* Auditoria de estabilização (P1): antes disto, esta linha era
               só <span> sem onClick — nunca respondia a toque nenhum, e
               "15M" ficava marcado ativo por um literal fixo

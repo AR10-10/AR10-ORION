@@ -107,7 +107,7 @@ describe('SideBar: gavetas de rodapé — Market Intelligence e Radar/OIH sempre
 
 describe('MoreHorizontal importado de lucide-react — nenhum ícone redigitado à parte', () => {
   it('import real na lista de lucide-react', () => {
-    expect(app).toContain('MoreHorizontal,\n  Gauge,\n} from "lucide-react";');
+    expect(app).toContain('MoreHorizontal,\n  Gauge,\n  Timer,\n} from "lucide-react";');
   });
 
   // Gauge (Ordem A1 §9-§10, fechamento das lacunas do A1 — botão de
