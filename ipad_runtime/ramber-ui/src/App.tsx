@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useRadarScanLatencySnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useTrackRecordArchive, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useRadarScanLatencySnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -317,6 +317,14 @@ import {
   describeTargetHitRates,
   type TargetHitRateReport,
 } from "./nexus/target-hit-rate";
+import {
+  buildOutcomeMatrix,
+  buildArchiveOutcomeMatrix,
+  informativeSlices,
+  type OutcomeMatrix,
+  type OutcomeSlice,
+  type OutcomeCell,
+} from "./nexus/outcome-matrix";
 import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
@@ -3397,6 +3405,13 @@ export default function App() {
     [trackRecordSlice.history],
   );
 
+  // Matriz de resultados (§46): a MESMA amostra de trackRecordResults,
+  // fatiada por um eixo de cada vez. Marginal e não produto cartesiano por
+  // uma razão medida, não estética: o histórico tem teto de 100 trades, e
+  // o cruzamento dos eixos daria ~1 trade por célula — ruído com cara de
+  // estatística. Ver o cabeçalho de nexus/outcome-matrix.ts.
+  const outcomeMatrix: OutcomeMatrix = useMemo(() => buildOutcomeMatrix(trackRecordResults), [trackRecordResults]);
+
   // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
   // NUNCA valor monetário (o sistema não conhece o capital do operador).
   // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
@@ -4277,6 +4292,7 @@ export default function App() {
       walkForwardReport,
       calibrationFreshness,
       targetHitRates,
+      outcomeMatrix,
       contextualRecall,
       decisionDistance,
       directionalConsensus,
@@ -4357,6 +4373,7 @@ export default function App() {
       walkForwardReport,
       calibrationFreshness,
       targetHitRates,
+      outcomeMatrix,
       decisionDistance,
       directionalConsensus,
       liquidityMap,
@@ -6717,6 +6734,78 @@ function ScoreContextCard() {
   );
 }
 
+// MATRIZ DE RESULTADOS (§46) — uma linha por eixo que REALMENTE separou a
+// amostra. Só entra na tela o que foi conquistado: um eixo com uma célula
+// só não é comparação (é a agregada com outro nome) e não aparece; uma
+// célula abaixo do piso de amostra aparece esmaecida e com "?", porque
+// "12 trades, ainda não sei" é informação real e apagá-la faria o painel
+// mentir por omissão. Com Track Record vazio o bloco inteiro some — zero
+// poluição enquanto não há nada medido.
+function OutcomeCellChip({ cell }: { cell: OutcomeCell }) {
+  const r = cell.stats?.expectancyR ?? null;
+  const positivo = r !== null && r > 0;
+  return (
+    <span
+      className={`whitespace-nowrap ${
+        !cell.established ? "text-[#8ab4f8]/40" : positivo ? "text-[#00ffaa]/90" : "text-[#ff0055]/90"
+      }`}
+      title={
+        cell.established
+          ? `${cell.label}: expectativa real de ${r?.toFixed(3)}R por trade sobre ${cell.trades} trades resolvidos, após custos. Frequência observada nesta fatia — nunca previsão do próximo trade.`
+          : `${cell.label}: ${cell.trades} trades resolvidos, abaixo do mínimo de ${MIN_TRADES_FOR_VALID_EXPECTANCY} para uma leitura estabelecida. O número existe e está aqui, mas a amostra ainda não sustenta a conclusão.`
+      }
+    >
+      {cell.label} {r === null ? DASH : `${r >= 0 ? "+" : ""}${r.toFixed(2)}R`}
+      <span className="text-[#8ab4f8]/50">·{cell.trades}{cell.established ? "" : "?"}</span>
+    </span>
+  );
+}
+
+function OutcomeSliceRow({ slice }: { slice: OutcomeSlice }) {
+  return (
+    <div className="flex items-baseline gap-1.5 text-[0.4rem] leading-tight">
+      <span className="shrink-0 text-[#8ab4f8]/50 uppercase tracking-wide" title={slice.title}>
+        {slice.title.split(" ")[0]}
+      </span>
+      <span className="flex flex-wrap gap-x-2 gap-y-0.5">
+        {slice.cells.map((c) => (
+          <OutcomeCellChip key={c.label} cell={c} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
+function OutcomeMatrixBlock() {
+  const { outcomeMatrix }: { outcomeMatrix?: OutcomeMatrix } = useContext(WidgetContext) || {};
+  // O arquivo é lido AQUI, e não em App(): o eixo ativo×timeframe atravessa
+  // várias amostras e só este bloco o consome — subir a leitura para App()
+  // faria a árvore inteira re-renderizar a cada arquivamento.
+  const archive = useTrackRecordArchive();
+  const archiveSlice = useMemo(() => buildArchiveOutcomeMatrix(archive), [archive]);
+  const uteis = useMemo(() => (outcomeMatrix ? informativeSlices(outcomeMatrix) : []), [outcomeMatrix]);
+  // Uma célula só no arquivo = o Operador só operou um symbol:timeframe;
+  // repetir a agregada com outro nome seria poluição, não informação.
+  const mostrarArquivo = archiveSlice.cells.length >= 2;
+
+  if (uteis.length === 0 && !mostrarArquivo) return null;
+
+  return (
+    <div className="flex flex-col gap-1 border-t border-[#00f0ff1a] pt-1.5">
+      <span
+        className="text-[0.4rem] uppercase tracking-[0.15em] text-[#00f0ff]/70"
+        title="Onde a expectativa agregada REALMENTE está. Uma média de +0.10R pode ser +0.45R num lado e −0.25R no outro — agregada, essa informação some. Fatias marginais (um eixo por vez), nunca produto cartesiano: com histórico de no máximo 100 trades o cruzamento daria ~1 trade por célula. Ver nexus/outcome-matrix.ts."
+      >
+        Matriz de resultados
+      </span>
+      {uteis.map((s) => (
+        <OutcomeSliceRow key={s.axis} slice={s} />
+      ))}
+      {mostrarArquivo && <OutcomeSliceRow slice={archiveSlice} />}
+    </div>
+  );
+}
+
 // Entrega 42 ("Profitability Engine"): expectativa real (após custos) do
 // Track Record deste symbol:timeframe — mesmo expectancyFilter computado
 // uma vez em App() e compartilhado via contextValue (ver comentário no
@@ -6936,6 +7025,7 @@ function ExpectancyCard() {
           Alcance · {describeTargetHitRates(targetHitRates)}
         </span>
       )}
+      <OutcomeMatrixBlock />
       {/* LEI 24 — exceção pontual autorizada pelo Operador (ver CLAUDE.md,
           seção "LEI 24"): quando expectancyFilter.show é false, o
           CoreSignalBadge substitui a direção real do Núcleo por NEUTRO.

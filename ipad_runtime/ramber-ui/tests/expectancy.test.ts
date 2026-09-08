@@ -22,6 +22,7 @@ function mkResult(netR: number, status: TradeCostResult['status'] = netR > 0 ? '
     regime: null,
     fingerprint: null,
     modelAgreement: null,
+    institutionalScore: null,
   };
 }
 

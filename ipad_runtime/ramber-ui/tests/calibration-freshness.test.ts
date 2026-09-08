@@ -26,6 +26,7 @@ const em = (resolvedAt: number): TradeCostResult => ({
   regime: null,
   fingerprint: null,
   modelAgreement: 0.5,
+  institutionalScore: null,
 });
 
 describe("o veredito sai da PRÓPRIA amostra — zero constante inventada", () => {

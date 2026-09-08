@@ -71,6 +71,7 @@ function tradeResult(fingerprint: string | null, netR: number): TradeCostResult 
     regime: null,
     fingerprint,
     modelAgreement: null,
+    institutionalScore: null,
   };
 }
 

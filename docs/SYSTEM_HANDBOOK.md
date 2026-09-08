@@ -9004,6 +9004,82 @@ sempre ao lado do número (`TP1 8/10 · TP2 3/10 · TP3 0/4`) — nunca
 probabilidade de o próximo trade chegar lá. Quem quer essa afirmação usa
 `walk-forward-calibration.ts` (§6.109), que existe justamente para isso.
 
+### 6.112 Matriz de resultados — onde a expectativa agregada REALMENTE está
+
+Item §46 da §2 da ordem "EVOLUÇÃO COMPLETA".
+
+#### O problema com uma média
+
+A expectativa agregada responde *"este symbol:timeframe é viável?"*. O que
+ela nunca respondeu é **onde** a viabilidade está. Uma expectativa de
+`+0.10R` pode ser `+0.45R` nos LONG e `−0.25R` nos SHORT — agregada, essa
+informação some, e é exatamente a que muda decisão.
+
+#### Marginal, nunca produto cartesiano — e a razão é medida
+
+A §46 pede direção × timeframe × ativo × regime × volatilidade × qualidade
+× confluência. O **produto cartesiano** desses eixos daria centenas de
+células sobre um histórico de no máximo `TRACK_RECORD_HISTORY_CAP` (100)
+trades: ~0 a 1 trade por célula, ruído puro apresentado com cara de
+estatística — precisamente o que a Regra de Ouro 2 proíbe.
+
+Então a matriz é de **fatias marginais**: um eixo por vez, cada célula com
+o seu próprio `n` visível. O cruzamento de fatores continua existindo e
+continua sendo trabalho de `scenario-fingerprint.ts` (que agrupa pela
+conjunção dos 4 fatores). Não são redundantes: aqui se pergunta *"o eixo X
+importa?"*, lá *"esta configuração exata já aconteceu?"*.
+
+#### O eixo QUALIDADE existia e morria na fronteira
+
+Terceiro achado da mesma família (§6.106 `computeLevelStrength`, §6.110
+`resolvedAt`): `PlanOpenContext.score` — o Institutional Score congelado na
+abertura — **nunca chegava** ao `TradeCostResult`. `plan-markers.ts` já o
+lia para decidir se desenhava a seta de um plano; a camada de estatística
+não tinha como perguntar *"os trades de score alto renderam mais?"*.
+Corrigido com um passthrough literal, zero recomputação.
+
+#### Auditoria eixo a eixo (o que existe, e o que não)
+
+| Eixo §46 | Estado real |
+|---|---|
+| direção | **REAL** — `TradeCostResult.direction` |
+| regime | **REAL** — carimbado na abertura |
+| qualidade | **REAL nesta rodada** — passthrough de `contextAtOpen.score` |
+| confluência | **REAL** — `modelAgreement` |
+| ativo × timeframe | **REAL, em outra função** — `trackRecordArchive` é keyed por `symbol:timeframe`; a amostra ao vivo é de um só. Achado: a store escreve esse arquivo desde a Entrega "Memória real" e **nenhum consumidor o lia**. |
+| **volatilidade** | **NÃO EXISTE.** Nenhum motor congela leitura de volatilidade (ATR, largura de Bollinger) no instante da abertura. Derivá-la agora, do candle de hoje, seria olhar o futuro do trade. Fica declarada ausente — nunca preenchida com proxy. |
+
+#### Os cortes numéricos não inventam limiar
+
+Os dois eixos numéricos são cortados por fronteiras **já declaradas em
+outro módulo**, nunca por um número escolhido aqui:
+
+- **qualidade** → `DEFAULT_MIN_OPPORTUNITY_SCORE` (`institutional-score.ts`),
+  o mesmo piso que `plan-markers.ts` usa para decidir se desenha uma seta;
+- **confluência** → o **sinal** de `modelAgreement`, cuja semântica
+  `trade-simulation.ts` já declara ("positivo = modelos a favor da direção
+  efetivamente tomada"). Exatamente `0` é sua própria categoria (MODELOS
+  DIVIDIDOS), nunca somado a favor nem contra.
+
+Toda a matemática por célula é `computeExpectancy()` — zero segunda
+fórmula. Este módulo só **fatia**.
+
+#### O piso marca, nunca esconde
+
+Cada célula declara se cruzou `MIN_TRADES_FOR_VALID_EXPECTANCY` (30,
+importado). Abaixo do piso a célula **não some**: aparece esmaecida, com
+`?` e o `n` real — "12 trades, ainda não sei" é informação, e apagá-la
+faria o painel mentir por omissão. `establishedSpreadR()` vai além e
+**recusa** comparar uma célula firme com uma frágil: −5R em 3 trades daria
+um "spread" que é ruído com cara de achado.
+
+Na tela, só entra o que foi conquistado: um eixo com uma célula só (a
+agregada com outro nome) não aparece, e com Track Record vazio o bloco
+inteiro some.
+
+`nexus/outcome-matrix.ts` (novo, puro, 29 testes: 24 de execução real +
+5 de fiação).
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar

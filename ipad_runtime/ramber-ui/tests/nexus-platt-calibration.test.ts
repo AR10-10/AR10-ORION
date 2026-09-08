@@ -29,6 +29,7 @@ function result(netR: number, modelAgreement: number | null): TradeCostResult {
     regime: null,
     fingerprint: null,
     modelAgreement,
+    institutionalScore: null,
   };
 }
 

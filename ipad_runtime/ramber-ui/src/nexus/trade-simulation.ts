@@ -92,6 +92,17 @@ export interface TradeCostResult {
   // módulo. null quando o contexto de abertura não tem NENHUM dos 4
   // fatores reais (registros anteriores à Entrega 42/Escopo Cirúrgico).
   fingerprint: string | null;
+  /** Institutional Score REAL carimbado na abertura
+   *  (`contextAtOpen.score`, nexus/institutional-score.ts) — passthrough
+   *  literal, zero recomputação. Mesma classe de achado do `resolvedAt`
+   *  acima e do `computeLevelStrength()`: o dado sempre esteve em
+   *  PlanOpenContext e morria nesta fronteira, então nada a jusante
+   *  conseguia perguntar "os trades de score alto renderam mais que os de
+   *  score baixo?" — o eixo QUALIDADE da §46. null em registros anteriores
+   *  ao carimbo, ou quando o score não pôde ser calculado na abertura;
+   *  nunca fabricado como 0 (0 se leria como "péssima oportunidade"
+   *  em vez de "não medido"). */
+  institutionalScore: number | null;
   // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
   // passthrough literal de contextAtOpen.modelAgreement (Fase 2, fusão de
   // modelos orientada à direção do plano) — zero recomputação. null
@@ -146,6 +157,7 @@ export function simulateTradeCosts(
     resolvedAt: tracked.resolvedAt,
     regime: tracked.contextAtOpen?.regime ?? null,
     fingerprint: computeScenarioFingerprint(tracked.contextAtOpen),
+    institutionalScore: tracked.contextAtOpen?.score ?? null,
     modelAgreement: tracked.contextAtOpen?.modelAgreement ?? null,
   };
 }
