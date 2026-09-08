@@ -157,7 +157,7 @@ export function SmartOmnibox({
         <span className="text-[0.5rem] text-[#00f0ff]/70 shrink-0">▼</span>
         {/* Dica de atalho — só em telas largas o bastante pra sobrar espaço
             real (md:), nunca espremendo o rótulo do ativo no iPad. */}
-        <span className="hidden md:inline text-[0.42rem] font-mono text-[#00f0ff]/40 border border-[#00f0ff]/20 rounded px-1 shrink-0">
+        <span className="hidden md:inline text-[0.4rem] font-mono text-[#00f0ff]/40 border border-[#00f0ff]/20 rounded px-1 shrink-0">
           ⌘K
         </span>
       </button>
