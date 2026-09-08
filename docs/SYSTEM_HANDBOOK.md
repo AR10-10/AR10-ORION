@@ -9466,6 +9466,51 @@ muda. Travado por teste.
 `nexus/regime-secondary.ts` (novo, puro, 23 testes: 19 de execução real +
 4 de fiação).
 
+### 6.119 §41 VOLATILITY AT OPEN — o último eixo da matriz ganha dado
+
+Era o **único** eixo da §46 sem leitura, e eu o declarei aberto três vezes
+nesta sessão. Fechado — mas só **daqui para frente**, e a razão importa.
+
+#### Por que não podia ser retroativo
+
+Derivar a volatilidade do candle de **hoje** para avaliar um plano de
+**ontem** é literalmente o `CURRENT_VALUE` usado como `VALUE_AT_OPEN` que o
+§40 proíbe. A única forma honesta é **congelar no instante da abertura** —
+e isso não alcança o passado.
+
+**Consequência aceita e registrada:** planos abertos antes deste carimbo
+ficam `null` **para sempre**. `null` é excluído da estatística, nunca lido
+como "volatilidade zero" (que se leria como mercado parado em vez de não
+medido).
+
+#### Zero motor novo
+
+`engine.marketRegime.atrPercent` — o **mesmo** ATR% que o Risk Engine já lê
+naquele render, do mesmo `regime-engine.js`. O carimbo é um passthrough ao
+lado de `score`/`regime`/`structureLabel`/`modelAgreement`, e
+`TradeCostResult.volatilityAtOpen` é outro passthrough literal. Um teste
+trava que **nada** recalcula ATR no caminho.
+
+#### O corte é a MEDIANA DA PRÓPRIA AMOSTRA
+
+Não existe "ATR% alto" universal: 1.2% é calmaria num timeframe e
+tempestade noutro. Então o eixo corta na **mediana real da amostra** —
+terceira aplicação da mesma técnica auto-referente nesta sessão
+(`calibration-freshness`, `independent-reference-price`), e pelo mesmo
+motivo: **o limiar honesto é o que os próprios dados declaram**, nunca um
+número escolhido por mim.
+
+Um teste trava a invariante: *a MESMA volatilidade muda de lado quando a
+amostra muda* — prova de que não há limiar fixo escondido.
+
+Isso exigiu uma mudança real de forma: o rotulador de eixo virou uma
+**fábrica que vê a amostra inteira antes de rotular** (mediana não é
+decidível olhando um resultado por vez). Os outros quatro eixos ignoram o
+argumento — o corte deles vem de limiar já declarado em outro módulo.
+
+`ALL_OUTCOME_AXES` agora tem 5 eixos marginais. A matriz da §46 está
+completa no que é honestamente mensurável.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar

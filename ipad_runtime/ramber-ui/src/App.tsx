@@ -3523,6 +3523,9 @@ export default function App() {
       // aberto que este efeito está carimbando é o MESMO que liveModelAgreement
       // já leu via trackRecordSlice.active) — zero segunda fusão.
       modelAgreement: liveModelAgreement,
+      // §41: mesmo engine.marketRegime.atrPercent que o Risk Engine já lê
+      // neste render — zero segundo cálculo, congelado aqui para sempre.
+      atrPercent: engine?.marketRegime?.atrPercent ?? null,
     });
   }, [
     trackRecordSlice.active,

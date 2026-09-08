@@ -30,6 +30,7 @@ const trade = (modelAgreement: number | null, netR: number): TradeCostResult => 
   regime: null,
   fingerprint: null,
   institutionalScore: null,
+  volatilityAtOpen: null,
   modelAgreement,
 });
 

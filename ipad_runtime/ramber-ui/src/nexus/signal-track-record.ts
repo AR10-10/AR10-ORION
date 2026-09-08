@@ -109,6 +109,17 @@ export interface PlanOpenContext {
   // instante da abertura); ausência aqui nunca é fabricada como 0 —
   // platt-calibration.ts exclui a amostra inteira quando null.
   modelAgreement?: number | null;
+  // §41 da MASTER ORDER ("VOLATILITY AT OPEN"): ATR% real do MESMO
+  // regime-engine.js já lido neste instante — zero segundo cálculo de
+  // volatilidade. Era o ÚNICO eixo da matriz de resultados (§46) sem dado.
+  //
+  // Congelado na abertura por obrigação, não por conveniência: medir a
+  // volatilidade de AGORA para avaliar um plano de ontem seria exatamente
+  // o CURRENT_VALUE usado como VALUE_AT_OPEN que o §40 proíbe. Por isso
+  // este campo NÃO PODE ser preenchido retroativamente — planos abertos
+  // antes desta rodada ficam null para sempre, e null é excluído da
+  // estatística, nunca lido como "volatilidade zero".
+  atrPercent?: number | null;
 }
 
 export interface TrackedPlan {
