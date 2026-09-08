@@ -116,6 +116,30 @@ export interface TradeCostResult {
   // anteriores à Fase 3. nexus/platt-calibration.ts exclui a amostra
   // inteira quando null (nunca trata ausência como 0/neutro).
   modelAgreement: number | null;
+  /** MASTER ORDER Phase D §7 — MFE OBSERVADO em R (excursão máxima A FAVOR
+   *  da direção do plano durante a vida dele). Positivo quando o preço
+   *  chegou a andar a favor; pode ser NEGATIVO num trade que nunca esteve
+   *  a favor um instante sequer — e esse caso é uma leitura real, não um
+   *  erro (significa "nem começou a funcionar").
+   *
+   *  Deriva de `tracked.observedMfePrice` com o MESMO `entryMid`/
+   *  `riskPoints` de `grossR` logo acima — zero segunda definição de R.
+   *  null quando o plano resolveu sem excursão medida (registro anterior
+   *  a esta rodada); nunca fabricado como 0. */
+  observedMfeR: number | null;
+  /** Phase D §6 — MAE OBSERVADO em R (excursão máxima CONTRA a direção).
+   *  Convenção de sinal: negativo é contra. Um MAE de −0.9R num trade que
+   *  terminou +2R diz que o Operador teve de sentar em cima de quase todo
+   *  o risco antes de o plano funcionar — informação que `netR` sozinho
+   *  jamais mostra. null pela mesma razão de `observedMfeR`. */
+  observedMaeR: number | null;
+  /** Distância REAL do primeiro alvo proposto, em R, congelada do próprio
+   *  plano (`targets[0]` vs `entryMid`). Existe aqui porque a pergunta que
+   *  o MFE dos PERDEDORES responde só faz sentido contra ela: "o preço
+   *  chegou a 1.4R a favor e ainda assim stopou — o TP1 estava a 2.6R?".
+   *  Sem este denominador, MFE de perdedor é um número solto.
+   *  null quando o plano não tinha alvo algum (defensivo). */
+  firstTargetR: number | null;
 }
 
 /** null quando o plano não resolveu de verdade ainda (OPEN/REPLACED nunca
@@ -166,7 +190,22 @@ export function simulateTradeCosts(
     institutionalScore: tracked.contextAtOpen?.score ?? null,
     volatilityAtOpen: tracked.contextAtOpen?.atrPercent ?? null,
     modelAgreement: tracked.contextAtOpen?.modelAgreement ?? null,
+    // Phase D §6/§7: mesma conversão de R já aplicada a `grossR` — mesmo
+    // entryMid, mesmo riskPoints, mesmo sinal por direção. `toR` devolve
+    // null para ausência, então um registro antigo (sem excursão medida)
+    // nunca vira 0R.
+    observedMfeR: toR(tracked.observedMfePrice, entryMid, riskPoints, long),
+    observedMaeR: toR(tracked.observedMaePrice, entryMid, riskPoints, long),
+    firstTargetR: toR(plan.targets[0]?.price ?? null, entryMid, riskPoints, long),
   };
+}
+
+/** Preço absoluto → R-múltiplo assinado pela direção do plano. Mesma
+ *  fórmula de `grossR`, extraída para não existir duas vezes. Ausência
+ *  (null/undefined/NaN) permanece ausência — nunca 0. */
+function toR(price: number | null | undefined, entryMid: number, riskPoints: number, long: boolean): number | null {
+  if (typeof price !== "number" || !Number.isFinite(price)) return null;
+  return (long ? price - entryMid : entryMid - price) / riskPoints;
 }
 
 /** Aplica simulateTradeCosts a uma lista real de TrackedPlan, descartando

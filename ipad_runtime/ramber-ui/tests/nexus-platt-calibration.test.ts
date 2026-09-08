@@ -31,6 +31,9 @@ function result(netR: number, modelAgreement: number | null): TradeCostResult {
     modelAgreement,
     institutionalScore: null,
     volatilityAtOpen: null,
+    observedMfeR: null,
+    observedMaeR: null,
+    firstTargetR: null,
   };
 }
 

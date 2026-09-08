@@ -24,6 +24,9 @@ function mkResult(netR: number, status: TradeCostResult['status'] = netR > 0 ? '
     modelAgreement: null,
     institutionalScore: null,
     volatilityAtOpen: null,
+    observedMfeR: null,
+    observedMaeR: null,
+    firstTargetR: null,
   };
 }
 

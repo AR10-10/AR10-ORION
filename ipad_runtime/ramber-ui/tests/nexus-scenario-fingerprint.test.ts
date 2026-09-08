@@ -73,6 +73,9 @@ function tradeResult(fingerprint: string | null, netR: number): TradeCostResult 
     modelAgreement: null,
     institutionalScore: null,
     volatilityAtOpen: null,
+    observedMfeR: null,
+    observedMaeR: null,
+    firstTargetR: null,
   };
 }
 
