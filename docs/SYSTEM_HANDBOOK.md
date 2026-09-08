@@ -8416,6 +8416,72 @@ MELHOR" que o Princípio Central da ordem proíbe.
 
 ---
 
+### 6.104 Escaneamento do ecossistema (pedido direto do Operador) — o que
+foi confirmado no ar, e o defeito de legibilidade que a varredura achou
+
+Pedido: "escaneie o AR10 por completo, confirme se não existe nada
+pendente, e execute o que faltar". A varredura foi feita por MEDIÇÃO, não
+por impressão — o único jeito de achar o que olho nenhum pega.
+
+**Pendência mais concreta, e ela era real:** as duas entregas anteriores
+(§6.102 perfis sob o eixo + respiro adaptativo; §6.103 evidence-
+independence) estavam commitadas mas **ainda não mergeadas** — ou seja, a
+correção do Volume Profile que o Operador achava estar no ar **não
+estava**. PR #34 fechada e mergeada nesta rodada (CI verde nos dois
+checks). Vale registrar como aprendizado de processo: "entregue" só vira
+"no ar" depois do merge, e o deploy público dispara em push no `main`.
+
+**Achado real da varredura — piso de legibilidade violado no DOM.**
+Medição da distribuição tipográfica real do app (16 tamanhos distintos):
+o widget "Vetor" do header tinha três rótulos a **0.35rem (5.6px),
+0.32rem (5.12px) e 0.3rem (4.8px)** — os únicos do app inteiro abaixo de
+0.4rem, e roughly METADE do piso que este mesmo projeto já tinha
+documentado, com razão escrita, para o eixo do gráfico: *"o texto era 9px
+numa caixa de 16px — abaixo do que qualquer terminal profissional usa no
+eixo, e no iPad (a superfície real deste app) fica no limite do legível"*
+(`PriceLabelStackPlugin.tsx`).
+
+Um piso de legibilidade que vale para o canvas mas não para o DOM não é
+um piso — é coincidência. Os três subiram para **0.4rem**, o menor degrau
+REAL já usado em massa na UI (35 ocorrências antes desta rodada), nunca um
+tamanho novo inventado; `tracking` de widest→wider nos dois que cresceram,
+compensando a largura extra.
+
+**Segundo achado, do próprio teste:** a varredura automática pegou mais
+**5 ocorrências a 0.38rem** (6.08px) — um degrau órfão 0.02rem abaixo do
+padrão, sem razão nenhuma para existir (§27, consistência global).
+Normalizadas para 0.4rem: mudança de 0.32px, risco zero de layout, e um
+tier inteiro a menos no sistema (16 → 15 tamanhos, zero abaixo do piso).
+
+**Travado por teste** (`typography-legibility-floor.test.ts`): varre TODOS
+os `.tsx` de `src/` e falha se qualquer texto ficar abaixo de 0.4rem —
+ignorando menções em comentário (o comentário que explica esta correção
+cita os tamanhos antigos de propósito). Um terceiro teste amarra os dois
+mundos: o piso do canvas (`FONT_COMPACT_BASE_PX`) nunca pode ficar abaixo
+do piso do DOM.
+
+**Verificado no ar:** `npm run verify` limpo (294 arquivos / 4814 testes,
+3 novos), e Playwright real nos 10 perfis de dispositivo (iPad Mini/iPad/
+iPad Pro 11/iPad Pro 13 em Portrait e Landscape + Desktop + Ultrawide) —
+zero overflow horizontal, zero vertical, zero page error. A mudança mexe
+em largura de rótulo dentro do header, então a validação responsiva não
+era opcional aqui.
+
+**Confirmado como JÁ no ar (nada a fazer):** TP/ST compactos com separador
+de milhar (§6.101), perfis ancorados na fronteira real do eixo (§6.102),
+respiro adaptativo nos 3 gráficos, countdown nos 14 timeframes (§6.100),
+seta de decisão em 10px, régua de anti-colisão do eixo.
+
+**Continua pendente e declarado** (inalterado desde §6.102/§6.103):
+hierarquia de peso de linha (§8/§9), varredura de menus/ícones/painéis
+(§22), unificação global de cor (§14), e as 5 lacunas de maturidade
+estatística (§46/§49/§52/§53/§54). A distribuição de ícones medida nesta
+rodada (10 tamanhos distintos: 12px e 14px dominam com 35 dos 65 usos)
+fica registrada como o ponto de partida factual da rodada de §22, quando
+ela vier.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

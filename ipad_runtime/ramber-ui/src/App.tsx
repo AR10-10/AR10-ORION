@@ -5038,7 +5038,7 @@ function ChartLayersPanelContent() {
         }`}
       >
         <span className="text-[0.55rem] tracking-[0.2em]">AR10 CYBORG · Adaptive Intelligent State</span>
-        <span className="text-[0.38rem] font-normal normal-case tracking-normal opacity-80">
+        <span className="text-[0.4rem] font-normal normal-case tracking-normal opacity-80">
           {emEstadoAutomatico ? "active now — reading ready, nothing to manage" : "click to return to the default adaptive state"}
         </span>
       </button>
@@ -5069,7 +5069,7 @@ function ChartLayersPanelContent() {
         )}
         {resumo.manuais.length > 0 && (
           <div className="flex flex-wrap gap-1 items-center">
-            <span className="text-[0.38rem] text-[#8ab4f8]/50 uppercase tracking-wider">pinned by you</span>
+            <span className="text-[0.4rem] text-[#8ab4f8]/50 uppercase tracking-wider">pinned by you</span>
             {resumo.manuais.map((m) => (
               <span
                 key={m.id}
@@ -5122,7 +5122,7 @@ function ChartLayersPanelContent() {
                   // layer-relevance.ts) some no texto do badge — nunca
                   // um efeito visual novo sem motivo real por trás.
                   <span
-                    className={`text-[0.38rem] px-1.5 py-1 rounded border font-bold uppercase tracking-wider ${
+                    className={`text-[0.4rem] px-1.5 py-1 rounded border font-bold uppercase tracking-wider ${
                       relevance?.emphasis === "highlight"
                         ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
                         : "border-[#00ffaa]/40 text-[#00ffaa]/80"
@@ -5155,7 +5155,7 @@ function ChartLayersPanelContent() {
                     type="button"
                     onClick={() => resetChartLayerToAuto?.(id)}
                     title="Return this layer to automatic behavior (Relevance Engine decides)."
-                    className="text-[0.38rem] px-1.5 py-1 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#00ffaa] hover:border-[#00ffaa]/40 font-bold uppercase tracking-wider"
+                    className="text-[0.4rem] px-1.5 py-1 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#00ffaa] hover:border-[#00ffaa]/40 font-bold uppercase tracking-wider"
                   >
                     ⟲ auto
                   </button>
@@ -11482,7 +11482,20 @@ function MarketDirectionWidget() {
       </div>
 
       <div className="flex flex-col items-center gap-0.5 px-1 shrink-0">
-        <span className="text-[0.35rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase font-bold whitespace-nowrap">
+        {/* Achado real de auditoria visual (escaneamento do ecossistema,
+            pedido do Operador): estes três rótulos estavam a 0.35rem
+            (5.6px), 0.32rem (5.12px) e 0.3rem (4.8px) — os únicos do app
+            inteiro abaixo do piso real de 0.4rem, e roughly METADE do que
+            este mesmo projeto já documentou como limite de legibilidade
+            no iPad ("o texto era 9px numa caixa de 16px — abaixo do que
+            qualquer terminal profissional usa no eixo", cabeçalho de
+            PriceLabelStackPlugin.tsx). Subiram para 0.4rem, o menor
+            degrau REAL já usado em massa na UI (35 ocorrências) — nunca um
+            tamanho novo inventado. `tracking` reduzido de widest para
+            wider nos dois que cresceram, compensando a largura extra para
+            a faixa do header não empurrar layout (verificado nos 10
+            perfis de dispositivo via harness, zero overflow). */}
+        <span className="text-[0.4rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase font-bold whitespace-nowrap">
           Vetor
         </span>
         <span className={`text-[0.6rem] font-black tracking-wide uppercase whitespace-nowrap ${vectorColor}`}>
@@ -11490,12 +11503,12 @@ function MarketDirectionWidget() {
         </span>
         <div className="flex items-center gap-1">
           <div className={`w-1 h-1 rounded-full animate-pulse ${glowColor}`}></div>
-          <span className="text-[0.32rem] uppercase tracking-widest font-bold text-[#8ab4f8]/60">
+          <span className="text-[0.4rem] uppercase tracking-wider font-bold text-[#8ab4f8]/60">
             Livro Real
           </span>
         </div>
         {vectorOutcomeQualifier && (
-          <span className="text-[0.3rem] uppercase tracking-widest font-bold text-[#8ab4f8]/50 whitespace-nowrap">
+          <span className="text-[0.4rem] uppercase tracking-wider font-bold text-[#8ab4f8]/50 whitespace-nowrap">
             {vectorOutcomeQualifier}
           </span>
         )}
@@ -12504,7 +12517,7 @@ function CouncilWidget() {
                   {COUNCIL_AGENT_LABEL[v.agent] ?? v.agent}
                   {!inPool && (
                     <span
-                      className="text-[0.38rem] font-normal italic text-[#8ab4f8]/40"
+                      className="text-[0.4rem] font-normal italic text-[#8ab4f8]/40"
                       title="Fora do pool linear real do Conselho: RISK é um portão fail-closed (nunca uma opinião direcional); ABSTAIN é ausência real de opinião nesta janela. Nenhum dos dois entra na massa de opinião que forma VOTO DO CONSELHO."
                     >
                       {" "}· fora do pool
