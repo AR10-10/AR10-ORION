@@ -9,11 +9,18 @@ alternativa caso o fluxo automático pare em qualquer etapa.
 
 ## Pré-requisito
 
-Uma URL HTTPS publicada (ver `docs/DEPLOY_GUIDE.md` e
-`docs/GITHUB_PAGES_FIX.md`). Sem essa URL, este guia não pode ser
-executado ponta-a-ponta num iPad físico — é exatamente o motivo do
-`PASS TÉCNICO / HOLD OPERACIONAL` registrado no handoff canônico desta
-entrega (`docs/AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1.html`).
+**Correção (varredura de documentação viva, carta branca do Operador,
+2026-09-08): esta seção presumia a URL como não publicada — não é mais o
+caso.** Uma URL HTTPS publicada (ver `docs/DEPLOY_GUIDE.md` e
+`docs/GITHUB_PAGES_FIX.md`, ambos já corrigidos) — hoje é
+`https://ar10-10.github.io/AR10-ORION/`, ao vivo e publicando com sucesso
+a cada push em `main`. O `PASS TÉCNICO / HOLD OPERACIONAL` citado abaixo
+referia-se à falta dessa URL; isso não bloqueia mais o fluxo. O restante
+deste pré-requisito (o handoff canônico
+`docs/AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1.html`)
+não foi encontrado no repositório nesta auditoria — referência morta,
+não corrigida aqui (fora do escopo desta passada; sinalizada, não
+inventada).
 
 ## O fluxo de um toque
 
