@@ -40,6 +40,22 @@ const KNOWN_REASONS: Record<string, string> = {
   // (App.tsx), snake_case sem passar por este tradutor.
   sem_candles_reais_para_este_timeframe: "sem candles reais para este prazo agora",
   nenhum_motor_real_teve_leitura_nesta_janela: "nenhum motor real teve leitura nesta janela",
+  // motor de backtest estrutural (status DADOS_INSUFICIENTES) — achado real
+  // da ORDEM DE SERVIÇO DEFINITIVA (§4, "nunca mostre 'Dados Insuficientes'
+  // sem explicar o porquê"): o painel Backtest Estrutural mostrava o código
+  // cru destes dois motivos, prefixado até por um "DADOS_INSUFICIENTES —"
+  // hardcoded na própria UI (App.tsx). Nomes de arquivo não citados
+  // literalmente aqui de propósito — as travas de fronteira LEI 24 desses
+  // dois motores escaneiam todo `src/` procurando o caminho de import
+  // exato como substring, e citar o caminho aqui (fora de um import real)
+  // já bastaria para acionar um falso positivo.
+  serie_menor_ou_igual_a_janela_de_analise: "série real menor ou igual à janela de análise — barras insuficientes para um backtest walk-forward válido",
+  horizonte_invalido: "horizonte de barras à frente inválido para este backtest",
+  // motor de comparação de corridas (verdict DADOS_INSUFICIENTES) — mesmo
+  // achado, painel de comparação de baseline.
+  baseline_sem_amostra_resolvida: "a corrida baseline não tem amostra real resolvida para comparar",
+  candidate_sem_amostra_resolvida: "a corrida atual não tem amostra real resolvida para comparar",
+  variancia_pooled_nula_amostra_sem_dispersao: "variância combinada nula — amostra sem dispersão real para um teste estatístico válido",
 };
 
 // Padrões paramétricos reais — o número/limiar É o dado, não pode virar
@@ -52,6 +68,12 @@ const PARAMETRIC_PATTERNS: { re: RegExp; describe: (m: RegExpMatchArray) => stri
   {
     re: /^treino_insuficiente_(\d+)_pontos_abaixo_de_k=(\d+)$/,
     describe: (m) => `apenas ${m[1]} pontos de treino reais — mínimo de k=${m[2]} ainda não atingido`,
+  },
+  // motor de comparação de corridas — o mínimo declarado é parte do dado
+  // real (pode mudar por chamador), não uma chave fixa da tabela acima.
+  {
+    re: /^amostra_resolvida_abaixo_do_minimo_declarado_(\d+)$/,
+    describe: (m) => `amostra resolvida abaixo do mínimo declarado de ${m[1]} por grupo`,
   },
 ];
 

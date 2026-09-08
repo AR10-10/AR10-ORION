@@ -7884,6 +7884,172 @@ PLANO DO CONSELHO`, `SEM TRADE PLAN`) presente no DOM.
 
 ---
 
+### 6.99 "ORDEM DE SERVIÇO DEFINITIVA" (evolução total "Ser Vivo") —
+6ª ordem da mesma família; 3 conflitos já resolvidos antes reafirmados,
+não reabertos + os 3 achados de código cru pendentes desde `§6.98`
+fechados
+
+Memo de 8 seções, majoritariamente uma reafirmação mais urgente de
+pedidos já resolvidos nas 2 ordens anteriores (`§6.97`, `§6.98`), mais 2
+seções genuinamente novas (pesquisa visual externa formal, otimização
+completa de iPad). Nenhuma pergunta nova foi posta ao Operador via
+`AskUserQuestion` — os 3 conflitos que o memo reabre já têm decisão
+explícita registrada nesta mesma sessão, e reabrir a pergunta seria
+re-litigar algo já decidido:
+
+| Pedido reafirmado | Decisão já registrada | Onde |
+|---|---|---|
+| "Todo ML pesado deve rodar exclusivamente no servidor" | Preditivo continua local, Web Worker — zero backend novo (Local-First, Regra de Ouro 6) | `§6.97`, `AskUserQuestion` "Keep it local, use Web Workers" |
+| "Sem botões AUTO/MANUAL, 100% autônomo" | Override manual permanece (o próprio memo já abre exceção pra isso — "exceto quando o operador quiser forçar"); "decide sozinho" já é o default hoje | `§6.97`, `AskUserQuestion` "Keep manual override" |
+| "Aprendizado contínuo... ajusta automaticamente seus parâmetros" (Reinforcement Learning) | LEI 24 (Núcleo único emissor) é permanente; escopo travado ao precedente já autorizado (Entrega 42) — só suprimir exibição, nunca o cálculo real | `§6.97`, `CLAUDE.md` LEI 24 |
+
+**Achado explicitamente recusado, não negociado (3ª vez):** §7 pede "87%
+de probabilidade de queda" via WebSocket — mesmo exemplo literal que a
+Regra de Ouro 2 proíbe. Não é uma escolha de arquitetura, é regra fixa já
+resolvida.
+
+**O que foi de fato construído — os 3 achados de código cru que `§6.98`
+tinha deixado pendentes** (o próprio memo, §4, nomeia esta classe de bug
+diretamente: "nunca mostre 'Dados Insuficientes' sem explicar o
+porquê"):
+
+1. **Painel Backtest Estrutural**: mostrava literalmente
+   `"DADOS_INSUFICIENTES —"` hardcoded na UI seguido do código cru do
+   motor (`serie_menor_ou_igual_a_janela_de_analise`,
+   `horizonte_invalido`). Ambos adicionados a `reason-vocabulary.ts` e a
+   UI agora chama `humanizeReasonCode()` — o prefixo hardcoded também
+   saiu (era literalmente o nome do enum de status, não uma explicação).
+2. **Comparação de baseline** (mesmo painel): `comparison.reason` cru
+   (`baseline_sem_amostra_resolvida`, `candidate_sem_amostra_resolvida`,
+   `variancia_pooled_nula_amostra_sem_dispersao`, mais um padrão
+   paramétrico `amostra_resolvida_abaixo_do_minimo_declarado_N`) — mesma
+   correção, mesmo tradutor.
+3. **Motor de Lucratividade, card Platt Calibration**: um ramo
+   estruturalmente inalcançável (o próprio comentário do código já provava
+   `params` nunca é `null` neste caminho — matematicamente garantido pelo
+   piso de amostra mínima) ainda emitia o código cru
+   `DADOS_INSUFICIENTES_PARA_CALIBRACAO` como defesa. Como as 2 razões
+   irmãs desta mesma função já são prosa real (não códigos), a correção
+   foi trocar o texto direto na fonte por prosa consistente — nunca
+   indireção nova via `humanizeReasonCode()`, que criaria 2 padrões
+   diferentes na mesma função.
+
+**Pesquisa real feita** (§2 do memo, "não trabalhar no escuro"): o padrão
+de 44px de alvo de toque citado pelo memo foi verificado via busca real —
+WCAG 2.5.5 (AAA) exige 44×44 CSS px, e tanto a Apple Human Interface
+Guidelines (44×44pt) quanto o Material Design do Google (48×48dp)
+convergem para o mesmo piso prático — o número do memo está correto e
+bem fundamentado. Achado real e HONESTO ao auditar o app contra esse
+piso: vários botões-ícone reais do topo/barra lateral medem hoje 32px
+(`w-8 h-8`) ou 40px (`w-10 h-10`), abaixo do piso de 44px em ambos os
+casos — confirmado por leitura direta do código (`App.tsx`), não uma
+estimativa. **Não corrigido nesta rodada** — ver "o que NÃO fez" abaixo.
+
+A pesquisa de paleta de cores (§2, "cores padrão fixas") já tinha sido
+feita numa rodada anterior e está documentada em `canvas-palette.ts`
+("Achado 3.1"): Bloomberg Terminal opera com 5 cores, TradingView com 7 —
+o app já usa 6 famílias canônicas travadas por teste, dentro dessa faixa
+real medida, não uma escolha arbitrária.
+
+**O que este round honestamente NÃO fez** (registrado para as próximas
+rodadas, nunca escondido):
+- **Auditoria visual pixel-a-pixel contra os 7 terminais nomeados**
+  (DXcharts, Bloomberg Terminal, Bookmap, ATAS, E*TRADE Pro, Bithumb,
+  TradingView): esta sessão não tem acesso a essas plataformas fechadas
+  ao vivo para uma comparação honesta tela-a-tela — fingir tê-la feito
+  seria menos honesto que admitir o limite. O que É real e verificável
+  (convenção de 44px, contagem de cores) foi pesquisado e confirmado
+  acima; o resto fica registrado como limite real da sessão, não uma
+  tarefa recusada.
+- **Correção dos botões abaixo de 44px + responsividade total de iPad**
+  (retrato/paisagem, lazy loading, DOM enxuto): esta é a mesma "Frente
+  3"/densidade responsiva já deliberadamente adiada em `§6.96`/`§6.97`/
+  `§6.98` — agora com um achado MEDIDO e real (32-40px vs. 44px) em vez
+  de só uma promessa futura, mas ainda não corrigida: mexer em alvo de
+  toque em todo o app é uma mudança de layout ampla o bastante pra
+  merecer sua própria auditoria dedicada, não um item a mais numa entrega
+  já extensa.
+- **Sistema preditivo (servidor + WebSocket + LSTM/Monte Carlo/
+  Transformers)**: não construído — decisão já registrada (`§6.97`) é
+  manter local/Worker; um backend novo é uma iniciativa própria, fora do
+  escopo READ_ONLY/Local-First deste projeto sem pedido explícito de
+  revisão dessa regra.
+- **Reinforcement Learning ajustando parâmetros reais do Núcleo**: não
+  construído — LEI 24 permanece intacta; a única auto-ajuste de exibição
+  autorizada continua sendo a exceção já registrada (Entrega 42).
+- **Nova auditoria de duplicidade "Validação Multi-Camada/Multi-Agent
+  Council/Market Intelligence"**: já auditada 2 vezes nesta sessão
+  (`§6.96`, `§6.97`) por um agente dedicado — não confirmada como
+  duplicação geral; a 1 duplicata literal real encontrada já foi
+  consolidada. Repetir a auditoria sem um achado novo real seria
+  trabalho sem ganho.
+
+`npm run verify`: **290 arquivos / 4764 testes** (6 novos casos: 5
+entradas na tabela exaustiva de `reason-vocabulary.ts` + 1 teste de
+padrão paramétrico), tsc limpo, build ok (1955 módulos).
+
+**Continuação real (mesma resposta, links de pesquisa fornecidos pelo
+Operador):** o Operador enviou uma captura de referência ("AR10 CYBORG"
+com painel LONG/RISK ENGINE/TRADE PLAN denso) mais uma lista de links
+para embasar a lapidação visual. Cada link foi verificado de verdade
+(`WebFetch`, nunca aceito de olhos fechados) antes de virar decisão:
+- **3 repositórios GitHub reais e substantivos**: `nexu-io/open-design`
+  (design system "Trading Terminal" — dark-only, JetBrains Mono para
+  números, cantos retos, ciano/coral compra/venda), `brianb4536/
+  NicheTerminal` (guidelines "Niche" — densidade máxima, Inter+JetBrains
+  Mono, near-black `#0a0a0a`), `ErTasselli/OpenTerminal` e `laanito/
+  OpenTerminalUI` (2 terminais open-source reais, ambos documentando
+  **command palette Ctrl+K/⌘K pra busca de símbolo** — convenção
+  confirmada 2x, independentemente).
+- **5 domínios bloqueados pelo proxy de rede deste sandbox**
+  (colorarchive.org, bloomberg.com, wandr.studio, lazarev.agency,
+  adminlte.io) — não confirmados nem negados, só inacessíveis daqui;
+  registrado como limite real, nunca tratado como se tivessem sido lidos.
+- **Links de busca/galeria do Dribbble/Behance**: não são citações de
+  conteúdo específico (são páginas de busca ou telas de imagem sem texto
+  útil pra extrair) — não entraram como evidência.
+
+**Achado NÃO adotado, sinalizado explicitamente:** a captura de
+referência do Operador mostra um selo "Prob. 87%" ao lado do badge LONG
+— exatamente o padrão que a Regra de Ouro 2 deste projeto proíbe (uma
+probabilidade de mercado calibrada sem backtest real por trás). O app já
+tem o equivalente HONESTO desse elemento (Motor de Lucratividade →
+"Probabilidade Calibrada", Platt Scaling real, só aparece com amostra
+mínima real — ver `platt-calibration.ts`) — a referência visual não muda
+essa regra, só mostra como o número apareceria SE fosse real.
+
+**O que foi de fato construído a partir da pesquisa: atalho de teclado
+⌘K/Ctrl+K no SmartOmnibox.** Confirmado por leitura direta do código
+(`App.tsx`) que o único atalho de teclado global do app inteiro é Escape
+(fechar gavetas) — nenhum comando por teclado pra busca de símbolo, a
+lacuna exata que os 2 terminais open-source verificados documentam como
+convenção real. Implementado dentro de `SmartOmnibox.tsx` (auto-contido,
+zero mudança em `App.tsx`): listener global de `keydown` reconhece
+`metaKey` (Mac) e `ctrlKey` (Windows/Linux/iPad com teclado externo),
+abre o dropdown e foca o campo de busca (que já usava `autoFocus`).
+Dica visual "⌘K" adicionada ao lado do gatilho, escondida em telas
+estreitas (`md:`) pra nunca espremer o rótulo do ativo no iPad. Verificado
+AO VIVO via Playwright: dica visível, campo de busca ausente antes do
+atalho, presente e com foco real depois de `Ctrl+K`.
+
+**O que NÃO foi feito a partir desta pesquisa** (mesma disciplina de
+sempre — só o concreto e de baixo risco entrou):
+- **Cantos retos ("sharp precision aesthetic", zero `rounded-*`)**: achado
+  real de inconsistência — o design system pesquisado prescreve isso
+  explicitamente, e o app usa `rounded-full`/`rounded`/`rounded-[3px]`
+  amplamente. Mudar o raio de borda do app inteiro é uma decisão visual
+  ampla o bastante pra merecer sua própria rodada (mesma classe da
+  "Frente 3"), não um ajuste pontual aqui.
+- **Densidade de painel (grid 3 colunas, largura fixa de 350px pro
+  painel de trade)**: a arquitetura de layout do app já é outra (Widgets
+  reordenáveis/colapsáveis, não um grid fixo) — adotar a densidade
+  ESPECÍFICA da referência exigiria decidir entre 2 arquiteturas de
+  layout concorrentes, uma decisão de escopo/arquitetura que continua
+  exigindo confirmação do Operador (per `CLAUDE.md`), não algo pra
+  assumir sozinho.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

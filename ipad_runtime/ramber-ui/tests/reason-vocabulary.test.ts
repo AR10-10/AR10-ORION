@@ -34,6 +34,15 @@ describe("humanizeReasonCode: tabela exaustiva de códigos reais conhecidos", ()
     // Matrix mostrava este código cru.
     ["sem_candles_reais_para_este_timeframe", "sem candles reais para este prazo agora"],
     ["nenhum_motor_real_teve_leitura_nesta_janela", "nenhum motor real teve leitura nesta janela"],
+    // research/backtest/structural-backtest.js + compare-runs.js — achado
+    // real da ORDEM DE SERVIÇO DEFINITIVA (auditoria de estados vazios):
+    // painel Backtest Estrutural e comparação de baseline mostravam código
+    // cru (um deles com "DADOS_INSUFICIENTES —" hardcoded na frente).
+    ["serie_menor_ou_igual_a_janela_de_analise", "série real menor ou igual à janela de análise — barras insuficientes para um backtest walk-forward válido"],
+    ["horizonte_invalido", "horizonte de barras à frente inválido para este backtest"],
+    ["baseline_sem_amostra_resolvida", "a corrida baseline não tem amostra real resolvida para comparar"],
+    ["candidate_sem_amostra_resolvida", "a corrida atual não tem amostra real resolvida para comparar"],
+    ["variancia_pooled_nula_amostra_sem_dispersao", "variância combinada nula — amostra sem dispersão real para um teste estatístico válido"],
   ];
   for (const [raw, expected] of cases) {
     it(`"${raw}" -> "${expected}"`, () => {
@@ -55,6 +64,12 @@ describe("humanizeReasonCode: padrões paramétricos reais (lorentzian-classifie
   it("treino_insuficiente_N_pontos_abaixo_de_k=K — números reais preservados", () => {
     expect(humanizeReasonCode("treino_insuficiente_3_pontos_abaixo_de_k=8")).toBe(
       "apenas 3 pontos de treino reais — mínimo de k=8 ainda não atingido",
+    );
+  });
+
+  it("amostra_resolvida_abaixo_do_minimo_declarado_N — número real preservado", () => {
+    expect(humanizeReasonCode("amostra_resolvida_abaixo_do_minimo_declarado_30")).toBe(
+      "amostra resolvida abaixo do mínimo declarado de 30 por grupo",
     );
   });
 });
