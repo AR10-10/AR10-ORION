@@ -312,6 +312,11 @@ import {
   describeCalibrationFreshness,
   type CalibrationFreshness,
 } from "./nexus/calibration-freshness";
+import {
+  computeTargetHitRates,
+  describeTargetHitRates,
+  type TargetHitRateReport,
+} from "./nexus/target-hit-rate";
 import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
@@ -3378,6 +3383,20 @@ export default function App() {
     [trackRecordResults, freshnessMinuteBucket, chartTimeframe],
   );
 
+  // Taxa real de alcance por alvo (§49 da §2 de "EVOLUÇÃO COMPLETA"). Fonte
+  // é `trackRecordSlice.history` DIRETO, e não `trackRecordResults` como os
+  // três memos acima — não por descuido: `TradeCostResult` é o resultado em
+  // R DEPOIS de custos, e nesse formato os dois campos de que esta leitura
+  // depende (`plan.targets` e `targetsHit`) já não existem. Enfiá-los lá só
+  // para reaproveitar o pipeline acoplaria custo de execução a uma pergunta
+  // puramente estrutural ("quantos chegaram ao TP2?"), que nada tem a ver
+  // com comissão ou funding. Mesma amostra real, mesmo filtro de resolvido
+  // (TARGET_HIT/PARTIAL_HIT/STOP_HIT) aplicado dentro do módulo.
+  const targetHitRates: TargetHitRateReport = useMemo(
+    () => computeTargetHitRates(trackRecordSlice.history),
+    [trackRecordSlice.history],
+  );
+
   // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
   // NUNCA valor monetário (o sistema não conhece o capital do operador).
   // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
@@ -4257,6 +4276,7 @@ export default function App() {
       calibrationResult,
       walkForwardReport,
       calibrationFreshness,
+      targetHitRates,
       contextualRecall,
       decisionDistance,
       directionalConsensus,
@@ -4336,6 +4356,7 @@ export default function App() {
       calibrationResult,
       walkForwardReport,
       calibrationFreshness,
+      targetHitRates,
       decisionDistance,
       directionalConsensus,
       liquidityMap,
@@ -6709,12 +6730,14 @@ function ExpectancyCard() {
     calibrationResult,
     walkForwardReport,
     calibrationFreshness,
+    targetHitRates,
     contextualRecall,
   }: {
     expectancyFilter?: FilterResult;
     calibrationResult?: CalibrationResult;
     walkForwardReport?: WalkForwardReport;
     calibrationFreshness?: CalibrationFreshness;
+    targetHitRates?: TargetHitRateReport;
     contextualRecall?: ContextualRecall | null;
   } = useContext(WidgetContext) || {};
   const stats = expectancyFilter?.stats ?? null;
@@ -6894,6 +6917,24 @@ function ExpectancyCard() {
             </span>
           )}
         </div>
+      )}
+      {/* ALCANCE POR ALVO (§49). O Track Record já dizia quantos planos
+          bateram alvo; nunca dizia quantos chegaram a CADA degrau — e uma
+          escada TP1/TP2/TP3 parece uniforme quando quase nunca é. O
+          denominador é onde mora a honestidade: só entram os planos que
+          REALMENTE ofereceram aquele alvo, porque um plano de 2 alvos
+          jamais poderia alcançar o TP3 e afundaria a taxa dele. Alvo nunca
+          proposto some da linha em vez de virar "0%". Frequência observada
+          sobre o histórico resolvido, com a contagem sempre ao lado —
+          nunca probabilidade do próximo trade (Regra de Ouro 2).
+          Ver nexus/target-hit-rate.ts. */}
+      {targetHitRates?.status === "OK" && targetHitRates.rates.some((r) => r.offered > 0) && (
+        <span
+          className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight"
+          title={`Frequência real com que cada alvo foi alcançado, entre os ${targetHitRates.resolvedPlans} planos resolvidos deste symbol:timeframe que REALMENTE propuseram aquele alvo — um plano de 2 alvos nunca entra no denominador do TP3. Contagem observada sobre histórico já resolvido, nunca probabilidade de o próximo trade chegar lá.`}
+        >
+          Alcance · {describeTargetHitRates(targetHitRates)}
+        </span>
       )}
       {/* LEI 24 — exceção pontual autorizada pelo Operador (ver CLAUDE.md,
           seção "LEI 24"): quando expectancyFilter.show é false, o

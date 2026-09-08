@@ -8948,6 +8948,62 @@ qualidade · risco de duplicação · READ_ONLY · FAIL_CLOSED.
 Regra aplicada (§7): mais dados somente se produzirem melhor contexto —
 nenhuma integração nova nesta fase.
 
+### 6.111 Alcance por alvo — o denominador é onde mora a honestidade
+
+Item §49 da §2 da ordem "EVOLUÇÃO COMPLETA" (hit-rate por alvo).
+
+#### A pergunta que o Track Record nunca respondeu
+
+`TrackRecordState` já contava `targetHits` / `partialHits` / `stopHits` —
+quantos planos **bateram alvo**. O que nunca disse é o que o Operador
+precisa antes de dimensionar uma saída:
+
+> "dos planos que abriram, quantos chegaram no TP1? e no TP2? e no TP3?"
+
+Sem isso a escada TP1/TP2/TP3 parece **uniforme**, e quase nunca é: um TP3
+que raramente é alcançado tinha exatamente a mesma aparência de um TP1 que
+quase sempre é.
+
+#### O erro que a conta ingênua comete
+
+`acertos do TP3 ÷ todos os planos` está errado, e erra **sempre para o
+mesmo lado**: um plano que só tinha 2 alvos jamais poderia alcançar o TP3,
+e incluí-lo no denominador afunda a taxa do TP3 com planos que nunca a
+ofereceram — o alvo mais distante fica artificialmente pessimista.
+
+Então o denominador de cada alvo é **planos resolvidos que REALMENTE
+tinham aquele alvo** (`plan.targets.length > i`). É a única leitura que
+responde à pergunta real: *quando o sistema propôs este alvo, com que
+frequência ele chegou lá?* O numerador é `targetsHit > i` — `targetsHit`
+conta alvos provados **em ordem**, então a taxa é monotonicamente
+não-crescente por construção (travado em teste).
+
+Alvo nunca oferecido devolve `rate: null`, **nunca 0** — "nunca propôs" e
+"nunca chega" são fatos diferentes, e some da linha em vez de virar "0%".
+
+`nexus/target-hit-rate.ts` (novo, puro, 21 testes: 17 de execução real +
+4 de fiação). `MAX_TARGETS` é **importado** de `trade-plan.ts`, nunca
+redeclarado: uma constante paralela sairia de sincronia no dia em que o
+plano ganhasse um 4º alvo, e a tabela silenciosamente pararia de mostrá-lo.
+
+#### Por que a fonte NÃO é `trackRecordResults`
+
+Os três memos vizinhos (expectativa, calibração, frescor) consomem
+`trackRecordResults` — e este consome `trackRecordSlice.history` **direto**.
+Não é descuido: `TradeCostResult` é o resultado em R *depois* de custos, e
+nesse formato os dois campos de que esta leitura depende (`plan.targets` e
+`targetsHit`) já não existem. Enfiá-los lá só para reaproveitar o pipeline
+acoplaria custo de execução a uma pergunta puramente estrutural. Mesma
+amostra real, mesmo filtro de resolvido (`TARGET_HIT`/`PARTIAL_HIT`/
+`STOP_HIT`) aplicado dentro do módulo.
+
+#### Regra de Ouro 2
+
+É **frequência observada** sobre histórico já resolvido, com a contagem
+sempre ao lado do número (`TP1 8/10 · TP2 3/10 · TP3 0/4`) — nunca
+probabilidade de o próximo trade chegar lá. Quem quer essa afirmação usa
+`walk-forward-calibration.ts` (§6.109), que existe justamente para isso.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar
