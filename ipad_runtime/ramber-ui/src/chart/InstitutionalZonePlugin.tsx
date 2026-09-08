@@ -199,8 +199,22 @@ export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, l
 
       for (let i = 0; i < currentZones.length; i++) {
         const zone = currentZones[i];
-        const yTop = series.priceToCoordinate(zone.top);
-        const yBottom = series.priceToCoordinate(zone.bottom);
+        // NÚCLEO da confluência, nunca o envelope (nexus/institutional-zones.ts).
+        // Achado real desta rodada, reportado pelo Operador ("a faixa roxa é
+        // larga demais, atrapalha o campo de visão") e depois MEDIDO no motor:
+        // `top`/`bottom` são a UNIÃO dos extents dos membros, enquanto o
+        // agrupamento só exige que as ÂNCORAS caiam dentro de 0.35%. Um FVG/OB
+        // alto cujo ponto médio cai perto de uma EMA esticava a faixa inteira —
+        // medido: 6.00% de altura a partir de uma tolerância de 0.35% (17.1x),
+        // pintada em largura total. A faixa passava a reivindicar uma região
+        // muito maior que o critério que a produziu.
+        //
+        // Zero dado perdido (Regra de Ouro 4): o extent completo de cada FVG/OB
+        // continua desenhado pelo plugin DELE (LiquidityZonesPlugin — o
+        // cabeçalho acima já declarava essa divisão de responsabilidade), e o
+        // envelope segue disponível em zone.top/zone.bottom para quem precisar.
+        const yTop = series.priceToCoordinate(zone.coreTop);
+        const yBottom = series.priceToCoordinate(zone.coreBottom);
         if (yTop === null || yBottom === null) continue; // fora da área de preço visível agora — Fail-Closed, nunca extrapola.
 
         const rectY = Math.min(yTop, yBottom);

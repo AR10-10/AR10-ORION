@@ -9152,6 +9152,77 @@ foi atualizado para travar a **forma** da chamada em vez do número de
 degraus: a lista cresce por capacidade, e travar o número faria toda
 capacidade nova quebrar um teste que não é sobre ela.
 
+### 6.114 A faixa roxa larga demais — a zona reivindicava mais que o critério que a produziu
+
+Achado do **Operador**, olhando a tela: *"a faixa roxa é larga demais,
+atrapalha muito o campo de visão"*. Auditoria antes de mexer confirmou que
+não era só estética — era uma **inconsistência real entre o critério e o
+desenho**.
+
+#### O defeito, medido antes de qualquer mudança
+
+`computeInstitutionalZones()` agrupa membros cujas **âncoras** caem dentro
+de `INSTITUTIONAL_ZONE_PROXIMITY_PCT` (0.35%) — mas a zona resultante era
+
+```
+top:    Math.max(...group.map(m => m.top))     // UNIÃO dos extents
+bottom: Math.min(...group.map(m => m.bottom))
+```
+
+Membros pontuais (EMA/VWAP/Nexus Line/S1/R1/EQH/EQL) têm `top === bottom
+=== price`. **FVG e Order Block não**: entram pelo ponto médio e
+contribuem a altura **inteira**. Nada limitava a altura da faixa.
+
+Medição real do motor (EMA+VWAP em ~100, FVG de 97→103):
+
+| | valor |
+|---|---|
+| tolerância que agrupou | **0.35%** |
+| altura da faixa desenhada | **5.998%** |
+| razão | **17.1×** |
+
+E isso pintado em **largura total** do gráfico, até 5 faixas ao mesmo
+tempo (`MAX_INSTITUTIONAL_ZONES`). O Operador estava certo: a camada
+reivindicava uma região ~17× maior que o critério que a produziu.
+
+#### A correção: núcleo, não envelope
+
+`InstitutionalZone` ganhou **`coreTop`/`coreBottom`** — o intervalo real
+onde as **âncoras** se encontram (`min(price)`..`max(price)`). Limitado
+pela tolerância **por construção**: é a mesma distância que definiu o
+grupo, então **zero constante nova**.
+
+`top`/`bottom` continuam existindo, inalterados (Regra de Ouro 4). O
+plugin e o rótulo passaram a ler o núcleo; o **extent completo de cada
+FVG/OB continua desenhado pelo plugin dele** (`LiquidityZonesPlugin`) —
+divisão de responsabilidade que o próprio cabeçalho do
+`InstitutionalZonePlugin` já declarava desde a origem. Nada some da tela:
+o que sai é a **duplicação** em roxo, de largura total, de uma geometria
+que já estava desenhada.
+
+#### Duas coisas que quase passaram
+
+1. **O rótulo teria se descolado.** `EnhancedChart_110_Percent.tsx`
+   ancorava a etiqueta em `(top+bottom)/2`. Movida para o mesmo núcleo —
+   senão a etiqueta nomearia uma faixa que não está mais ali.
+2. **A guarda de igualdade ficaria cega.** `institutionalZonesEqual()`
+   comparava só o envelope: uma mudança real **só no núcleo** (mesmo
+   envelope, âncoras deslocadas) seria lida como "nada mudou" e a faixa
+   congelaria no lugar errado. O núcleo entrou na guarda.
+
+#### O que NÃO foi feito, e por quê
+
+A largura horizontal **continua total**. O cabeçalho do plugin já
+argumentava — corretamente — que `InstitutionalZone` não carrega índice de
+formação (é confluência de indicadores *agora*, não estrutura histórica
+como FVG/OB), então estreitar horizontalmente **fabricaria uma origem que
+o motor não calcula**. A obstrução real era a altura, e é ela que foi
+corrigida.
+
+`tests/institutional-zone-core.test.ts` (novo, 12 testes de execução real
++ fiação). A medição do defeito virou invariante permanente: a faixa nunca
+mais pode reivindicar mais que a tolerância que a agrupou.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar
