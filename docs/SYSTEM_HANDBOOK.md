@@ -9750,6 +9750,148 @@ escondê-los daria a impressão de que não existem.
 
 ---
 
+### 6.124 §74-B → aplicado: o limite de Hoeffding (ADWIN) no drift-detector
+
+A pesquisa da §6.121 tinha identificado a própria fraqueza do
+`drift-detector.ts` que ela mesma acabara de entregar: as bandas 1σ/2σ/3σ
+são **convenção declarada**, não derivada. Perguntei ao Operador se
+deveria trocá-las pelo bound de Hoeffding do ADWIN antes de mexer sozinho
+no núcleo estatístico de um módulo recém-entregue; a resposta foi a
+autorização geral de finalização. Implementado **aditivamente** — nada foi
+trocado, algo novo foi somado (Regra de Ouro 4).
+
+**A fórmula, do próprio artigo (Bifet & Gavaldà 2007):**
+
+```
+ε_cut = amplitude · √( ln(4/δ') / 2m ),  m = média harmônica de n₀,n₁,  δ' = δ/n
+```
+
+**A correção que a fórmula publicada esconde, e que quase entrou errada.**
+Hoeffding só vale para variável LIMITADA, e o `ε_cut` do artigo assume
+valores em `[0,1]` — onde a amplitude é 1 e some da fórmula. R-múltiplo
+não é limitado em `[0,1]` (um trade pode render −1R ou +4R). Copiar o
+`ε_cut` literal teria dado um corte calibrado para uma escala errada —
+apertado demais, com falso alarme muito acima do δ prometido. A correção:
+a AMPLITUDE REAL da base (max − min) volta explicitamente como fator.
+Quinta aplicação da técnica auto-referente deste projeto (depois de
+calibration-freshness, referência independente, mediana de volatilidade e
+o próprio erro padrão do drift): a régua sai dos dados, nunca de um
+número meu.
+
+**Honestidade sobre "parameter-free".** A literatura descreve ADWIN assim,
+e a §6.121 repetiu — precisa de qualificação. O que ADWIN elimina é o
+LIMIAR escolhido à mão; δ continua sendo uma escolha. A diferença real é
+que δ tem SIGNIFICADO OPERACIONAL (a taxa de falso alarme aceita, 5% por
+convenção estatística ordinária), enquanto "2σ" é só um número de
+desvios. É uma troca por algo com significado, não uma eliminação —
+dizer que a convenção sumiu seria a desonestidade que este projeto evita.
+`DRIFT_HOEFFDING_DELTA = 0.05`, com essa qualificação escrita no módulo.
+
+**As bandas convencionais continuam existindo.** O bound é BINÁRIO ("a
+diferença passa do que o acaso explica?"); as bandas dão a MAGNITUDE
+graduada (1σ/2σ/3σ), que é o que separa "começou a se mexer" de "mudou
+completamente". Complementares, não redundantes — remover uma delas
+perderia informação real. `describeDrift()` mostra as duas juntas de
+propósito: quando discordam, isso já é informação.
+
+**A amplitude vem da BASE, nunca da janela recente.** A base é a
+distribuição de referência que define a escala do que é surpresa; usar a
+amplitude da própria janela recente deixaria o evento sendo medido
+esticar a régua que deveria julgá-lo.
+
+Aditivo em três pontas: `TrackedPlan`/`DriftReading` ganham campos novos
+(`hoeffdingBound`, `hoeffdingExceeded`, `baselineRange`), zero campo
+removido; `describeDrift()` concatena o veredito derivado ao final da
+linha existente; o tooltip do painel ganha uma frase explicando os dois
+lados. Fail-closed: ausência de leitura nunca vira `hoeffdingExceeded:
+false` (que se leria como "testado, sem drift" em vez de "não medido").
+
+LEI 24 intacto: diagnóstico puro, mesma exceção já registrada em
+`drift-detector.ts` — nada aqui alimenta Núcleo, Trade Plan ou risco.
+
+---
+
+### 6.125 "ADAPTIVE TIMEFRAME INTELLIGENCE" — Stage 1: Radar × Track Record real
+
+O Operador trouxe um pedido grande (documento de 37 seções + uma segunda
+carta comparando a arquitetura a sistemas de recomendação — candidate
+generation → scoring → ranking → re-ranking, e a contextual bandits).
+Antes de escrever qualquer linha, os dois termos técnicos citados foram
+**verificados de verdade** (Disciplina §2, `WebSearch`), não aceitos por
+confiança na citação colada: a arquitetura de três estágios é
+documentação real do Google sobre sistemas de recomendação, e a definição
+de contextual bandit (contexto → ação → recompensa, exploração/
+explotação) bate com a literatura. Os dois se sustentam — o que precisava
+de auditoria era o quanto disso **já existia** aqui.
+
+**A auditoria (agente dedicado, ~50 buscas reais) encontrou uma sobreposição grande:**
+
+| Pedido do documento | Estado real encontrado |
+|---|---|
+| Candidate Generator (assets) | **Já existe**: `radar-qualification.ts`+`radar-universe.ts` — ~28 símbolos curados + até 30 MEXC por ciclo, scan real a cada 5min, throttle já endurecido (FRENTE 1 §2.3) |
+| Ranking por qualidade | **Já existe**, mas só do MOMENTO: `qualityIndex` = intensity do Corredor de Confluência — zero leitura histórica |
+| TIMEFRAME AGREEMENT (§10) | **Já existe**, graduado: `multi-timeframe-engine.ts`, 9 timeframes reais para o ativo selecionado |
+| CANDIDATE→SHADOW→VALIDATION→ELIGIBLE (§12/§14/§29) | **Já existia** antes mesmo do documento chegar: `model-governance.ts` (§6.123), construído nesta mesma sessão |
+| Track Record por par | **Já existe**: `trackRecordArchive` chaveado `symbol:timeframe`, achado de auditoria de uma rodada anterior |
+| AUTO/MANUAL de timeframe | **Não existe** — o toggle AUTO/MANUAL que existe é de camadas visuais do gráfico, sem relação |
+| Comparar 1m/5m/15m/1h do MESMO ativo | **Não existe** — cada candidato do Radar carrega um único timeframe (o do gráfico no instante do scan) |
+
+**A pergunta que decidia o escopo, devolvida ao Operador (`AskUserQuestion`,
+2 perguntas):** para os candidatos do Radar que o Operador nunca abriu no
+gráfico, `trackRecordArchive` não tem NADA — zero trade real resolvido.
+Fabricar um backtest sintético preencheria esse vazio, mas seria a
+SEGUNDA simulação de trade que `trade-simulation.ts` já recusou construir
+nesta base (reconstruiria contexto de Conselho/GMIL/fluxo que só existe
+no momento real). Resposta do Operador: rótulo honesto `SEM_HISTORICO`,
+nunca sintético — e escopo aditivo sobre o que já existe, zero motor
+duplicado.
+
+**`nexus/opportunity-rank.ts` (novo) não é um motor — é a JUNÇÃO que faltava.**
+Para cada candidato do Radar, procura `trackRecordArchive[symbol:timeframe]`
+(mesma chave de `candleKey()`); se existe pelo menos 1 trade resolvido,
+roda as MESMAS quatro funções que já compõem `model-governance.ts` para
+o par ativo (shadow, walk-forward, frescor, drift) mais `computeExpectancy`
+— zero segunda implementação, travado por teste que varre o arquivo. Se
+não existe, `SEM_HISTORICO` explícito. Um teste reconstrói a conta à mão,
+trade a trade, e compara com o resultado do módulo — provando que não há
+divergência de lógica entre os dois caminhos.
+
+**Quase um motor duplicado de verdade.** A implementação original criava
+`useTrackRecordArchiveSnapshot()` como um novo hook de store — só depois
+de escrever o import é que apareceu que `useTrackRecordArchive()` **já
+existia** (consumido por `OutcomeMatrixBlock`). Corrigido antes de
+qualquer commit: hook duplicado removido, o já existente reusado. É
+exatamente o tipo de achado que a Disciplina §1 pede auditoria para
+evitar — e aconteceria de novo aqui, na escala menor de um hook, sem essa
+mesma disciplina aplicada a cada linha, não só à arquitetura geral.
+
+**Um teste existente quase travou a arquitetura errada.** `useTrackRecordArchive()`
+sendo reusado por um SEGUNDO bloco (`RadarPanel`, além de `OutcomeMatrixBlock`)
+quebrou um teste que fixava a contagem total do arquivo em exatamente 1.
+O invariante REAL, que o próprio comentário do teste já declarava
+("`App()` não assina o arquivo"), continuava intacto — o teste só nunca
+tinha previsto um segundo consumidor legítimo. Mesma lição já paga duas
+vezes nesta sessão (`buildSampleMaturity`, bandas de drift): a prova
+certa trava a FORMA do invariante (nenhuma ocorrência dentro do corpo de
+`App()`), nunca uma contagem que uma capacidade nova e honesta
+inevitavelmente muda.
+
+**Deliberadamente fora do Stage 1** (não é esquecimento — é escopo
+declarado): comparar timeframes do MESMO ativo (exigiria multiplicar as
+chamadas REST do scanner, decisão de custo real, não escopada aqui);
+auto-troca do timeframe operacional do gráfico (território de LEI 24/§71
+— mudar o que o Core Engine lê nunca entra de carona numa rodada
+aditiva); reordenar a lista do Radar pela nova evidência (`rankOpportunities()`
+existe e é testada, mas a ORDEM do painel continua sendo só a do Radar —
+resortear silenciosamente mudaria um comportamento já endurecido sem
+pedido explícito para isso).
+
+Display only, LEI 24: computado só com o painel aberto (Main Thread
+sagrada), nunca reordena a lista existente, nenhum caminho para
+`engine.direction`.
+
+---
+
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar
 (mesma disciplina da seção Arquitetura do `CLAUDE.md`); a seção 6 só
 cresce — uma pendência nova entra com destino declarado, nunca fica vaga.*

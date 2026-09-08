@@ -343,6 +343,11 @@ import {
   type GovernanceReport,
 } from "./nexus/model-governance";
 import {
+  computeOpportunityRank,
+  describeOpportunity,
+  type OpportunityReading,
+} from "./nexus/opportunity-rank";
+import {
   evaluateShadowCalibration,
   describeShadowCalibration,
   MIN_SHADOW_SAMPLE,
@@ -5473,10 +5478,33 @@ function PropertiesPanelBody({ onOpenSettings }: { onOpenSettings: () => void })
 // cockpit já tem "RADAR DE CONSENSO" (CouncilWidget) e uma aba "SCANNER"
 // (heurística de %-change de 24h, ScannerWidget) — um terceiro rótulo com
 // a mesma palavra confundiria qual painel está aberto.
+// Stage 1 aditivo do pedido "ADAPTIVE TIMEFRAME INTELLIGENCE" (Operador,
+// escopo confirmado via AskUserQuestion: aditivo sobre o que já existe,
+// zero motor duplicado). Referência estável para quando o painel está
+// fechado — evita uma referência de array nova a cada render sem motivo.
+const EMPTY_OPPORTUNITY_RANK: OpportunityReading[] = [];
+
 function RadarPanel() {
   const { radarPanelOpen, setRadarPanelOpen, setSelectedAsset, setMarketMode, setSelectedTradFiAsset } =
     useContext(WidgetContext) || {};
   const candidates = useRadarCandidatesSnapshot();
+  // nexus/opportunity-rank.ts: junta o candidato (qualidade do MOMENTO, já
+  // existia) com o Track Record Archive real (desfecho HISTÓRICO, quando
+  // existe) — reusa shadow/walk-forward/frescor/drift/governança já
+  // testados, zero segunda lógica. Ausência de histórico vira
+  // "SEM_HISTORICO" honesto, nunca um backtest sintético (decisão
+  // explícita do Operador). Gated por radarPanelOpen: o Radar já varre em
+  // segundo plano mesmo com o painel fechado (Main Thread sagrada) — esta
+  // junção adicional não precisa rodar até alguém realmente abrir a lista.
+  const trackRecordArchive = useTrackRecordArchive();
+  const opportunityFreshnessMinuteBucket = Math.floor(Date.now() / 60_000);
+  const opportunityRank = useMemo(
+    () =>
+      radarPanelOpen
+        ? computeOpportunityRank(candidates, trackRecordArchive, opportunityFreshnessMinuteBucket * 60_000)
+        : EMPTY_OPPORTUNITY_RANK,
+    [radarPanelOpen, candidates, trackRecordArchive, opportunityFreshnessMinuteBucket],
+  );
   if (!radarPanelOpen) return null;
 
   // Mesmo mecanismo real do SmartOmnibox (onSelectCrypto) — trocar
@@ -5529,8 +5557,12 @@ function RadarPanel() {
               </span>
             </div>
           ) : (
-            candidates.map((c) => {
+            candidates.map((c, i) => {
               const isLong = c.direction === "LONG";
+              // computeOpportunityRank preserva a ORDEM de `candidates` —
+              // índice a índice, nunca uma segunda correspondência por
+              // chave (testado em opportunity-rank.test.ts).
+              const opportunity = opportunityRank[i];
               return (
                 <button
                   key={`${c.provider}:${c.symbol}:${c.timeframe}`}
@@ -5553,6 +5585,32 @@ function RadarPanel() {
                       >
                         {c.timeframe} · {c.provider}
                       </span>
+                      {/* "ADAPTIVE TIMEFRAME INTELLIGENCE" Stage 1: prova
+                          REAL quando existe (governança composta sobre o
+                          Track Record deste par), honestidade explícita
+                          quando não existe — nunca um backtest sintético
+                          preenchendo o vazio. A maioria dos candidatos do
+                          Radar nunca foi realmente operada, então
+                          SEM HISTÓRICO é o caso comum, não um erro. Ver
+                          nexus/opportunity-rank.ts. */}
+                      {opportunity && (
+                        <span
+                          className={`text-[0.4rem] uppercase tracking-wider ${
+                            opportunity.status === "HISTORICO_REAL"
+                              ? opportunity.governance!.stage === "ELEGIVEL"
+                                ? "text-[#00ffaa]/80"
+                                : "text-[#8ab4f8]/60"
+                              : "text-[#8ab4f8]/30"
+                          }`}
+                          title={
+                            opportunity.status === "HISTORICO_REAL"
+                              ? `Desfecho REAL deste par, medido pela MESMA esteira de governança do Core Intelligence (CANDIDATE→SHADOW→OOS→VALIDATION→ELEGÍVEL) — nunca uma leitura nova. ${opportunity.governance!.nextRequirement}`
+                              : "Este par nunca foi aberto no gráfico — zero trade real resolvido, zero evidência histórica. A qualidade acima é só estrutura do MOMENTO."
+                          }
+                        >
+                          {describeOpportunity(opportunity)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-col items-end">
@@ -7185,7 +7243,7 @@ function ExpectancyCard() {
                       ? "text-[#00ffaa]/80"
                       : "text-[#8ab4f8]/60"
               }`}
-              title={`Compara os ${driftReading.recentTrades} trades mais recentes contra os ${driftReading.baselineTrades} ANTERIORES a eles — as duas amostras são disjuntas de propósito, senão a base diluiria o próprio sinal procurado. A régua é o erro padrão da base, então a leitura se adapta à volatilidade real da estratégia. RECUPERANDO significa que mudou A FAVOR; DEGRADADO significa que mudou e passou a perder. Bandas 1/2/3σ são convenção estatística ordinária, não um teste de hipótese calibrado.`}
+              title={`Compara os ${driftReading.recentTrades} trades mais recentes contra os ${driftReading.baselineTrades} ANTERIORES a eles — as duas amostras são disjuntas de propósito, senão a base diluiria o próprio sinal procurado. A régua é o erro padrão da base, então a leitura se adapta à volatilidade real da estratégia. RECUPERANDO significa que mudou A FAVOR; DEGRADADO significa que mudou e passou a perder. Bandas 1/2/3σ são convenção estatística ordinária, não um teste de hipótese calibrado — o "Hoeffding" ao lado é o veredito DERIVADO (§74-B, ADWIN): a diferença passa do que o acaso, dada a amplitude real da base, explicaria com 95% de confiança? Os dois viajam juntos de propósito — quando discordam, isso já é informação real.`}
             >
               Drift · {describeDrift(driftReading)}
             </span>

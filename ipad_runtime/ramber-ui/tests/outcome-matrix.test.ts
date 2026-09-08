@@ -314,8 +314,31 @@ describe('outcome-matrix: fiação real em App.tsx', () => {
   it('o arquivo é lido no bloco, nunca em App() (evita re-render da árvore)', () => {
     const bloco = app.slice(app.indexOf('function OutcomeMatrixBlock()'));
     expect(bloco.slice(0, 900)).toContain('useTrackRecordArchive()');
-    // App() não assina o arquivo: só o bloco que o consome.
-    expect(app.split('useTrackRecordArchive()').length - 1).toBe(1);
+    // O invariante real é "App() nunca assina o arquivo" — nunca "só existe
+    // UMA leitura no arquivo inteiro". Um segundo bloco independente e
+    // autocontido (RadarPanel, Stage 1 de opportunity-rank.ts) também tem
+    // motivo real para ler o arquivo, e ler em dois blocos pequenos é
+    // estritamente MELHOR para a árvore de render que ler uma vez em App()
+    // — é exatamente o padrão que esta prova protege. Fixar a CONTAGEM
+    // total faria qualquer bloco novo e legítimo quebrar este teste sem
+    // ter violado o invariante — mesma lição já paga nesta base com
+    // platt-calibration-wiring/shadow-calibration (buildSampleMaturity) e
+    // drift-detector (lista de degraus). A prova certa é: para CADA
+    // ocorrência, a função top-level mais próxima antes dela nunca é
+    // `App`.
+    const ocorrencias = [...app.matchAll(/useTrackRecordArchive\(\)/g)];
+    expect(ocorrencias.length).toBeGreaterThan(0);
+    const funcaoTopLevelAntes = /^function ([A-Za-z_]\w*)\(/gm;
+    for (const m of ocorrencias) {
+      let ultima: string | null = null;
+      funcaoTopLevelAntes.lastIndex = 0;
+      let f: RegExpExecArray | null;
+      while ((f = funcaoTopLevelAntes.exec(app)) !== null) {
+        if (f.index >= m.index!) break;
+        ultima = f[1];
+      }
+      expect(ultima).not.toBe('App');
+    }
   });
 
   it('só desenha eixos que realmente separaram a amostra (nada não-conquistado)', () => {
