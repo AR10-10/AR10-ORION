@@ -85,6 +85,24 @@ export function SmartOmnibox({
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open]);
 
+  // Atalho de teclado (⌘K/Ctrl+K) — pesquisa real confirmou esta convenção
+  // em 2 terminais financeiros open-source independentes (OpenTerminal:
+  // "⌘K global command palette"; OpenTerminalUI: "Command Palette Ctrl+K"),
+  // além de ser o padrão já consolidado fora do domínio financeiro (GitHub,
+  // Linear, Slack, Notion). Sempre ativo (não só quando `open`), pra abrir
+  // de qualquer lugar da tela — mesmo espírito do Escape global já existente
+  // em App.tsx pra fechar gavetas.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOpen(true);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const { crypto, meme } = useMemo(() => partitionCryptoSymbols(cryptoSymbols ?? []), [cryptoSymbols]);
 
   const q = query.trim().toUpperCase();
@@ -137,6 +155,11 @@ export function SmartOmnibox({
       >
         <span className="max-w-[110px] truncate">{selectedLabel}</span>
         <span className="text-[0.5rem] text-[#00f0ff]/70 shrink-0">▼</span>
+        {/* Dica de atalho — só em telas largas o bastante pra sobrar espaço
+            real (md:), nunca espremendo o rótulo do ativo no iPad. */}
+        <span className="hidden md:inline text-[0.42rem] font-mono text-[#00f0ff]/40 border border-[#00f0ff]/20 rounded px-1 shrink-0">
+          ⌘K
+        </span>
       </button>
 
       {open && (

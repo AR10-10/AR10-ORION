@@ -7988,6 +7988,66 @@ rodadas, nunca escondido):
 entradas na tabela exaustiva de `reason-vocabulary.ts` + 1 teste de
 padrão paramétrico), tsc limpo, build ok (1955 módulos).
 
+**Continuação real (mesma resposta, links de pesquisa fornecidos pelo
+Operador):** o Operador enviou uma captura de referência ("AR10 CYBORG"
+com painel LONG/RISK ENGINE/TRADE PLAN denso) mais uma lista de links
+para embasar a lapidação visual. Cada link foi verificado de verdade
+(`WebFetch`, nunca aceito de olhos fechados) antes de virar decisão:
+- **3 repositórios GitHub reais e substantivos**: `nexu-io/open-design`
+  (design system "Trading Terminal" — dark-only, JetBrains Mono para
+  números, cantos retos, ciano/coral compra/venda), `brianb4536/
+  NicheTerminal` (guidelines "Niche" — densidade máxima, Inter+JetBrains
+  Mono, near-black `#0a0a0a`), `ErTasselli/OpenTerminal` e `laanito/
+  OpenTerminalUI` (2 terminais open-source reais, ambos documentando
+  **command palette Ctrl+K/⌘K pra busca de símbolo** — convenção
+  confirmada 2x, independentemente).
+- **5 domínios bloqueados pelo proxy de rede deste sandbox**
+  (colorarchive.org, bloomberg.com, wandr.studio, lazarev.agency,
+  adminlte.io) — não confirmados nem negados, só inacessíveis daqui;
+  registrado como limite real, nunca tratado como se tivessem sido lidos.
+- **Links de busca/galeria do Dribbble/Behance**: não são citações de
+  conteúdo específico (são páginas de busca ou telas de imagem sem texto
+  útil pra extrair) — não entraram como evidência.
+
+**Achado NÃO adotado, sinalizado explicitamente:** a captura de
+referência do Operador mostra um selo "Prob. 87%" ao lado do badge LONG
+— exatamente o padrão que a Regra de Ouro 2 deste projeto proíbe (uma
+probabilidade de mercado calibrada sem backtest real por trás). O app já
+tem o equivalente HONESTO desse elemento (Motor de Lucratividade →
+"Probabilidade Calibrada", Platt Scaling real, só aparece com amostra
+mínima real — ver `platt-calibration.ts`) — a referência visual não muda
+essa regra, só mostra como o número apareceria SE fosse real.
+
+**O que foi de fato construído a partir da pesquisa: atalho de teclado
+⌘K/Ctrl+K no SmartOmnibox.** Confirmado por leitura direta do código
+(`App.tsx`) que o único atalho de teclado global do app inteiro é Escape
+(fechar gavetas) — nenhum comando por teclado pra busca de símbolo, a
+lacuna exata que os 2 terminais open-source verificados documentam como
+convenção real. Implementado dentro de `SmartOmnibox.tsx` (auto-contido,
+zero mudança em `App.tsx`): listener global de `keydown` reconhece
+`metaKey` (Mac) e `ctrlKey` (Windows/Linux/iPad com teclado externo),
+abre o dropdown e foca o campo de busca (que já usava `autoFocus`).
+Dica visual "⌘K" adicionada ao lado do gatilho, escondida em telas
+estreitas (`md:`) pra nunca espremer o rótulo do ativo no iPad. Verificado
+AO VIVO via Playwright: dica visível, campo de busca ausente antes do
+atalho, presente e com foco real depois de `Ctrl+K`.
+
+**O que NÃO foi feito a partir desta pesquisa** (mesma disciplina de
+sempre — só o concreto e de baixo risco entrou):
+- **Cantos retos ("sharp precision aesthetic", zero `rounded-*`)**: achado
+  real de inconsistência — o design system pesquisado prescreve isso
+  explicitamente, e o app usa `rounded-full`/`rounded`/`rounded-[3px]`
+  amplamente. Mudar o raio de borda do app inteiro é uma decisão visual
+  ampla o bastante pra merecer sua própria rodada (mesma classe da
+  "Frente 3"), não um ajuste pontual aqui.
+- **Densidade de painel (grid 3 colunas, largura fixa de 350px pro
+  painel de trade)**: a arquitetura de layout do app já é outra (Widgets
+  reordenáveis/colapsáveis, não um grid fixo) — adotar a densidade
+  ESPECÍFICA da referência exigiria decidir entre 2 arquiteturas de
+  layout concorrentes, uma decisão de escopo/arquitetura que continua
+  exigindo confirmação do Operador (per `CLAUDE.md`), não algo pra
+  assumir sozinho.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)

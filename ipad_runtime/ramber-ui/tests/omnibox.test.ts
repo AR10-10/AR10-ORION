@@ -244,3 +244,32 @@ describe('SmartOmnibox.tsx: dropdown precisa vencer a cascata CSS de `.cyber-pan
     expect(classLine).toContain('!overflow-y-auto');
   });
 });
+
+describe('SmartOmnibox.tsx: atalho de teclado ⌘K/Ctrl+K (convenção real confirmada em 2 terminais open-source: OpenTerminal, OpenTerminalUI)', () => {
+  const src = () => readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../src/omnibox/SmartOmnibox.tsx'), 'utf8');
+
+  it('listener global reconhece tanto metaKey (Mac) quanto ctrlKey (Windows/Linux/iPad com teclado externo), sempre ativo (nunca só quando já aberto)', () => {
+    const s = src();
+    const idx = s.indexOf('function onKeyDown(e: KeyboardEvent) {');
+    expect(idx, 'listener de teclado não encontrado').toBeGreaterThan(-1);
+    const block = s.slice(idx, idx + 300);
+    expect(block).toContain('e.metaKey || e.ctrlKey');
+    expect(block).toContain('e.key.toLowerCase() === "k"');
+    expect(block).toContain('setOpen(true)');
+    // useEffect com deps [] (sempre ativo) — não condicionado a `open`,
+    // diferente do listener de mousedown logo acima que só existe quando aberto.
+    const effectStart = s.lastIndexOf('useEffect(() => {', idx);
+    const effectDeclBlock = s.slice(effectStart, idx);
+    expect(effectDeclBlock).not.toContain('if (!open) return;');
+  });
+
+  it('dica visual "⌘K" ao lado do gatilho, escondida no iPad (md:) pra nunca espremer o rótulo do ativo', () => {
+    const s = src();
+    // âncora no <span> real do JSX — "⌘K" sozinho apareceria antes, dentro
+    // do comentário que explica a pesquisa real por trás da convenção.
+    const idx = s.indexOf('>\n          ⌘K');
+    expect(idx, '<span> de dica visual não encontrado').toBeGreaterThan(-1);
+    const classBlock = s.slice(Math.max(0, idx - 250), idx);
+    expect(classBlock).toContain('hidden md:inline');
+  });
+});
