@@ -36,12 +36,22 @@
 // desenhar por cima da irmã quando ambas caem na mesma vela. Esta é a
 // camada de MAIOR prioridade da hierarquia (item 11: "3. DECISÃO/SETA"
 // vem antes de "5. INDICADORES SECUNDÁRIOS"), então usa o maior offset dos
-// três — 40px, H=11 — deliberadamente maior que os 27px de alcance
-// máximo do triângulo harmônico (18+9), com folga real. As etiquetas do
-// eixo de preço (EN/ST/TP/S1/R1, price-label-stack.ts) vivem numa região
-// espacial diferente (o gutter do eixo, à direita da área de plotagem,
-// chart-plot-area.ts) — não competem por pixel com um marcador ancorado na
-// última vela.
+// três — OFFSET-H (o ponto real mais próximo do preço) fica acima dos 27px
+// de alcance máximo do triângulo harmônico (18+9), com a MESMA folga real
+// de 2px que já existia (29 antes da calibração de tamanho abaixo, 29
+// depois). As etiquetas do eixo de preço (EN/ST/TP/S1/R1,
+// price-label-stack.ts) vivem numa região espacial diferente (o gutter do
+// eixo, à direita da área de plotagem, chart-plot-area.ts) — não competem
+// por pixel com um marcador ancorado na última vela.
+//
+// CALIBRAÇÃO DE TAMANHO (ORDEM 3, "Precision Decision Arrow" — achado real
+// documentado pelo próprio Operador com capturas ao vivo em 1D/1W/1M: o
+// triângulo de 22×22px ficava "visualmente grande demais", dominando o
+// gráfico em vez de ser "uma micro-indicação direcional"). A ordem pede
+// STANDARD ~10px de altura visual, limite absoluto ~12px — H=5 dá altura
+// total 2*H=10px (STANDARD), a MESMA proporção de sempre (base=altura),
+// só menor. OFFSET recalculado para preservar a MESMA folga de anti-
+// colisão de 2px acima (OFFSET-H continua 29, > 27).
 //
 // MINIMALISMO (item 12): sem label (o texto LONG/SHORT já existe no
 // CoreSignalBadge — repeti-lo aqui seria a "poluição" que o memo pede para
@@ -54,8 +64,8 @@ import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { chartPaletteRgba } from "./canvas-palette";
 
-const OFFSET = 40; // maior que os 18px do harmônico — esta é a camada de maior prioridade da hierarquia (item 11).
-const H = 11; // maior que os 9px do harmônico, mesmo motivo do offset.
+const OFFSET = 34; // OFFSET-H = 29, preserva a folga real de 2px acima dos 27px do harmônico.
+const H = 5; // altura total do triângulo = 2*H = 10px (STANDARD, ORDEM 3 §6) — limite absoluto do memo é 12px.
 
 interface ConfidenceDirectionArrowPluginProps {
   chart: IChartApi | null;

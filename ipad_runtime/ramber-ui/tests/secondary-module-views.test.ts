@@ -104,7 +104,7 @@ describe('Command bar: Trade Plan strip (critical numbers in the header, fail-cl
     expect(fnSrc).toContain('if (council.riskGated) {');
     expect(fnSrc).toContain('if (council.stance === "NEUTRAL" || council.stance === "ABSTAIN") {');
     // a divergência Núcleo vs. Conselho (achado real) fica explícita quando existe
-    expect(fnSrc).toContain('reason: `Núcleo ${coreDir}, Conselho neutro`,');
+    expect(fnSrc).toContain('reason: `Core ${coreDir}, Council neutral`,');
     expect(fnSrc).not.toMatch(/fetch\(/);
     expect(fnSrc).not.toMatch(/Math\.random/);
   });

@@ -814,8 +814,8 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const block = s.slice(idx, idx + 3000);
     // A intencao original, intacta: com as linhas do Nucleo na tela, o
     // texto diz que falta o plano do CONSELHO — nunca "SEM TRADE PLAN".
-    expect(block).toContain('"SEM PLANO DO CONSELHO · linhas abaixo são do Núcleo"');
-    expect(block).toContain(': `SEM TRADE PLAN · ${tradePlanAbsenceReason}`');
+    expect(block).toContain('"NO COUNCIL PLAN · lines below are the Core\'s"');
+    expect(block).toContain(': `NO TRADE PLAN · ${tradePlanAbsenceReason}`');
   });
 
   it('o MOTIVO da ausencia nao se repete no grafico — ele ja vive na faixa TRADE PLAN do cabecalho', () => {
@@ -829,7 +829,7 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const block = s.slice(idx, idx + 3000);
     // No ramo COM linhas do Nucleo, o motivo saiu; no ramo SEM linhas ele
     // permanece, porque ali a etiqueta e a unica coisa na tela sobre isso.
-    expect(block).not.toContain('SEM PLANO DO CONSELHO · ${tradePlanAbsenceReason}');
+    expect(block).not.toContain('NO COUNCIL PLAN · ${tradePlanAbsenceReason}');
 
     // E a faixa do cabecalho continua sendo quem mostra o motivo, sempre.
     const app = read('../src/App.tsx');

@@ -7497,13 +7497,13 @@ function recentResolutionReason(
   if (ageBars >= DISSOLVE_CONFIG.expireCandles) return null;
   if (lastResolvedPlan.status === "TARGET_HIT") {
     return {
-      reason: "Alvo atingido · reanalisando",
-      tooltip: "O último plano completou todos os alvos reais (ladder inteiro validado). O Core Engine e o Conselho já seguem reavaliando a estrutura ao vivo, no mesmo ciclo de sempre, para o próximo plano real — nunca um placeholder parado no alvo antigo.",
+      reason: "Target reached · reanalyzing",
+      tooltip: "The last plan completed every real target (the full ladder validated). The Core Engine and Council are already reassessing the live structure, in the same cycle as always, for the next real plan — never a placeholder stuck on the old target.",
     };
   }
   return {
-    reason: "Alvo parcial · reanalisando",
-    tooltip: "O último plano validou pelo menos um alvo real antes do preço devolver ao stop já ajustado (ganho parcial honesto, nunca contado como perda). O Core Engine e o Conselho já seguem reavaliando a estrutura ao vivo para o próximo plano real.",
+    reason: "Partial target · reanalyzing",
+    tooltip: "The last plan validated at least one real target before price returned to the already-adjusted stop (an honest partial gain, never counted as a loss). The Core Engine and Council are already reassessing the live structure for the next real plan.",
   };
 }
 
@@ -7515,30 +7515,30 @@ function tradePlanAbsenceReason(
   if (recentResolution) return recentResolution;
   if (!council) {
     return {
-      reason: "Aguardando Conselho",
-      tooltip: "O Conselho Multi-Agente ainda não computou nenhuma leitura nesta sessão — sem base real para um plano ainda.",
+      reason: "Awaiting Council",
+      tooltip: "The Multi-Agent Council hasn't computed a reading yet this session — no real basis for a plan yet.",
     };
   }
   if (council.riskGated) {
     return {
-      reason: "Conselho travado (risco)",
-      tooltip: "O RiskAgent absteve por dado degradado e travou o Conselho (fail-closed) — nenhum plano acionável enquanto durar.",
+      reason: "Council locked (risk)",
+      tooltip: "The RiskAgent abstained due to degraded data and locked the Council (fail-closed) — no actionable plan while this holds.",
     };
   }
   if (council.stance === "NEUTRAL" || council.stance === "ABSTAIN") {
     return coreDir
       ? {
-          reason: `Núcleo ${coreDir}, Conselho neutro`,
-          tooltip: `O Core Engine (LEI 24, única decisão real de LONG/SHORT/WAIT) lê ${coreDir}, mas o Conselho Multi-Agente — mais conservador, soma várias fontes independentes — está neutro ou sem quórum direcional. O Trade Plan usa a base do Conselho, não a do Núcleo diretamente; por isso Entry/Stop/Target não aparecem agora mesmo com o Núcleo direcional. Nunca um plano fabricado sem essa base.`,
+          reason: `Core ${coreDir}, Council neutral`,
+          tooltip: `The Core Engine (LEI 24, the only real LONG/SHORT/WAIT decision) reads ${coreDir}, but the Multi-Agent Council — more conservative, pooling several independent sources — is neutral or has no directional quorum. The Trade Plan is built on the Council's base, not the Core's directly; that's why Entry/Stop/Target don't appear now even with the Core directional. Never a plan fabricated without that base.`,
         }
       : {
-          reason: "Conselho neutro",
-          tooltip: "O Conselho Multi-Agente está neutro ou sem quórum direcional — sem base real para Entry/Stop/Target agora.",
+          reason: "Council neutral",
+          tooltip: "The Multi-Agent Council is neutral or has no directional quorum — no real basis for Entry/Stop/Target right now.",
         };
   }
   return {
-    reason: `Conselho ${council.stance}, sem estrutura`,
-    tooltip: `O Conselho lê ${council.stance}, mas nenhuma estrutura real mapeada (Order Blocks, FVGs, S/R, Fibonacci, Volume Profile) forma uma entrada/invalidação/alvo coerentes agora — nunca um plano fabricado sem base real.`,
+    reason: `Council ${council.stance}, no structure`,
+    tooltip: `The Council reads ${council.stance}, but no real mapped structure (Order Blocks, FVGs, S/R, Fibonacci, Volume Profile) forms a coherent entry/invalidation/target right now — never a plan fabricated without a real basis.`,
   };
 }
 

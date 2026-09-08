@@ -7767,6 +7767,123 @@ fallback de erro; zero page error novo.
 
 ---
 
+### 6.98 "ORDEM 3 — Chart Visual Calibration + Precision Decision Arrow"
+(Stage 1) — nome reaproveitado do Operador (não confundir com `§6.95`,
+uma Ordem 3 anterior e não relacionada sobre o Professional Market
+Terminal; ambas usam o mesmo número de ordem coincidentemente)
+
+Memo pedia, em resumo: calibrar o tamanho da Decision Arrow (relatado
+"visualmente grande demais" em capturas reais de 1D/1W/1M), consolidar o
+Structure Trace roxo como linha primária única (as capturas mostravam
+linhas diagonais competindo), reformular TP1/TP2/TP3 com % real por
+Entry, uma "breathing zone" dinâmica à direita, anti-colisão completa,
+densidade responsiva (iPad Mini/iPad/iPad Pro/Desktop), e conclusão da
+tradução para English Technical — consolidado num único pedido em vez de
+vários pequenos, per a própria mensagem do Operador.
+
+Escopo real desta rodada (Stage 1 — auditar antes de codar, CLAUDE.md
+item 1): dos itens acima, só os concretos, bem-delimitados e de baixo
+risco entraram nesta entrega. Os demais (breathing zone dinâmica,
+motor de anti-colisão completo, reformatação de TP1/TP2/TP3, densidade
+responsiva por dispositivo) exigem arquitetura nova ou tocam componentes
+já cuidadosamente ajustados em rodadas passadas — ver "o que NÃO fez"
+abaixo.
+
+**1. Seta de Decisão calibrada (`ConfidenceDirectionArrowPlugin.tsx`):**
+o triângulo tinha `H=11`/`OFFSET=40` → 22×22px de altura/base total, mais
+que o dobro do limite absoluto de 12px que o próprio memo definiu
+("STANDARD ~10px, EXPANDED 12px MAX"). Recalibrado para `H=5`
+(altura total 2*H=10px, exatamente o STANDARD pedido) e `OFFSET=34` —
+recalculado para preservar a MESMA folga real de anti-colisão contra o
+triângulo harmônico (`OFFSET-H` continua 29, > 27 de antes). Teste novo
+trava o limite de 12px permanentemente (não seria a primeira vez que uma
+correção de tamanho sem trava volta — ver "Achado 2.6" em
+`canvas-palette.ts`).
+
+**2. Structure Trace (roxo) vs. ZigZag (azul) — hierarquia visual:**
+achado real (auditoria de código, não só das capturas): as duas linhas de
+estrutura já eram matematicamente distintas de propósito (fractal de K
+fixo vs. %+depth adaptativo — nunca um "ZigZag duplicado" no sentido de
+cálculo redundante, mesma conclusão de `StructureTracePlugin.tsx`'s
+próprio header), mas o ZigZag tinha alpha 0.55 contra o 0.5 do Structure
+Trace — MAIS forte que a linha que deveria ser a primária da hierarquia
+(item 2 do memo, "CURRENT STRUCTURE TRACE — PURPLE"), invertendo a
+convenção que este projeto já documenta (`canvas-palette.ts`: "opacidade
+= força real", `nexus/visual-budget.ts`). Reduzido para 0.30 — visível,
+nunca escondido (Regra de Ouro 4), mas claramente secundário. Achado
+lateral: o ZigZag também tinha o tom `rgba(138, 180, 248, ...)`
+redigitado à mão em vez de usar a paleta canônica — a família
+`"measurement"` de `canvas-palette.ts` já cita "ZigZag" explicitamente
+entre seus membros — corrigido para `chartPaletteRgba("measurement", ...)`
+no mesmo commit (mesma disciplina que a trava de `canvas-palette.test.ts`
+já exige de todo overlay novo).
+
+**3. Tradução: "SEM PLANO DO CONSELHO"/"Conselho neutro" (English
+Technical):** o próprio memo cita "Conselho neutro" como exemplo literal
+do que precisa mudar. `tradePlanAbsenceReason()`/`recentResolutionReason()`
+(App.tsx) e as 2 etiquetas de `EnhancedChart_110_Percent.tsx` que
+dependem delas — as strings SEMPRE visíveis na tela (faixa TRADE PLAN do
+cabeçalho + etiqueta do canto do gráfico) — foram traduzidas: "Aguardando
+Conselho"→"Awaiting Council", "Conselho travado (risco)"→"Council locked
+(risk)", "Núcleo X, Conselho neutro"→"Core X, Council neutral", "Conselho
+neutro"→"Council neutral", "Conselho X, sem estrutura"→"Council X, no
+structure", "Alvo atingido/parcial · reanalisando"→"Target
+reached/Partial target · reanalyzing", "SEM PLANO DO CONSELHO · linhas
+abaixo são do Núcleo"→"NO COUNCIL PLAN · lines below are the Core's",
+"SEM TRADE PLAN"→"NO TRADE PLAN". Os 6 tooltips (texto explicativo sob
+hover) foram traduzidos junto — nunca um reason em inglês com tooltip em
+português na mesma leitura.
+
+**O que este round honestamente NÃO fez** (registrado para as próximas
+rodadas desta mesma Ordem, nunca escondido):
+- **Breathing zone dinâmica à direita, anti-colisão completa por
+  densidade, reformatação de TP1/TP2/TP3 com % real por Entry
+  (`EnhancedChart_110_Percent.tsx`, construção de label ~linha 3200-3480)**:
+  a formatação atual (`"TP1 FRACA · 0.34% · 1:0.04 · REACHED"`) já foi
+  cuidadosamente ajustada em rodadas passadas para resolver colisão real
+  de texto sobre vela (comentários no próprio arquivo documentam a
+  captura que motivou o formato atual) — reordenar/reformatar sem
+  entender esse histórico completo arrisca reabrir exatamente o problema
+  que já foi fechado. Fica para uma rodada própria, dedicada só a isso.
+- **Densidade responsiva real por dispositivo (iPad Mini/iPad/iPad
+  Pro/Desktop)**: continua sendo a mesma "Frente 3"/responsividade total
+  já deliberadamente adiada em `§6.96`/`§6.97` — não empacotada aqui.
+- **Graduação de `nexus/visual-budget.ts`**: motor puro já existe no
+  Laboratório de Evolução, formalizando exatamente a "hierarquia visual
+  obrigatória" de 7 níveis que o memo pede (Trade Plan > Zona
+  Institucional > Alvos > Invalidação > Radar > Liquidez > Estrutura) —
+  mas o próprio header do arquivo já documenta "graduação real fica para
+  uma rodada própria". Não wireado nesta entrega; a correção do item 2
+  acima foi uma intervenção cirúrgica (2 números), não a graduação do
+  motor completo.
+- **Tradução completa do sistema de razão paralelo
+  (`decision-layer.ts`'s `NEXUS_PLAN_GAP_LABEL`, consumido por
+  `market-analysis.ts`/`operational-readability.ts`)**: mesma FAMÍLIA de
+  motivo ("Conselho neutro — sem plano acionável" etc.) mas para um
+  consumidor diferente (painéis/drawers secundários, não o cabeçalho
+  sempre visível) — mesma classe de pendência já registrada em `§6.97`
+  ("System Health/Council/Market Analysis continuam parcialmente em
+  português"), não um achado novo.
+- **Padronização de labels de 2-3 caracteres do memo (FVG/OB/BOS/CH/EQH/
+  EQL/CVD/OFI/TP1/TP2/TP3/ST/NL/E21)**: não auditado nesta rodada — a
+  maioria já existe no canvas real (confirmado por leitura direta:
+  `EN`/`ST`/`TP1`/`TP2`/`E21`/`NL` aparecem tal qual nas capturas do
+  Operador); uma auditoria completa de TODOS os rótulos do canvas contra
+  a lista do memo fica pendente.
+
+`npm run verify`: **290 arquivos / 4758 testes** (3 novos: limite de
+altura da seta, hierarquia de opacidade ZigZag×Structure Trace, e as
+atualizações de string nos testes de wiring existentes), tsc limpo,
+build ok (1955 módulos). Verificado AO VIVO via Playwright: app real
+inicializado sem novo page error; a string traduzida "Council locked
+(risk)" aparece corretamente na faixa TRADE PLAN do cabeçalho (fluxo real
+de rede bloqueado no sandbox — sem candles reais para render do
+gráfico/canvas neste ambiente, mesma limitação já registrada em rodadas
+anteriores); zero string antiga em português (`Conselho neutro`, `SEM
+PLANO DO CONSELHO`, `SEM TRADE PLAN`) presente no DOM.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
