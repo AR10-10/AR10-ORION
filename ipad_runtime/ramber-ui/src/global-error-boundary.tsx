@@ -33,7 +33,7 @@ export class GlobalErrorBoundary extends Component<{ children: ReactNode }, Glob
     if (!error) return this.props.children;
 
     return (
-      <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#010205] px-6">
+      <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-[#0c0e11] px-6">
         <div className="cyber-panel w-full max-w-sm px-6 py-8 flex flex-col items-center gap-4 text-center">
           <div className="text-[#00f0ff] font-black tracking-[0.2em] text-sm drop-shadow-[0_0_5px_#00f0ff]">
             AR10 CYBORG

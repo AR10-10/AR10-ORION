@@ -92,3 +92,126 @@ export function isOnTypeScale(rem: number): boolean {
   if (!Number.isFinite(rem)) return false;
   return TYPE_SCALE_REM.some((s) => Math.abs(s - rem) < 1e-9);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUPERFÍCIES — a escala de profundidade do terminal (rodada 2)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// ── O DEFEITO REAL, MEDIDO ─────────────────────────────────────────────
+// O app tinha QUATRO quase-pretos fazendo trabalho de superfície, e os
+// papéis pretendidos estavam legíveis no código:
+//
+//   #020610 (2)   fundo da página   (App.tsx: `h-[100dvh] bg-[#020610]`)
+//   #010205 (15)  painel/card/modal (`cyber-panel`, `fixed inset-0 z-[10000]`)
+//   #010308 (65)  dominante         (63 `bg-`, 2 `text-`)
+//   #050810 (4)   chip de etiqueta  (PriceLabelStackPlugin: live, critical)
+//
+// Medição em CIE L* (0–100), o eixo perceptual de claridade:
+//
+//   #010205  L* 0.55
+//   #010308  L* 0.80   ΔL* 0.26   <- INVISÍVEL
+//   #020610  L* 1.63   ΔL* 0.83   <- INVISÍVEL
+//   #050810  L* 2.20   ΔL* 0.57   <- INVISÍVEL
+//
+// **O sistema de profundidade inteiro ocupava ΔL* = 1.65 numa escala de
+// 0 a 100.** Um degrau só começa a ser lido como deliberado por volta de
+// ΔL* 2–3; nenhum destes chegava perto. Pior: o fundo da PÁGINA era mais
+// claro que os PAINÉIS — a profundidade estava invertida em relação à
+// convenção de UI escura (o que está por cima recebe mais luz).
+//
+// Ou seja, não havia hierarquia de superfície: havia quatro quase-pretos
+// acidentais. É exatamente o pedido "hierarquia clara (o que é importante
+// aparece mais forte)" do Operador, dito em cor.
+//
+// ── A ESCALA, DERIVADA E NÃO INVENTADA ─────────────────────────────────
+// Âncora: `#010308`, o dominante (65 usos) — a base não muda de cor, o
+// que mantém a identidade do terminal e a menor migração possível. Os dois
+// degraus acima são gerados EM Lab a partir dela, somando ΔL* = 3.0 e
+// preservando o matiz (a*, b*) byte a byte: continuam o mesmo quase-preto
+// azulado, só com luz suficiente para o degrau existir.
+//
+// Por que ΔL* = 3.0: é o menor passo que se lê como intencional numa área
+// grande sem clarear o terminal. Abaixo disso volta a ser o ruído medido
+// acima; muito acima vira cinza e o AR10 deixa de ser um terminal escuro.
+//
+// ── CONTRASTE VERIFICADO, NÃO ASSUMIDO ─────────────────────────────────
+// Clarear superfície DERRUBA o contraste do texto — então cada cor de
+// texto real foi medida contra a superfície MAIS CLARA (o pior caso).
+// Todas passam WCAG AA (4.5:1), com uma exceção que a medição revelou:
+// `#b026ff` já estava em 4.49:1 contra o fundo ATUAL — reprovado antes
+// desta rodada, por 0.01. Corrigido subindo só o L* (matiz preservado).
+//
+// NOTA DE PROCESSO (achado da própria rodada): a migração foi feita com
+// `sed` sobre `src/**`, e este arquivo mora lá — o `sed` reescreveu a
+// tabela `SURFACE_MIGRATIONS` e o texto acima, trocando cada `from` pelo
+// seu próprio `to`. Foi o teste de conformidade que pegou (ele acusou
+// `#010308` como "cor migrada de volta"). Ficam os valores REAIS de
+// origem; quem repetir uma migração assim precisa excluir este arquivo
+// do sed, ou a tabela deixa de ser registro e vira eco.
+
+/** Razão de contraste mínima para texto normal (WCAG 2.1 AA). */
+export const CONTRAST_MIN_AA = 4.5;
+
+/** Degrau de claridade entre superfícies vizinhas, em CIE L*. */
+export const SURFACE_STEP_DELTA_L = 3.0;
+
+/** As três superfícies do terminal, da mais funda para a mais alta.
+ *  Em UI escura, "mais alto" = mais luz — a convenção que a medição acima
+ *  mostrou estar invertida antes desta rodada. */
+export const SURFACE = {
+  /** Fundo da página. A âncora: 65 usos, cor inalterada. */
+  base: "#010308",
+  /** Painel, card, modal — tudo que pousa sobre a página. */
+  panel: "#0c0e11",
+  /** Popover, chip de etiqueta no canvas — o que pousa sobre um painel. */
+  raised: "#141518",
+} as const;
+
+export type SurfaceRole = keyof typeof SURFACE;
+
+/** Migrações de cor desta rodada, com o papel real que cada uma exercia.
+ *  Registro no código pelo mesmo motivo de TYPE_SCALE_MIGRATIONS: uma
+ *  sessão futura que encontre `#0c0e11` tem aqui a resposta. */
+export const SURFACE_MIGRATIONS: ReadonlyArray<{
+  from: string;
+  to: string;
+  papel: string;
+  uses: number;
+}> = [
+  { from: "#020610", to: SURFACE.base, papel: "fundo da página", uses: 2 },
+  { from: "#010205", to: SURFACE.panel, papel: "painel / card / modal", uses: 15 },
+  { from: "#050810", to: SURFACE.raised, papel: "chip de etiqueta no canvas", uses: 4 },
+  // Não é superfície: é a única cor de TEXTO que reprovava no contraste
+  // mínimo — e já reprovava antes, contra o fundo antigo. Mesmo roxo,
+  // 4.5 pontos de L* mais claro.
+  { from: "#b026ff", to: "#be37ff", papel: "roxo (texto) — correção de contraste", uses: 6 },
+  // Pares perceptualmente idênticos (ΔE < 5) achados na mesma varredura:
+  // duas decisões separadas para uma cor só.
+  { from: "#c3d0dc", to: "#c8d4e6", papel: "cinza claro duplicado", uses: 1 },
+  { from: "#ffaa00", to: "#ffb020", papel: "âmbar duplicado", uses: 2 },
+];
+
+function srgbToLinear(c: number): number {
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/** Luminância relativa (WCAG 2.1). Fail-closed: hex inválido devolve null
+ *  em vez de um número que pareceria uma medição real. */
+export function relativeLuminance(hex: string): number | null {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const r = srgbToLinear(((n >> 16) & 255) / 255);
+  const g = srgbToLinear(((n >> 8) & 255) / 255);
+  const b = srgbToLinear((n & 255) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Razão de contraste WCAG 2.1 entre duas cores. `null` se qualquer uma
+ *  for inválida — nunca um número inventado. */
+export function contrastRatio(a: string, b: string): number | null {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  if (la === null || lb === null) return null;
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}

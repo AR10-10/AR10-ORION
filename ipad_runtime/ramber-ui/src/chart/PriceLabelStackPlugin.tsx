@@ -186,10 +186,10 @@ export const LABEL_TIER_COLOR: Record<PriceLabelTier, string> = {
   // live/critical desenham texto escuro sobre preenchimento sólido — a
   // cor deles não vem daqui (ver isBigTier abaixo). Declarados mesmo
   // assim para o Record ser total: um tier novo nunca cai em undefined.
-  live: "#050810",
-  critical: "#050810",
+  live: "#141518",
+  critical: "#141518",
   // O lado acionável agora: nível estrutural, plano, alvo.
-  primary: "#C3D0DC",
+  primary: "#c8d4e6",
   // Contexto de fundo: mesma discrição de antes, com o viés azulado da
   // paleta em vez do cinza puro.
   context: "#8A94A0",
@@ -609,7 +609,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // agora também na cor do chip, nunca reconstruída via COR DO
           // TEXTO (Regra de Ouro 4: nenhum dado real some, só para de
           // repetir a mesma informação num terceiro canal visual).
-          const textColor = isBigTier ? "#050810" : LABEL_TIER_COLOR[tier];
+          const textColor = isBigTier ? "#141518" : LABEL_TIER_COLOR[tier];
           ctx.fillStyle = textColor;
           ctx.textBaseline = "middle";
           ctx.textAlign = "left";
