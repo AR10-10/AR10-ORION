@@ -32,6 +32,9 @@ const t = (netR: number): TradeCostResult =>
     fingerprint: null,
     institutionalScore: null,
     volatilityAtOpen: null,
+    observedMfeR: null,
+    observedMaeR: null,
+    firstTargetR: null,
     modelAgreement: null,
   }) as TradeCostResult;
 

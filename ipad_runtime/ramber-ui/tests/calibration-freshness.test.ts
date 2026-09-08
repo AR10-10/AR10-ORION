@@ -28,6 +28,9 @@ const em = (resolvedAt: number): TradeCostResult => ({
   modelAgreement: 0.5,
   institutionalScore: null,
   volatilityAtOpen: null,
+  observedMfeR: null,
+  observedMaeR: null,
+  firstTargetR: null,
 });
 
 describe("o veredito sai da PRÓPRIA amostra — zero constante inventada", () => {

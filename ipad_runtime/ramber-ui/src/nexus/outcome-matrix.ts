@@ -71,6 +71,7 @@
 //
 // LEI 24: leitura de histórico. Zero direção, zero decisão.
 import type { TradeCostResult } from "./trade-simulation";
+import { realPercentile } from "./percentile";
 import { computeExpectancy, MIN_TRADES_FOR_VALID_EXPECTANCY, type ExpectancyStats } from "./expectancy";
 import { DEFAULT_MIN_OPPORTUNITY_SCORE } from "./institutional-score";
 
@@ -147,8 +148,16 @@ function medianVolatility(sample: readonly TradeCostResult[]): number | null {
     .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0)
     .sort((a, b) => a - b);
   if (vals.length === 0) return null;
-  const mid = Math.floor(vals.length / 2);
-  return vals.length % 2 === 0 ? (vals[mid - 1] + vals[mid]) / 2 : vals[mid];
+  // Corrigido na rodada Phase D (auditoria antes de construir): esta função
+  // tirava a MÉDIA dos dois centrais numa amostra par, o que sintetiza um
+  // ATR% que nunca foi observado — exatamente o que o contrato declarado de
+  // percentile.ts proíbe ("valor SEMPRE um ponto real da própria amostra
+  // ordenada — nunca interpolado"). Era também a segunda implementação de
+  // mediana no repositório; a terceira quase nasceu em excursion-stats.ts.
+  // A PARTIÇÃO não muda nos casos sem empate no centro (o corte `>=` seleciona
+  // o mesmo conjunto), então isto é consolidação de contrato, não mudança de
+  // comportamento medido.
+  return realPercentile(vals, 0.5);
 }
 
 const AXIS_LABELLER: Record<MarginalOutcomeAxis, AxisLabellerFactory> = {

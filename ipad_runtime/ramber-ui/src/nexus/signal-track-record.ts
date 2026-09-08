@@ -140,6 +140,59 @@ export interface TrackedPlan {
   // §11: presente só quando o carimbo real aconteceu (campo opcional —
   // registros antigos persistidos continuam válidos no rehydrate v2).
   contextAtOpen?: PlanOpenContext;
+  /** MASTER ORDER Phase D §6/§7 — MFE/MAE OBSERVADOS.
+   *
+   *  Extremo REAL de preço a favor (MFE) e contra (MAE) alcançado durante
+   *  a vida deste plano, em preço bruto. A conversão para R vive em
+   *  trade-simulation.ts, onde `entryMid` e `riskPoints` já existem —
+   *  aqui seria uma segunda definição de R.
+   *
+   *  ── DE ONDE VEIO ESTE DADO ─────────────────────────────────────────
+   *  De lugar nenhum novo: `trackPriceTick()` SEMPRE viu cada tick real
+   *  de um plano aberto e descartava, na primeira linha do corpo, todo
+   *  tick que não resolvia (`if (!stopTouched && !targetTouched) return
+   *  state`). MFE/MAE são exatamente o conteúdo desses ticks descartados.
+   *  Mesma classe de achado já corrigida em computeLevelStrength(),
+   *  `resolvedAt`, `contextAtOpen.score`, `absorptionState` e
+   *  `prev_bandwidth_percentile`: o dado sempre esteve aqui e morria na
+   *  fronteira. O laboratório de backtest (research/backtest/
+   *  structural-backtest.js) já media MFE/MAE — mas só sobre trials
+   *  HIPOTÉTICOS; o histórico REAL do Operador nunca teve essa leitura.
+   *
+   *  ── "OBSERVADO" É PARTE DO CONTRATO, NÃO ADORNO ────────────────────
+   *  Este é o extremo entre os ticks que ESTE terminal realmente
+   *  testemunhou — nunca uma afirmação sobre o caminho verdadeiro do
+   *  preço. Aba fechada, rede caída ou throttling do Safari em segundo
+   *  plano significam ticks que nunca chegaram, e o extremo verdadeiro
+   *  pode ter sido pior. Por isso o nome carrega `observed`, mesma
+   *  honestidade de `absorptionState: "OBSERVED"` em
+   *  microstructure-readout.ts.
+   *
+   *  ── POR QUE A ACUMULAÇÃO NÃO MORA AQUI ────────────────────────────
+   *  Estes campos só são PREENCHIDOS no instante da resolução. O extremo
+   *  corrido de um plano ABERTO vive em `PlanExcursion`, num campo IRMÃO
+   *  da store (`planExcursion`), nunca dentro de `trackRecord`.
+   *
+   *  A primeira versão desta rodada acumulava direto no plano ativo, e
+   *  três testes existentes a reprovaram na hora — com razão. O invariante
+   *  que eles protegem é "um tick que não resolve nada devolve a MESMA
+   *  referência de estado", e ele existe porque a store é Zustand+Immer:
+   *  um `trackRecord` novo re-renderiza todo assinante do Track Record. Em
+   *  mercado lateral isso custaria pouco (medido: 12 estados novos em 400
+   *  ticks), mas num movimento em TENDÊNCIA quase todo tick bate um
+   *  extremo novo — o custo real seria ~1 render por atualização de preço,
+   *  exatamente a classe de tempestade de render já corrigida nesta base.
+   *  Num campo irmão, o Zustand compara o valor SELECIONADO: `trackRecord`
+   *  mantém a identidade, ninguém assina `planExcursion`, e o custo de
+   *  render volta a ser zero — sem enfraquecer o invariante e sem abrir
+   *  mão da medição.
+   *
+   *  Opcional: registros persistidos antes desta rodada nunca tiveram a
+   *  medição, e null/undefined é excluído da estatística — nunca lido
+   *  como "excursão zero", que se leria como "nunca andou contra" em vez
+   *  de "não medido". */
+  observedMfePrice?: number | null;
+  observedMaePrice?: number | null;
 }
 
 export interface TrackRecordState {
@@ -252,11 +305,59 @@ export function stampOpenContext(state: TrackRecordState, ctx: PlanOpenContext):
   return { ...state, active: { ...state.active, contextAtOpen: ctx } };
 }
 
+/** Extremo corrido de um plano ABERTO (Phase D §6/§7). Vive num campo
+ *  IRMÃO da store, nunca dentro de `trackRecord` — ver a explicação em
+ *  `TrackedPlan.observedMfePrice`. `openedAt` é a identidade do trade a
+ *  que este acumulador pertence: quando o plano ativo troca, o acumulador
+ *  reinicia em vez de contaminar o trade novo com o caminho do anterior. */
+export interface PlanExcursion {
+  openedAt: number;
+  /** Melhor preço A FAVOR da direção do plano visto até aqui. */
+  mfePrice: number;
+  /** Pior preço CONTRA a direção do plano visto até aqui. */
+  maePrice: number;
+}
+
+/**
+ * Dobra um tick real no acumulador de excursão. Função pura.
+ *
+ * Devolve a MESMA referência quando nada avança — assim o chamador na
+ * store pode pular a escrita e nem o campo irmão muda de identidade à toa.
+ *
+ * Sem plano ativo devolve null: excursão sem trade aberto não existe (e
+ * um acumulador órfão vazaria o caminho de um trade para o seguinte).
+ * Ao trocar de trade (`openedAt` diferente) reinicia no preço atual —
+ * nunca herda, nunca começa em 0 (0 num par de preço seria um extremo
+ * absurdo que envenenaria a estatística inteira).
+ */
+export function accumulateExcursion(
+  prev: PlanExcursion | null | undefined,
+  active: TrackedPlan | null,
+  price: number,
+): PlanExcursion | null {
+  if (!active || !Number.isFinite(price)) return prev ?? null;
+  const long = active.plan.direction === "LONG";
+  if (!prev || prev.openedAt !== active.openedAt) {
+    return { openedAt: active.openedAt, mfePrice: price, maePrice: price };
+  }
+  // "A favor"/"contra" são sempre relativos à DIREÇÃO do plano, nunca a
+  // alta/baixa absoluta: num SHORT, preço caindo é MFE.
+  const mfePrice = long ? Math.max(prev.mfePrice, price) : Math.min(prev.mfePrice, price);
+  const maePrice = long ? Math.min(prev.maePrice, price) : Math.max(prev.maePrice, price);
+  if (mfePrice === prev.mfePrice && maePrice === prev.maePrice) return prev;
+  return { openedAt: prev.openedAt, mfePrice, maePrice };
+}
+
 /** Real price tick vs the open plan's CURRENT rung of the target ladder and
  *  its CURRENT effective stop (original, or break-even once >=1 real
  *  target has been proven). Conservative on a bracket gap: the stop/break-
  *  even reading wins. Returns the ORIGINAL state when nothing resolves. */
-export function trackPriceTick(state: TrackRecordState, price: number, now: number): TrackRecordState {
+export function trackPriceTick(
+  state: TrackRecordState,
+  price: number,
+  now: number,
+  excursion?: PlanExcursion | null,
+): TrackRecordState {
   const active = state.active;
   if (!active || !Number.isFinite(price)) return state;
   const plan = active.plan;
@@ -280,7 +381,7 @@ export function trackPriceTick(state: TrackRecordState, price: number, now: numb
     return {
       ...state,
       active: null,
-      history: pushHistory(state.history, { ...active, status, resolvedAt: now, resolvedPrice: price, targetsHit, breakEvenSuggested: false }),
+      history: pushHistory(state.history, { ...active, status, resolvedAt: now, resolvedPrice: price, targetsHit, breakEvenSuggested: false, observedMfePrice: excursion?.mfePrice ?? null, observedMaePrice: excursion?.maePrice ?? null }),
       partialHits: state.partialHits + (status === "PARTIAL_HIT" ? 1 : 0),
       stopHits: state.stopHits + (status === "STOP_HIT" ? 1 : 0),
     };
@@ -292,7 +393,7 @@ export function trackPriceTick(state: TrackRecordState, price: number, now: numb
     return {
       ...state,
       active: null,
-      history: pushHistory(state.history, { ...active, status: "TARGET_HIT", resolvedAt: now, resolvedPrice: price, targetsHit: newTargetsHit, breakEvenSuggested: false }),
+      history: pushHistory(state.history, { ...active, status: "TARGET_HIT", resolvedAt: now, resolvedPrice: price, targetsHit: newTargetsHit, breakEvenSuggested: false, observedMfePrice: excursion?.mfePrice ?? null, observedMaePrice: excursion?.maePrice ?? null }),
       targetHits: state.targetHits + 1,
     };
   }

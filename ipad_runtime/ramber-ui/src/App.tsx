@@ -333,6 +333,11 @@ import {
   type TargetHitRateReport,
 } from "./nexus/target-hit-rate";
 import {
+  computeExcursionStats,
+  describeExcursionStats,
+  type ExcursionStats,
+} from "./nexus/excursion-stats";
+import {
   evaluateShadowCalibration,
   describeShadowCalibration,
   MIN_SHADOW_SAMPLE,
@@ -3433,6 +3438,15 @@ export default function App() {
   // estatística. Ver o cabeçalho de nexus/outcome-matrix.ts.
   const outcomeMatrix: OutcomeMatrix = useMemo(() => buildOutcomeMatrix(trackRecordResults), [trackRecordResults]);
 
+  // MASTER ORDER Phase D §6/§7: MFE/MAE observados. MESMA amostra já
+  // custeada (trackRecordResults) — zero recomputação, zero 2ª simulação.
+  // O insumo é novo de verdade (a excursão não existia no Track Record até
+  // esta rodada), mas o pipeline é o de sempre.
+  const excursionStats: ExcursionStats = useMemo(
+    () => computeExcursionStats(trackRecordResults),
+    [trackRecordResults],
+  );
+
   // §29 CONCEPT DRIFT: a janela recente ainda se parece com a base? O
   // insumo (recentStats de expectancy.ts) já era computado e a auditoria
   // por AST o achou órfão — ninguém lia. Mesma amostra, zero recomputação.
@@ -4378,6 +4392,7 @@ export default function App() {
       walkForwardReport,
       calibrationFreshness,
       targetHitRates,
+      excursionStats,
       outcomeMatrix,
       shadowReport,
       independentReference,
@@ -4462,6 +4477,7 @@ export default function App() {
       walkForwardReport,
       calibrationFreshness,
       targetHitRates,
+      excursionStats,
       outcomeMatrix,
       shadowReport,
       independentReference,
@@ -6912,6 +6928,7 @@ function ExpectancyCard() {
     walkForwardReport,
     calibrationFreshness,
     targetHitRates,
+    excursionStats,
     shadowReport,
     driftReading,
     contextualRecall,
@@ -6921,6 +6938,7 @@ function ExpectancyCard() {
     walkForwardReport?: WalkForwardReport;
     calibrationFreshness?: CalibrationFreshness;
     targetHitRates?: TargetHitRateReport;
+    excursionStats?: ExcursionStats;
     shadowReport?: ShadowCalibrationReport;
     driftReading?: DriftReading;
     contextualRecall?: ContextualRecall | null;
@@ -7172,6 +7190,24 @@ function ExpectancyCard() {
           title={`Frequência real com que cada alvo foi alcançado, entre os ${targetHitRates.resolvedPlans} planos resolvidos deste symbol:timeframe que REALMENTE propuseram aquele alvo — um plano de 2 alvos nunca entra no denominador do TP3. Contagem observada sobre histórico já resolvido, nunca probabilidade de o próximo trade chegar lá.`}
         >
           Alcance · {describeTargetHitRates(targetHitRates)}
+        </span>
+      )}
+      {/* MASTER ORDER Phase D §6/§7 — CAMINHO (MFE/MAE observados).
+          `netR` diz quanto rendeu; não diz quanto calor o Operador teve de
+          aguentar até render, nem se um perdedor quase chegou ao alvo. Duas
+          leituras diferentes que, sem isto, têm exatamente a mesma cara no
+          histórico. O `n` viaja SEMPRE junto do número (não existe piso de
+          amostra inventado aqui): uma mediana de 3 vencedores se lê
+          literalmente como "3 vencedores". Excursão OBSERVADA — o extremo
+          entre os ticks que ESTE terminal testemunhou, nunca uma afirmação
+          sobre o caminho verdadeiro do preço (aba fechada = ticks que nunca
+          chegaram). Display only, LEI 24. Ver nexus/excursion-stats.ts. */}
+      {excursionStats?.status === "OK" && (
+        <span
+          className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight"
+          title={`Excursão OBSERVADA sobre ${excursionStats.measuredTrades} de ${excursionStats.totalTrades} trades resolvidos deste symbol:timeframe. "Calor típico" = mediana do MAE dos vencedores (quanto o preço andou CONTRA antes de o plano funcionar) e, entre parênteses, o pior caso — é ele que decide se o stop é sobrevivível na prática. "% do TP1" = quão longe os perdedores chegaram do primeiro alvo antes de reverter: perto de 100% aponta ALVO longe demais (estrutural); perto de 0% aponta LEITURA errada (direcional). Extremo entre os ticks realmente testemunhados por este terminal, nunca o caminho verdadeiro do preço; registros sem medição ficam de fora, nunca contam como excursão zero.`}
+        >
+          Caminho · {describeExcursionStats(excursionStats)}
         </span>
       )}
       <OutcomeMatrixBlock />

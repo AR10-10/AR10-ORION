@@ -9606,6 +9606,92 @@ Um que é **proibido**: os **Executors** do Hummingbot são a camada que
 coloca e cancela ordens reais. Vale ler pela disciplina de fronteira, nunca
 importar.
 
+### 6.122 Phase D §6/§7 — MFE/MAE observados: o CAMINHO do trade
+
+O que faltava da Phase D da MASTER ORDER, medido item a item antes de
+construir: **7 dos 9 já existiam** (outcome, target outcomes, fees,
+slippage, funding, expectancy, target hit rate). Os dois que faltavam
+eram **MAE** e **MFE** — e não por acaso: eles existiam no laboratório
+(`research/backtest/structural-backtest.js`) sobre trials HIPOTÉTICOS, e
+nunca sobre o histórico REAL do Operador.
+
+**De onde veio o dado.** De lugar nenhum novo. `trackPriceTick()` sempre
+viu cada tick real de um plano aberto e descartava, na primeira linha do
+corpo, todo tick que não resolvia. MFE/MAE são exatamente o conteúdo
+desses ticks descartados. É a **sétima** ocorrência da mesma família de
+defeito já corrigida em `computeLevelStrength()`, `resolvedAt`,
+`contextAtOpen.score`, `absorptionState`, `prev_bandwidth_percentile` e
+`recentStats`: o dado sempre esteve ali e morria na fronteira.
+
+**As duas perguntas que isto responde, e que `netR` nunca respondeu:**
+
+1. *Quanto calor?* Dois planos +2R são coisas diferentes se um nunca
+   andou 0.1R contra e o outro chegou a −0.9R antes de virar. O segundo
+   provavelmente teria sido abandonado no meio, e o histórico, mostrando
+   só +2R, diz que foi tranquilo. `winnerMaeMedianR` + `winnerMaeWorstR`
+   (o pior é quem decide se o stop é sobrevivível na prática).
+2. *O alvo estava errado, ou a leitura estava errada?* Um perdedor que
+   chegou a 85% do caminho até o TP1 é um defeito ESTRUTURAL corrigível
+   (alvo longe demais); um que nunca saiu de 10% é uma leitura
+   DIRECIONAL errada. Sem MFE de perdedor os dois são idênticos:
+   "STOP_HIT, −1R". `loserMfeFractionMedian`.
+
+**A decisão de arquitetura que vale registrar (e não reverter).** A
+primeira versão acumulava o extremo dentro do plano ativo, em
+`trackRecord`. Três testes existentes de
+`nexus-signal-track-record.test.ts` reprovaram na hora, e estavam certos:
+o invariante que eles protegem é *"um tick que não resolve nada devolve a
+MESMA referência de estado"*, e ele existe porque a store é
+Zustand+Immer — um `trackRecord` novo re-renderiza todo assinante. Em
+mercado lateral o custo seria pequeno (**medido: 12 estados novos em 400
+ticks, 3%**), mas em **tendência** quase todo tick bate um extremo novo:
+~1 render por atualização de preço, exatamente a tempestade de render já
+corrigida nesta base.
+
+A correção não foi relaxar o teste — foi mudar o desenho. O acumulador
+(`PlanExcursion`) vive num campo **IRMÃO** da store, `planExcursion`, que
+ninguém assina. O Zustand compara o valor SELECIONADO, então
+`trackRecord` mantém a identidade e o custo de render volta a zero, com a
+medição intacta. Os três testes voltaram a passar **sem uma linha
+alterada** — que é a prova de que o guard não foi enfraquecido. Uma
+sessão futura que pense em "simplificar" movendo o acumulador para dentro
+de `trackRecord` está desfazendo isto.
+
+**Achado colateral da auditoria (Disciplina §1).** `outcome-matrix.ts`
+tinha escrito a **segunda** mediana do repositório, e ela violava o
+contrato declarado de `percentile.ts` (*"valor SEMPRE um ponto real da
+própria amostra ordenada — nunca interpolado"*) ao tirar a média dos dois
+centrais numa amostra par, sintetizando um ATR% nunca observado. A
+terceira quase nasceu em `excursion-stats.ts`. Consolidadas as duas em
+`realPercentile(vals, 0.5)` — a partição não muda nos casos sem empate no
+centro, então é consolidação de contrato, não mudança de comportamento
+medido (os 38 testes de `outcome-matrix.test.ts` passaram sem alteração).
+Mesmo padrão que `price-clustering.js` já teve de resolver.
+
+**Sem piso de amostra inventado.** `excursion-stats.ts` não tem um
+`MIN_TRADES` próprio: estatística descritiva de histórico já resolvido
+não é a mesma afirmação que expectancy/Platt (que projetam), e um 30 aqui
+seria um limiar sem origem. Vale o padrão de `target-hit-rate.ts` — o `n`
+viaja SEMPRE junto do número, na estrutura e na linha de UI, então uma
+mediana de 3 vencedores se lê literalmente como "3 vencedores". É a
+quinta vez nesta trilha que um limiar foi evitado fazendo o dado carregar
+a própria qualificação.
+
+**Limite honesto declarado no nome.** `observed` é contrato, não adorno:
+é o extremo entre os ticks que ESTE terminal testemunhou, nunca uma
+afirmação sobre o caminho verdadeiro do preço — aba fechada, rede caída
+ou throttling do Safari em segundo plano significam ticks que nunca
+chegaram, e o extremo verdadeiro pode ter sido pior. Mesma honestidade de
+`absorptionState: "OBSERVED"`. Registros anteriores ao carimbo ficam
+`null` e são excluídos, nunca lidos como excursão zero (Regra de Ouro 3).
+
+**Deliberadamente não calculado:** MAE dos perdedores. É degenerado por
+construção (um perdedor resolveu tocando o stop, então o MAE dele é ≈
+−1R sempre) — reportá-lo teria aparência de medição sendo só a definição
+de stop de volta. Registrado para que não seja "adicionado por simetria".
+
+LEI 24: display only. `engine.direction` nunca é lido nem tocado.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar

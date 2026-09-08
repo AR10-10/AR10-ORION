@@ -35,6 +35,9 @@ function res(over: Partial<TradeCostResult> = {}): TradeCostResult {
     fingerprint: null,
     institutionalScore: null,
     volatilityAtOpen: null,
+    observedMfeR: null,
+    observedMaeR: null,
+    firstTargetR: null,
     modelAgreement: null,
     ...over,
   };

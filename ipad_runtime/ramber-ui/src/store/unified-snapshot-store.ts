@@ -74,9 +74,11 @@ import {
   trackPlanTransition,
   trackPriceTick,
   stampOpenContext,
+  accumulateExcursion,
   EMPTY_TRACK_RECORD,
   type TrackRecordState,
   type PlanOpenContext,
+  type PlanExcursion,
 } from "../nexus/signal-track-record";
 import {
   ingestAffectiveEvent,
@@ -417,6 +419,19 @@ export interface UnifiedSnapshotState {
   // against the real price (first touch: target vs stop; conservative on
   // gaps). Session state hydrated from IndexedDB (Local-First).
   trackRecord: TrackRecordState;
+  // MASTER ORDER Phase D §6/§7: extremo corrido (MFE/MAE) do plano ABERTO.
+  //
+  // Campo IRMÃO de `trackRecord` de propósito, não por organização: a
+  // primeira versão acumulava dentro do próprio plano ativo e reprovou em
+  // três testes existentes que travam "tick que não resolve devolve a
+  // MESMA referência". Aqui o Zustand compara o valor SELECIONADO — quem
+  // assina `trackRecord` não re-renderiza quando só a excursão anda, e
+  // ninguém assina este campo. É o único jeito de medir o caminho do preço
+  // sem pagar ~1 render por atualização de preço em mercado de tendência
+  // (Regras de Ouro 6/7). Nunca persistido: só faz sentido para o plano
+  // aberto DESTA sessão, e o valor final já viaja congelado na entrada
+  // resolvida do histórico.
+  planExcursion: PlanExcursion | null;
   // Achado real de auditoria (Diretriz de Evolução Geral do Organismo
   // §6.8, "memória de decisões hoje é uma fatia GLOBAL"): arquivo do
   // agregado (history/targetHits/partialHits/stopHits/replaced) por
@@ -600,6 +615,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     affectiveMemory: EMPTY_AFFECTIVE_STATE,
     cpi: null,
     trackRecord: EMPTY_TRACK_RECORD,
+    planExcursion: null,
     trackRecordArchive: {},
     paperTrading: EMPTY_PAPER_TRADING_STATE,
 
@@ -692,7 +708,15 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
       s.trackRecord = trackPlanTransition(s.trackRecord as TrackRecordState, plan, Date.now());
     }),
     trackPriceTick: (price) => set((s) => {
-      s.trackRecord = trackPriceTick(s.trackRecord as TrackRecordState, price, Date.now());
+      // Phase D §6/§7: dobra o tick no acumulador ANTES de avaliar a
+      // resolução — o tick que resolve é um preço real como qualquer
+      // outro, e excluí-lo faria o MFE de um vencedor ignorar justamente
+      // o alvo que ele bateu. `accumulateExcursion` devolve a MESMA
+      // referência quando nada avança, então a escrita abaixo é um no-op
+      // para o Immer nesse caso.
+      const excursion = accumulateExcursion(s.planExcursion as PlanExcursion | null, s.trackRecord.active as TrackRecordState["active"], price);
+      s.planExcursion = excursion;
+      s.trackRecord = trackPriceTick(s.trackRecord as TrackRecordState, price, Date.now(), excursion);
     }),
     stampPlanOpenContext: (ctx) => set((s) => {
       s.trackRecord = stampOpenContext(s.trackRecord as TrackRecordState, ctx);
