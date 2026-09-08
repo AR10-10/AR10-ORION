@@ -8482,6 +8482,84 @@ ela vier.
 
 ---
 
+### 6.105 ORDEM "NÚCLEO + POSICIONAMENTO INTELIGENTE" (7 itens) — o lado
+das etiquetas deixa de ser estático
+
+**§2/§3 — LACUNA REAL, fechada como módulo puro.** O lado de cada etiqueta
+do eixo era **100% estático**: 15 atribuições literais `side: "left"` em
+`EnhancedChart_110_Percent.tsx` e nenhuma `"right"` explícita (todo o
+resto cai no default). Nada media, nada decidia — um ativo a 5 dígitos e
+um a 3 casas decimais distribuíam as etiquetas exatamente igual, mesmo o
+primeiro tendo eixo muito mais largo (`resolveAxisWidthForLabels` cresce
+até 140px). É literalmente o que a §3 descreve.
+
+Construído: `chart/chart-label-side-balance.ts` —
+`resolveLabelSideBalance(rightLabels, leftLabels, plotWidthPx)`, puro e
+determinístico. Regras, todas derivadas de coisa já existente:
+- **Orçamento** = `CHART_LEFT_EDGE_FRACTION` (0.14), o número que o
+  projeto JÁ declarou como "quanto uma faixa de borda pode ocupar".
+  Simetria de um limiar existente, nunca um número novo.
+- **Só `context` migra.** `live`/`critical`/`primary` ficam colados ao
+  eixo — é a leitura primária do Operador, e mover o TP para o lado
+  oposto da escala destruiria a mesma "leitura de medida correta" que a
+  §2 exige preservar no Volume Profile.
+- **Ataca sempre a MAIS LARGA.** A coluna é alinhada, então sua largura é
+  o `max` — migrar qualquer etiqueta que não seja a mais larga não
+  encolhe a coluna em 1px. *Este foi um defeito real da primeira versão,
+  pego pelo próprio teste*: o laço migrava candidatas inúteis. Corrigido:
+  se a mais larga não pode sair, nada abaixo dela ajuda → para.
+- **Nunca troca um problema por outro:** a esquerda só cresce até o mesmo
+  orçamento, ou absorve de graça o que já cabe na largura que ela ocupa.
+  Propriedade provada em teste: com a esquerda VAZIA a migração nunca
+  acontece (as duas condições são mutuamente exclusivas por construção) —
+  no AR10 real isso não é o caso comum, porque a esquerda já carrega as
+  15 etiquetas estruturais.
+
+18 testes de execução real. **Não graduado ainda** (Disciplina §3: isolar
+antes de integrar): a fiação no `PriceLabelStackPlugin` muda o código mais
+sensível a colisão do gráfico, e o sandbox não carrega candle real para a
+verificação visual que uma mudança dessas exige. Graduar é a próxima
+rodada, com dado real na tela.
+
+**§5 — JÁ EXISTE, confirmado por leitura.** "Intensidade proporcional à
+força/score" está implementado desde rodadas anteriores:
+`nexus/visual-budget.ts` + `nexus/layer-relevance.ts`, com 4 consumidores
+reais (`EnhancedChart`, `InstitutionalZonePlugin`, `TradePlanZonePlugin`,
+`StructureBreakMarkersPlugin`) e alpha por tier de confiança
+(`OPACITY_BY_TIER`). O que **não** foi feito, e é deliberado: o "glow"
+pedido. Ele colide com duas regras próprias deste projeto — "Fio de Seda"
+(Regra de Ouro 5: 1px sólida, zero efeito) e o alvo de 60 FPS no iPad
+(blur/glow são das primeiras coisas que derrubam frame em Safari móvel).
+Registrado como decisão consciente, não como esquecimento.
+
+**§4 — LACUNA REAL, localizada, não fechada.** "Linhas não devem
+atravessar o gráfico inteiro": confirmado que atravessam.
+`HorizontalLevelLinesPlugin.tsx:90` faz `ctx.moveTo(0, yCrisp)` — começa
+em x=0 — e há **17 usos de `createPriceLine`** em `EnhancedChart`, que é
+full-width por natureza da lib. Limitar a "2-3 toques relevantes" precisa
+plumbing do dado de toques (`strength.touches`, que existe) até o
+desenho, e/ou migrar as 17 price lines nativas para canvas — do tamanho
+da migração que já consumiu uma PR inteira antes. É sua própria rodada.
+
+**§1 — já satisfeito no essencial.** O `CoreSignalBadge` já tem hierarquia
+forte: sinal em `text-sm md:text-base font-black tracking-wider` (o maior
+e mais pesado do bloco) contra subtítulo em 0.4/0.45rem. Sobre
+"probabilidade": a única honesta que existe é a calibrada por Platt
+(`platt-calibration.ts`), com piso real de 30 trades resolvidos e
+fail-closed abaixo disso — na prática ela mostra `DADOS_INSUFICIENTES` na
+maior parte do tempo, e é assim que tem de ser. Exibir qualquer outro
+número como "probabilidade" seria a Regra de Ouro 2 quebrada.
+
+**§6/§7 — no ar e confirmados.** Volume Profile ancorado na fronteira real
+do eixo (§6.102, mergeado), piso de legibilidade (§6.104, mergeado), TP/ST
+com separador de milhar, countdown nos 14 timeframes, respiro adaptativo
+nos 3 gráficos.
+
+`npm run verify`: tsc limpo, **295 arquivos / 4833 testes** (19 novos),
+build ok.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
