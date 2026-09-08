@@ -103,6 +103,12 @@ export interface TradeCostResult {
    *  nunca fabricado como 0 (0 se leria como "péssima oportunidade"
    *  em vez de "não medido"). */
   institutionalScore: number | null;
+  /** §41: ATR% congelado na abertura (`contextAtOpen.atrPercent`).
+   *  Passthrough literal, zero recomputação — recalcular com o ATR de hoje
+   *  seria avaliar o passado com informação do presente (§40). null em
+   *  registros anteriores ao carimbo; nunca fabricado como 0, que se leria
+   *  como "mercado parado" em vez de "não medido". */
+  volatilityAtOpen: number | null;
   // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
   // passthrough literal de contextAtOpen.modelAgreement (Fase 2, fusão de
   // modelos orientada à direção do plano) — zero recomputação. null
@@ -158,6 +164,7 @@ export function simulateTradeCosts(
     regime: tracked.contextAtOpen?.regime ?? null,
     fingerprint: computeScenarioFingerprint(tracked.contextAtOpen),
     institutionalScore: tracked.contextAtOpen?.score ?? null,
+    volatilityAtOpen: tracked.contextAtOpen?.atrPercent ?? null,
     modelAgreement: tracked.contextAtOpen?.modelAgreement ?? null,
   };
 }

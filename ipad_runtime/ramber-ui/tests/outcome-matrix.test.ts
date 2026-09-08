@@ -34,6 +34,7 @@ function res(over: Partial<TradeCostResult> = {}): TradeCostResult {
     regime: null,
     fingerprint: null,
     institutionalScore: null,
+    volatilityAtOpen: null,
     modelAgreement: null,
     ...over,
   };
@@ -331,5 +332,71 @@ describe('outcome-matrix: fiação real em App.tsx', () => {
 
   it('o bloco está montado dentro do ExpectancyCard', () => {
     expect(app).toContain('<OutcomeMatrixBlock />');
+  });
+});
+
+describe('outcome-matrix: eixo VOLATILIDADE (§41) — o corte é a mediana da própria amostra', () => {
+  const comVol = (vol: number | null, over: Partial<TradeCostResult> = {}) =>
+    res({ volatilityAtOpen: vol, ...over });
+
+  it('corta na mediana REAL, nunca num "ATR% alto" universal', () => {
+    // ATR% 1,2,3,4 => mediana 2.5. Dois de cada lado.
+    const s = sliceOutcomes([comVol(1), comVol(2), comVol(3), comVol(4)], 'VOLATILIDADE');
+    expect(s.cells.map((c) => c.label)).toEqual(['ACIMA DA MEDIANA', 'ABAIXO DA MEDIANA']);
+    expect(s.cells.map((c) => c.trades)).toEqual([2, 2]);
+  });
+
+  it('a MESMA volatilidade muda de lado quando a amostra muda — é auto-referente', () => {
+    // Esta é a invariante que prova que não há limiar fixo escondido.
+    const calmo = sliceOutcomes([comVol(0.5), comVol(1), comVol(1.5)], 'VOLATILIDADE');
+    const agitado = sliceOutcomes([comVol(1), comVol(5), comVol(9)], 'VOLATILIDADE');
+    const ladoNoCalmo = calmo.cells.find((c) => c.label === 'ACIMA DA MEDIANA')!;
+    const ladoNoAgitado = agitado.cells.find((c) => c.label === 'ABAIXO DA MEDIANA')!;
+    // ATR% 1 é "acima" num mercado calmo e "abaixo" num agitado.
+    expect(ladoNoCalmo.trades).toBeGreaterThan(0);
+    expect(ladoNoAgitado.trades).toBeGreaterThan(0);
+  });
+
+  it('registro sem leitura (anterior ao carimbo) é EXCLUÍDO, nunca lido como zero', () => {
+    const s = sliceOutcomes([comVol(2), comVol(4), comVol(null), comVol(null)], 'VOLATILIDADE');
+    expect(s.unclassified).toBe(2);
+    expect(s.cells.reduce((t, c) => t + c.trades, 0)).toBe(2);
+  });
+
+  it('amostra SEM nenhuma leitura => eixo vazio, nunca uma mediana fabricada', () => {
+    const s = sliceOutcomes([comVol(null), comVol(null)], 'VOLATILIDADE');
+    expect(s.cells).toEqual([]);
+    expect(s.unclassified).toBe(2);
+  });
+
+  it('ATR% zero ou negativo é leitura impossível => excluído', () => {
+    const s = sliceOutcomes([comVol(0), comVol(-1), comVol(3), comVol(5)], 'VOLATILIDADE');
+    expect(s.unclassified).toBe(2);
+  });
+
+  it('o eixo entra na matriz completa', () => {
+    expect(ALL_OUTCOME_AXES).toContain('VOLATILIDADE');
+    const m = buildOutcomeMatrix([comVol(2), comVol(4)]);
+    expect(m.slices.map((s) => s.axis)).toContain('VOLATILIDADE');
+  });
+
+  it('o cabeçalho não afirma mais que o eixo não existe', () => {
+    const src = readFileSync(new URL('../src/nexus/outcome-matrix.ts', import.meta.url), 'utf-8');
+    expect(src).not.toContain('volatilidade → NÃO EXISTE');
+    expect(src).toContain('REAL desde o §41');
+  });
+});
+
+describe('outcome-matrix: §41 — congelado na abertura, jamais retroativo', () => {
+  it('o carimbo grava o ATR% do MESMO motor já lido naquele instante', () => {
+    const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
+    expect(app).toContain('atrPercent: engine?.marketRegime?.atrPercent ?? null,');
+  });
+
+  it('o passthrough é literal, sem recomputar volatilidade', () => {
+    const sim = readFileSync(new URL('../src/nexus/trade-simulation.ts', import.meta.url), 'utf-8');
+    expect(sim).toContain('volatilityAtOpen: tracked.contextAtOpen?.atrPercent ?? null');
+    // Nenhum cálculo de ATR aqui — só repasse.
+    expect(sim).not.toMatch(/trueRange|computeAtr|atrOf\(/i);
   });
 });

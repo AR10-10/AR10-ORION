@@ -32,6 +32,7 @@ const trade = (modelAgreement: number | null, netR: number): TradeCostResult => 
   fingerprint: null,
   modelAgreement,
   institutionalScore: null,
+  volatilityAtOpen: null,
 });
 
 /** Série em que o score REALMENTE prevê o resultado: score alto → ganho.

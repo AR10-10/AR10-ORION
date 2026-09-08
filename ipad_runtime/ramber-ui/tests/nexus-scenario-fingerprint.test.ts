@@ -72,6 +72,7 @@ function tradeResult(fingerprint: string | null, netR: number): TradeCostResult 
     fingerprint,
     modelAgreement: null,
     institutionalScore: null,
+    volatilityAtOpen: null,
   };
 }
 

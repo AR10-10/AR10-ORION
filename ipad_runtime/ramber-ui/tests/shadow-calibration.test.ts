@@ -30,6 +30,7 @@ const trade = (modelAgreement: number | null, netR: number): TradeCostResult => 
   regime: null,
   fingerprint: null,
   institutionalScore: null,
+  volatilityAtOpen: null,
   modelAgreement,
 });
 
@@ -201,7 +202,12 @@ describe('shadow-calibration: fiação real em App.tsx', () => {
 
   it('a razão de escassez entra na linha de maturidade, não vira 4ª frase', () => {
     expect(app).toContain('const shadowGate = { label: "shadow"');
-    expect(app).toContain('buildSampleMaturity([expectancyGate, calibrationGate, walkForwardGate, shadowGate])');
+    // Trava a FORMA, não a contagem: a lista cresce por CAPACIDADE (o 5º
+    // degrau é o drift, §29). Fixar o número faria toda capacidade nova
+    // quebrar um teste que não é sobre ela — foi exatamente o que
+    // aconteceu aqui, e a lição já valeu uma vez em
+    // platt-calibration-wiring.test.ts.
+    expect(app).toMatch(/buildSampleMaturity\(\[expectancyGate, calibrationGate, walkForwardGate, shadowGate[^\]]*\]\)/);
     expect(app).toContain('reasonStillNeeded(shadowReport?.reason, shadowGate)');
   });
 

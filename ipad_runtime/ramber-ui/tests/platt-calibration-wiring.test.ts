@@ -65,7 +65,11 @@ describe('App: stampPlanOpenContext carimba modelAgreement (Fase 3) usando o MES
     const a = app();
     const idx = a.indexOf('useUnifiedSnapshotStore.getState().stampPlanOpenContext({');
     expect(idx, 'chamada de stampPlanOpenContext não encontrada').toBeGreaterThan(-1);
-    const block = a.slice(idx, idx + 1300);
+    // Janela generosa DE PROPÓSITO: a chamada cresce a cada campo novo
+    // carimbado na abertura (§41 acrescentou atrPercent), e uma fatia
+    // apertada faz este teste quebrar por motivo errado — ele é sobre
+    // modelAgreement, não sobre o tamanho do bloco.
+    const block = a.slice(idx, idx + 2600);
     expect(block).toContain('structureLabel: engine?.marketStructureLabel ?? null,');
     expect(block).toContain('modelAgreement: liveModelAgreement,');
     const depsMatch = block.match(/\}, \[([\s\S]*?)\]\);/);

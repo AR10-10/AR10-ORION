@@ -9411,6 +9411,201 @@ não pode regredir em silêncio.
 LEI 24 intacta: leitura de evidência, travada por teste contra alimentar
 Núcleo ou Trade Plan.
 
+### 6.118 Phase C — o regime secundário que a cascata descartava
+
+MASTER ORDER §18 pede `PRIMARY_REGIME`, `SECONDARY_REGIME`,
+`REGIME_TRANSITION` e `REGIME_CONFIDENCE`. Só o primeiro existia.
+
+#### O achado
+
+`classifyMarketRegime` é uma cascata **if/else winner-take-all**: testa
+BREAKOUT → TENDENCIA_FORTE → COMPRESSAO → TENDENCIA_MODERADA e devolve o
+**primeiro** que casa. Quando `ADX >= 30` **e** a banda está comprimida ao
+mesmo tempo, o motor reporta TENDENCIA_FORTE e a COMPRESSAO some — mesmo
+sendo igualmente verdadeira.
+
+E a evidência para reconstruir tudo **já vinha de graça** no retorno:
+`adx`, `bandwidth_percentile`, `prev_bandwidth_percentile`,
+`close_position`. Mesma família de `resolvedAt` (§6.110),
+`contextAtOpen.score` (§6.112) e `absorptionState` (§6.115) — aqui a
+fronteira era a própria cascata, que colapsa evidência rica num rótulo só.
+
+#### Mais um passthrough que morria na ponte
+
+`engine-bridge.ts` carregava `adx` e `bandwidthPercentile`, mas **não**
+`prev_bandwidth_percentile` — e sem ele não existe transição. Corrigido
+aditivamente: `prevBandwidthPercentile`.
+
+#### "Margem", nunca "probabilidade" (Regra de Ouro 2)
+
+O §18 chama de `REGIME_CONFIDENCE`. O que é honestamente calculável é a
+**margem relativa ao limiar que decidiu**: ADX 40 com piso 30 → `+0.33`.
+Um ADX de **30.1** e um de **45** produzem o **mesmo rótulo**, e a margem é
+o que os separa.
+
+O campo **não** se chama `confidence` nem vira porcentagem de acerto —
+nomear assim convidaria exatamente a leitura que a Regra de Ouro 2 proíbe.
+Um teste trava o contrato (nenhum campo `confidence`/`probability`).
+Regimes sem limiar numérico próprio (BREAKOUT, decidido por posição de
+fechamento; CONSOLIDACAO, o "nenhum dos outros") devolvem `null` em vez de
+uma régua inventada.
+
+#### Zero limiar novo
+
+`ADX_STRONG` (30), `ADX_MODERATE` (20) e `SQUEEZE_PERCENTILE` (0.25) são
+**importados** do motor que os declara. Redeclarar criaria duas verdades
+que sairiam de sincronia, e a leitura secundária passaria a discordar do
+primário sem ninguém notar.
+
+Sem leitura anterior, a transição é `DESCONHECIDA` — **nunca "ESTAVEL"
+fabricado**: ausência de histórico não é estabilidade observada.
+
+LEI 24: `primary` é passthrough **literal**; a linha oficial do motor nunca
+muda. Travado por teste.
+
+`nexus/regime-secondary.ts` (novo, puro, 23 testes: 19 de execução real +
+4 de fiação).
+
+### 6.119 §41 VOLATILITY AT OPEN — o último eixo da matriz ganha dado
+
+Era o **único** eixo da §46 sem leitura, e eu o declarei aberto três vezes
+nesta sessão. Fechado — mas só **daqui para frente**, e a razão importa.
+
+#### Por que não podia ser retroativo
+
+Derivar a volatilidade do candle de **hoje** para avaliar um plano de
+**ontem** é literalmente o `CURRENT_VALUE` usado como `VALUE_AT_OPEN` que o
+§40 proíbe. A única forma honesta é **congelar no instante da abertura** —
+e isso não alcança o passado.
+
+**Consequência aceita e registrada:** planos abertos antes deste carimbo
+ficam `null` **para sempre**. `null` é excluído da estatística, nunca lido
+como "volatilidade zero" (que se leria como mercado parado em vez de não
+medido).
+
+#### Zero motor novo
+
+`engine.marketRegime.atrPercent` — o **mesmo** ATR% que o Risk Engine já lê
+naquele render, do mesmo `regime-engine.js`. O carimbo é um passthrough ao
+lado de `score`/`regime`/`structureLabel`/`modelAgreement`, e
+`TradeCostResult.volatilityAtOpen` é outro passthrough literal. Um teste
+trava que **nada** recalcula ATR no caminho.
+
+#### O corte é a MEDIANA DA PRÓPRIA AMOSTRA
+
+Não existe "ATR% alto" universal: 1.2% é calmaria num timeframe e
+tempestade noutro. Então o eixo corta na **mediana real da amostra** —
+terceira aplicação da mesma técnica auto-referente nesta sessão
+(`calibration-freshness`, `independent-reference-price`), e pelo mesmo
+motivo: **o limiar honesto é o que os próprios dados declaram**, nunca um
+número escolhido por mim.
+
+Um teste trava a invariante: *a MESMA volatilidade muda de lado quando a
+amostra muda* — prova de que não há limiar fixo escondido.
+
+Isso exigiu uma mudança real de forma: o rotulador de eixo virou uma
+**fábrica que vê a amostra inteira antes de rotular** (mediana não é
+decidível olhando um resultado por vez). Os outros quatro eixos ignoram o
+argumento — o corte deles vem de limiar já declarado em outro módulo.
+
+`ALL_OUTCOME_AXES` agora tem 5 eixos marginais. A matriz da §46 está
+completa no que é honestamente mensurável.
+
+### 6.120 §29 CONCEPT DRIFT — a janela recente ainda se parece com a base?
+
+#### A semente já estava órfã
+
+`evaluateSignalFilter` já recortava os últimos `RECENT_TRADES_WINDOW` (20)
+trades e devolvia `recentStats` — e a auditoria por AST (§6.115) o
+classificou em **classe C: produzido e PERDIDO**. O insumo do detector de
+drift estava construído e jogado fora. Sexto achado desta família na
+sessão.
+
+#### A base e a recente são DISJUNTAS
+
+A base é tudo **antes** da janela recente. Comparar os últimos 20 contra
+"todos os trades" incluiria os próprios 20 na referência, **diluindo
+exatamente o sinal procurado**. Aqui as duas partes não se sobrepõem por
+construção, e um teste trava isso.
+
+#### A régua é a variabilidade da PRÓPRIA base
+
+Não existe "ΔR grande" universal: `0.2R` é ruído numa estratégia volátil e
+um terremoto numa estável. Então a escala é
+
+> `erro padrão = σ_base / √n_recente`
+
+— o desvio que se **espera** numa média de n sorteios da distribuição da
+base. A leitura vira *"a recente está a X erros padrão da base"*, adaptando
+-se sozinha à volatilidade real da estratégia. **Quarta** aplicação da
+técnica auto-referente nesta sessão.
+
+O teste central prova que a régua é real: *a MESMA diferença de médias muda
+de veredito quando a base muda de volatilidade*.
+
+Base sem dispersão medível → **recusa**, em vez de dividir por ~0 e fazer
+qualquer diferença parecer infinita.
+
+#### As bandas são convenção DECLARADA, não medição
+
+1σ / 2σ / 3σ são as bandas estatísticas **ordinárias**, usadas aqui como
+convenção explícita — exatamente como o repositório já faz com
+`slippageRFraction`, `WALL_VOLUME_MULTIPLIER` e `PROXIMITY_FULL_PCT`. **Não
+são calibradas contra o desempenho deste sistema**, e o módulo nunca afirma
+que sejam. Chamar 3σ de "drift confirmado" é uma **nomeação de banda**, não
+um teste de hipótese com p-valor.
+
+#### Os estados distinguem "mudou" de "piorou"
+
+- **RECOVERING** — mudou muito, mas **a favor** do Operador. O §29 lista
+  este estado separado justamente porque *mudou* não é sinônimo de *piorou*.
+- **DEGRADED** — subcaso honesto de DRIFT_CONFIRMED: não só mudou muito,
+  **passou a perder dinheiro** (`recentMeanR < 0`). Distinção real, não
+  sinônimo.
+
+`nexus/drift-detector.ts` (novo, puro, 25 testes: 20 de execução real + 5
+de fiação). O 5º degrau da linha de maturidade (`drift`, ≥20) entrou junto
+— exige as **duas** amostras, porque comparar precisa de duas.
+
+**Lição repetida:** um teste do Shadow fixava a lista de 4 degraus e
+quebrou. Já tinha acontecido com `platt-calibration-wiring`. Ambos agora
+travam a **forma** da chamada, não a contagem — a lista cresce por
+capacidade, e fixar o número faz toda capacidade nova quebrar um teste que
+não é sobre ela.
+
+### 6.121 §74-B RESEARCH — a pesquisa externa que eu tinha declarado pendente
+
+Declarei este bloco como **não feito** três vezes. Feito agora, em
+`docs/PESQUISA_REFERENCIAS_EXTERNAS.md`, no formato exato do §74-B.
+
+**Limite declarado no próprio documento:** foi lida a documentação oficial
+e as descrições de arquitetura, **não os códigos-fonte inteiros**, e nenhum
+projeto foi executado (este ambiente não tem egress para nada).
+
+**O achado principal — e ele critica algo que eu mesmo acabei de
+entregar:** **ADWIN é *parameter-free***. Ele deriva o corte por **limite
+de Hoeffding** em vez de exigir um número escolhido. Isso ataca exatamente
+a fraqueza que `drift-detector.ts` (§6.120) declara sobre si mesmo: as
+bandas 1σ/2σ/3σ são **convenção**, não derivação. Substituí-las pelo bound
+seria a **quinta** aplicação do princípio que o projeto já usa quatro vezes
+— *o limiar honesto é o que os próprios dados declaram* — e é a evolução
+recomendada, como **decisão de escopo do Operador**, porque trocaria o
+núcleo estatístico de um módulo recém-entregue.
+
+Outros dois que valem: o **stacked imbalance** do Freqtrade (desequilíbrio
+isolado é ruído; empilhado em níveis consecutivos é sinal — barato sobre
+dado já recebido) e o padrão **`t` decide / `t+1` executa** como invariante
+**testada**, não convenção respeitada.
+
+E três que **não** valem, com razão registrada: Page-Hinkley (troca
+convenção por convenção), footprint persistido (a própria doc do Freqtrade
+admite o custo de memória — incompatível com 60 FPS em iPad) e o motor de
+backtest completo (o AR10 usa desfecho REAL, não replay sintético).
+
+Um que é **proibido**: os **Executors** do Hummingbot são a camada que
+coloca e cancela ordens reais. Vale ler pela disciplina de fronteira, nunca
+importar.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar

@@ -30,6 +30,7 @@ function result(netR: number, modelAgreement: number | null): TradeCostResult {
     fingerprint: null,
     modelAgreement,
     institutionalScore: null,
+    volatilityAtOpen: null,
   };
 }
 

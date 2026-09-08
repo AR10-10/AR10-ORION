@@ -45,11 +45,16 @@
 //                  symbol:timeframe só (trackRecordArchive é keyed por ele).
 //                  O eixo existe no arquivo, não nesta lista — por isso
 //                  buildArchiveOutcomeMatrix() abaixo é uma função separada.
-//   volatilidade → NÃO EXISTE. Nenhum motor deste repositório congela uma
-//                  leitura de volatilidade (ATR, largura de Bollinger) no
-//                  instante da abertura do plano. Derivar agora, do candle
-//                  de hoje, seria olhar o futuro do trade. Fica declarado
-//                  como ausente — nunca preenchido com um proxy.
+//   volatilidade → REAL desde o §41 (MASTER ORDER "VOLATILITY AT OPEN"):
+//                  `contextAtOpen.atrPercent` é congelado no instante da
+//                  abertura, do MESMO regime-engine.js já lido ali. Antes
+//                  disto o eixo não existia, e a razão está registrada:
+//                  derivar a volatilidade do candle de HOJE para avaliar um
+//                  plano de ontem seria olhar o futuro do trade (§40).
+//                  Consequência aceita: planos abertos antes do carimbo
+//                  ficam null PARA SEMPRE — este campo não pode ser
+//                  preenchido retroativamente, e null é excluído da
+//                  estatística, nunca lido como "volatilidade zero".
 //
 // ── OS CORTES NÃO INVENTAM LIMIAR ──────────────────────────────────────
 // Os dois eixos numéricos são cortados por fronteiras JÁ DECLARADAS em
@@ -71,7 +76,7 @@ import { DEFAULT_MIN_OPPORTUNITY_SCORE } from "./institutional-score";
 
 /** Eixos com leitura real hoje. `VOLATILIDADE` deliberadamente ausente —
  *  ver o cabeçalho: nenhum motor a congela na abertura. */
-export type OutcomeAxis = "DIRECAO" | "REGIME" | "QUALIDADE" | "CONFLUENCIA" | "ATIVO_TIMEFRAME";
+export type OutcomeAxis = "DIRECAO" | "REGIME" | "QUALIDADE" | "CONFLUENCIA" | "VOLATILIDADE" | "ATIVO_TIMEFRAME";
 
 /** Os eixos que uma amostra ÚNICA consegue cortar. `ATIVO_TIMEFRAME` fica
  *  de fora por construção, não por esquecimento: a amostra ao vivo é
@@ -116,6 +121,7 @@ export interface OutcomeMatrix {
 
 const AXIS_TITLE: Record<OutcomeAxis, string> = {
   ATIVO_TIMEFRAME: "Ativo × timeframe (arquivo)",
+  VOLATILIDADE: "Volatilidade na abertura (ATR%)",
   DIRECAO: "Direção",
   REGIME: "Regime na abertura",
   QUALIDADE: "Qualidade (Institutional Score na abertura)",
@@ -127,10 +133,28 @@ const AXIS_TITLE: Record<OutcomeAxis, string> = {
  *  estatística própria. */
 type AxisLabeller = (r: TradeCostResult) => string | null;
 
-const AXIS_LABELLER: Record<MarginalOutcomeAxis, AxisLabeller> = {
-  DIRECAO: (r) => (r.direction === "LONG" || r.direction === "SHORT" ? r.direction : null),
-  REGIME: (r) => (typeof r.regime === "string" && r.regime.length > 0 ? r.regime : null),
-  QUALIDADE: (r) =>
+/** Fábrica: recebe a amostra inteira antes de rotular. Existe por causa da
+ *  VOLATILIDADE — o corte dela é a MEDIANA da própria amostra, e mediana
+ *  não é decidível olhando um resultado por vez. Os outros eixos ignoram o
+ *  argumento (o corte deles vem de limiar já declarado em outro módulo). */
+type AxisLabellerFactory = (sample: readonly TradeCostResult[]) => AxisLabeller;
+
+/** Mediana real dos ATR% congelados na abertura. null quando nenhum trade
+ *  da amostra tem a leitura (histórico anterior ao carimbo do §41). */
+function medianVolatility(sample: readonly TradeCostResult[]): number | null {
+  const vals = sample
+    .map((r) => r.volatilityAtOpen)
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0)
+    .sort((a, b) => a - b);
+  if (vals.length === 0) return null;
+  const mid = Math.floor(vals.length / 2);
+  return vals.length % 2 === 0 ? (vals[mid - 1] + vals[mid]) / 2 : vals[mid];
+}
+
+const AXIS_LABELLER: Record<MarginalOutcomeAxis, AxisLabellerFactory> = {
+  DIRECAO: () => (r) => (r.direction === "LONG" || r.direction === "SHORT" ? r.direction : null),
+  REGIME: () => (r) => (typeof r.regime === "string" && r.regime.length > 0 ? r.regime : null),
+  QUALIDADE: () => (r) =>
     typeof r.institutionalScore === "number" && Number.isFinite(r.institutionalScore)
       ? r.institutionalScore >= DEFAULT_MIN_OPPORTUNITY_SCORE
         ? `SCORE >= ${DEFAULT_MIN_OPPORTUNITY_SCORE}`
@@ -139,7 +163,21 @@ const AXIS_LABELLER: Record<MarginalOutcomeAxis, AxisLabeller> = {
   // O sinal, e só o sinal — a semântica já declarada em trade-simulation.ts.
   // Exatamente 0 é "nenhum modelo pendeu para nenhum lado": categoria real
   // e distinta, nunca somada a favor nem contra.
-  CONFLUENCIA: (r) =>
+  // O corte é a MEDIANA DA PRÓPRIA AMOSTRA, nunca um "ATR% alto" universal
+  // — que não existe: 1.2% é calmaria num timeframe e tempestade noutro.
+  // Auto-referente pela terceira vez neste projeto (calibration-freshness,
+  // independent-reference-price), e pelo mesmo motivo: o limiar honesto é o
+  // que os próprios dados declaram, não um número escolhido por mim.
+  VOLATILIDADE: (sample) => {
+    const mediana = medianVolatility(sample);
+    return (r) => {
+      if (mediana === null) return null;
+      const v = r.volatilityAtOpen;
+      if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return null;
+      return v >= mediana ? "ACIMA DA MEDIANA" : "ABAIXO DA MEDIANA";
+    };
+  },
+  CONFLUENCIA: () => (r) =>
     typeof r.modelAgreement === "number" && Number.isFinite(r.modelAgreement)
       ? r.modelAgreement > 0
         ? "MODELOS A FAVOR"
@@ -157,15 +195,19 @@ const DECLARED_ORDER: Partial<Record<MarginalOutcomeAxis, string[]>> = {
   DIRECAO: ["LONG", "SHORT"],
   QUALIDADE: [`SCORE >= ${DEFAULT_MIN_OPPORTUNITY_SCORE}`, `SCORE < ${DEFAULT_MIN_OPPORTUNITY_SCORE}`],
   CONFLUENCIA: ["MODELOS A FAVOR", "MODELOS DIVIDIDOS", "MODELOS CONTRA"],
+  VOLATILIDADE: ["ACIMA DA MEDIANA", "ABAIXO DA MEDIANA"],
 };
 
 /** Uma fatia marginal real. Função pura. */
 export function sliceOutcomes(results: readonly TradeCostResult[], axis: MarginalOutcomeAxis): OutcomeSlice {
   const buckets = new Map<string, TradeCostResult[]>();
   let unclassified = 0;
+  // A fábrica vê a amostra INTEIRA antes de rotular — é o que permite à
+  // VOLATILIDADE usar a mediana real em vez de um limiar inventado.
+  const label_de = AXIS_LABELLER[axis](results);
 
   for (const r of results) {
-    const label = AXIS_LABELLER[axis](r);
+    const label = label_de(r);
     if (label === null) {
       unclassified++;
       continue;
@@ -197,7 +239,7 @@ export function sliceOutcomes(results: readonly TradeCostResult[], axis: Margina
   return { axis, title: AXIS_TITLE[axis], unclassified, cells };
 }
 
-export const ALL_OUTCOME_AXES: MarginalOutcomeAxis[] = ["DIRECAO", "REGIME", "QUALIDADE", "CONFLUENCIA"];
+export const ALL_OUTCOME_AXES: MarginalOutcomeAxis[] = ["DIRECAO", "REGIME", "QUALIDADE", "CONFLUENCIA", "VOLATILIDADE"];
 
 /**
  * A matriz inteira sobre uma amostra JÁ simulada (trade-simulation.ts).
