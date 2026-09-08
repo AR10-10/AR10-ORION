@@ -208,7 +208,19 @@ body {
    "atrapalhar o campo de visão" que o Operador proibiu: aqui é chrome
    (moldura), nunca leitura. */
 .cyber-panel {
-  background: linear-gradient(165deg, rgba(6, 8, 14, 0.72), rgba(3, 4, 9, 0.86));
+  /* ACHADO DE VERIFICAÇÃO VISUAL (rodada 3 da ordem "EVOLUÇÃO COMPLETA"):
+     a rodada 2 declarou a escala de superfície em terminal-design-tokens.ts
+     e migrou 15 `bg-[...]` no .tsx — mas a varredura só olhou .tsx, e ESTE
+     arquivo carregava mais TRÊS quase-pretos que ela nunca viu: os dois
+     stops abaixo e o #0c0e11 de --solid. Pior: como diz o comentário do
+     --solid logo abaixo, o gradiente é pintado POR CIMA do background-color,
+     com 72–86% de opacidade — então aquele `bg-` migrado ficava quase todo
+     escondido. Medido em tela: o painel efetivo era rgb(3,4,9), não o
+     rgb(12,14,17) que a escala prometia.
+     Os stops agora são REANCORADOS para que o resultado EFETIVO sobre a
+     base caia exatamente em SURFACE.panel. Opacidades preservadas byte a
+     byte: o "vidro" é a identidade do painel, só a cor sob ele muda. */
+  background: linear-gradient(165deg, rgba(22, 24, 27, 0.72), rgba(14, 16, 18, 0.86));
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -242,7 +254,12 @@ body {
  * legibilidade, que é a única coisa que um terminal não pode perder. */
 .cyber-panel--solid {
   background-image: none;
-  background-color: #050912;
+  /* SURFACE.raised (terminal-design-tokens.ts). Um painel que FLUTUA sobre
+     o gráfico está, por definição, um degrau acima de um painel que pousa
+     sobre a página — e em UI escura o que está mais alto recebe mais luz.
+     Era #050912, um quarto quase-preto solto que não pertencia a escala
+     nenhuma. */
+  background-color: #141518;
 }
 
 .cyber-panel:hover {

@@ -55,14 +55,27 @@ describe('Camada de vidro: o blur precisa ter o que borrar', () => {
     expect(reduced).toMatch(/background:\s*linear-gradient\(165deg,\s*#/); // sólido, nunca transparente sem blur
   });
 
-  it('contraste preservado: o fundo translúcido continua escuro o bastante para texto claro', () => {
+  it('contraste preservado: o fundo EFETIVO continua escuro o bastante para texto claro', () => {
     // Se alguém deixar o painel claro demais, o texto do terminal some.
-    const alphas = [...panelBlock.matchAll(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/g)]
+    //
+    // CORRIGIDO na rodada 3 da ordem "EVOLUÇÃO COMPLETA": a versão anterior
+    // media a cor CRUA de cada stop do gradiente. Isso é o ingrediente, não
+    // o resultado — um stop a 72% de opacidade sobre um quase-preto produz
+    // uma cor final bem mais escura que ele próprio, e é a FINAL que decide
+    // se o texto some. Medir o ingrediente reprovava a reancoragem dos
+    // stops em SURFACE.panel mesmo com o painel efetivo em rgb(12,14,17).
+    // Agora o teste compõe de verdade, o que o torna mais forte: ele
+    // continua pegando "alguém clareou o painel", e para de pegar
+    // "alguém mudou a receita mantendo o resultado".
+    const BASE = [1, 3, 8]; // SURFACE.base (terminal-design-tokens.ts)
+    const stops = [...panelBlock.matchAll(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/g)]
       .filter((m) => Number(m[4]) > 0.5 && Number(m[1]) < 60); // só os do background
-    expect(alphas.length).toBeGreaterThan(0);
-    for (const m of alphas) {
-      const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
-      expect((r + g + b) / 3).toBeLessThan(20); // fundo permanece muito escuro
+    expect(stops.length).toBeGreaterThan(0);
+    for (const m of stops) {
+      const a = Number(m[4]);
+      const efetivo = [1, 2, 3].map((i) => a * Number(m[i]) + (1 - a) * BASE[i - 1]);
+      const media = (efetivo[0] + efetivo[1] + efetivo[2]) / 3;
+      expect(media, `stop ${m[0]} compõe para média ${media.toFixed(1)}`).toBeLessThan(20);
     }
   });
 });
