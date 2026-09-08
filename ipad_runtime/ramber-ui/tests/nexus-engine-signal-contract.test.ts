@@ -88,6 +88,10 @@ describe('deriveEngineSignalsFromCouncil: reempacota votos reais, zero segunda m
 const zone = (distinctSourceCount: number, centerPrice: number, memberLabels: string[]): InstitutionalZone => ({
   top: centerPrice + 10,
   bottom: centerPrice - 10,
+  // Núcleo estreito ao redor da âncora — o caso realista: o envelope é
+  // largo porque um membro alto o estica, o núcleo não.
+  coreTop: centerPrice,
+  coreBottom: centerPrice,
   centerPrice,
   distinctSourceCount,
   members: memberLabels.map((label) => ({ sourceKind: 'EMA', label, price: centerPrice, top: centerPrice, bottom: centerPrice })) as InstitutionalZone['members'],

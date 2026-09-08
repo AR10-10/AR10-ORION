@@ -1011,7 +1011,15 @@ describe('Diretriz Final — Polimento Visual: rótulo de Zona Institucional mig
     expect(block).toContain('institutionalZones.forEach((zone, i) => {');
     expect(block).toContain('const resolved = institutionalZoneVisualWeights[i];');
     expect(block).toContain('const alpha = resolved !== undefined && base > 0 ? Math.min(1, resolved / base) : 1;');
-    expect(block).toContain('price: (zone.top + zone.bottom) / 2,');
+    // ATUALIZADO (correção da faixa larga demais, reportada pelo Operador):
+    // a etiqueta ancora no NÚCLEO da confluência, o mesmo intervalo que
+    // InstitutionalZonePlugin agora desenha. Com o meio do ENVELOPE ela se
+    // descolava da própria faixa que nomeia sempre que um membro alto
+    // (FVG/OB) puxava top/bottom para longe das âncoras. A invariante que
+    // este teste protege é a mesma de sempre — etiqueta e faixa no mesmo
+    // preço —, só que agora o preço certo é o do núcleo.
+    expect(block).toContain('price: (zone.coreTop + zone.coreBottom) / 2,');
+    expect(block).not.toContain('price: (zone.top + zone.bottom) / 2,');
     // Ordem "FECHAMENTO" §3: junto com TREND era a etiqueta mais larga do
     // eixo. Nível 1 = força da confluência (contagem real de fontes
     // distintas, a MESMA que alimenta confluenceWeight); Nível 2 = quais

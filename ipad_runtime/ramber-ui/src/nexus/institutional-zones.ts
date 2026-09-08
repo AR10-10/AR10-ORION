@@ -84,8 +84,33 @@ export interface InstitutionalZoneMember {
 }
 
 export interface InstitutionalZone {
+  /** Envelope COMPLETO do grupo — a união dos extents de todos os membros.
+   *  Preservado exatamente como sempre foi (Regra de Ouro 4: nada de dado
+   *  real apagado); é o alcance total que as ferramentas deste grupo
+   *  cobrem somadas. NÃO é o que a faixa desenha — ver coreTop/coreBottom. */
   top: number;
   bottom: number;
+  /** NÚCLEO da confluência: o intervalo real onde as ÂNCORAS dos membros
+   *  se encontram (`min(price)`..`max(price)`).
+   *
+   *  Por que este campo existe (achado real desta rodada, reportado pelo
+   *  Operador como "a faixa roxa é larga demais e atrapalha o campo de
+   *  visão", e depois MEDIDO): o agrupamento só exige que as ÂNCORAS
+   *  caiam dentro de `proximityPct` (0.35%) umas das outras — mas
+   *  `top`/`bottom` são a UNIÃO dos extents. Um FVG/Order Block alto cujo
+   *  ponto médio cai perto de uma EMA contribui a sua altura INTEIRA, e a
+   *  faixa passa a reivindicar uma região muito maior que o critério que a
+   *  produziu. Medição real do motor: EMA+VWAP em ~100 com um FVG de
+   *  97→103 produz uma faixa de 6.00% a partir de uma tolerância de
+   *  0.35% — 17.1x, pintada em largura total do gráfico.
+   *
+   *  O núcleo é limitado pela tolerância POR CONSTRUÇÃO (é a mesma
+   *  distância que definiu o grupo), então não precisa de nenhuma
+   *  constante nova. E nada é perdido: o extent completo de cada FVG/OB
+   *  continua desenhado pelo plugin DELE (LiquidityZonesPlugin), e o
+   *  envelope segue disponível em top/bottom acima. */
+  coreTop: number;
+  coreBottom: number;
   centerPrice: number; // média real dos preços representativos do grupo
   members: InstitutionalZoneMember[];
   distinctSourceCount: number; // quantas FERRAMENTAS diferentes (não instâncias) concordam aqui
@@ -282,6 +307,10 @@ export function computeInstitutionalZones(input: InstitutionalZoneInput): Instit
     zones.push({
       top: Math.max(...group.map((m) => m.top)),
       bottom: Math.min(...group.map((m) => m.bottom)),
+      // Núcleo: onde as âncoras REALMENTE se encontram. Sempre dentro de
+      // proximityPct por construção — é a mesma distância que agrupou.
+      coreTop: Math.max(...group.map((m) => m.price)),
+      coreBottom: Math.min(...group.map((m) => m.price)),
       centerPrice: group.reduce((sum, m) => sum + m.price, 0) / group.length,
       members: group,
       distinctSourceCount,
@@ -326,6 +355,11 @@ export function institutionalZonesEqual(a: InstitutionalZone[], b: Institutional
     const za = a[i];
     const zb = b[i];
     if (za.top !== zb.top || za.bottom !== zb.bottom || za.centerPrice !== zb.centerPrice) return false;
+    // O núcleo entra na guarda junto do envelope: sem isto, uma mudança
+    // real só no núcleo (mesmo envelope, âncoras deslocadas) seria tratada
+    // como "nada mudou" e nunca chegaria ao assinante — a faixa desenhada
+    // congelaria no lugar errado.
+    if (za.coreTop !== zb.coreTop || za.coreBottom !== zb.coreBottom) return false;
     if (za.distinctSourceCount !== zb.distinctSourceCount) return false;
     if (za.members.length !== zb.members.length) return false;
     for (let j = 0; j < za.members.length; j++) {

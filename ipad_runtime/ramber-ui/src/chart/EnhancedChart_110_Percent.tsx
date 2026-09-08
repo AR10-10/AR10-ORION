@@ -3603,7 +3603,11 @@ function EnhancedChart_110_PercentImpl({
         // já era 2 pesos visuais (Nível 1/Nível 2 acima), só o texto do
         // Nível 1 compacta mais.
         out.push({
-          price: (zone.top + zone.bottom) / 2,
+          // Mesmo núcleo que InstitutionalZonePlugin desenha, nunca o
+          // envelope: com o meio do envelope o rótulo se descolava da
+          // própria faixa que ele nomeia sempre que um membro alto
+          // (FVG/OB) puxava top/bottom para longe das âncoras.
+          price: (zone.coreTop + zone.coreBottom) / 2,
           text: `${zone.distinctSourceCount}F`,
           secondaryText: toolNames,
           color: INSTITUTIONAL_ZONE_LABEL_COLOR,
