@@ -338,6 +338,11 @@ import {
   type ExcursionStats,
 } from "./nexus/excursion-stats";
 import {
+  evaluatePromotion,
+  describeGovernance,
+  type GovernanceReport,
+} from "./nexus/model-governance";
+import {
   evaluateShadowCalibration,
   describeShadowCalibration,
   MIN_SHADOW_SAMPLE,
@@ -3452,6 +3457,7 @@ export default function App() {
   // por AST o achou órfão — ninguém lia. Mesma amostra, zero recomputação.
   const driftReading: DriftReading = useMemo(() => detectDrift(trackRecordResults), [trackRecordResults]);
 
+
   // Modo Shadow (§53): o candidato roda AO LADO do incumbente sobre a
   // mesma amostra e nunca decide nada — nenhum consumidor lê daqui uma
   // direção, um filtro ou uma probabilidade exibida (LEI 24). Responde por
@@ -3460,6 +3466,18 @@ export default function App() {
   const shadowReport: ShadowCalibrationReport = useMemo(
     () => evaluateShadowCalibration(trackRecordResults),
     [trackRecordResults],
+  );
+  // MASTER ORDER Phase G: "Pode ser promovido?" (§75). Composição PURA dos
+  // quatro vereditos que já existem logo acima — zero estatística nova,
+  // zero recomputação. A lacuna que isto fecha não era falta de medição:
+  // era que os quatro moravam em módulos que nunca se falavam, e ninguém
+  // respondia a pergunta da esteira.
+  //
+  // O resultado é ELEGIBILIDADE exibida ao Operador, nunca uma troca de
+  // modelo (§71: "Nunca permitir Candidate alterar Core silenciosamente").
+  const governance: GovernanceReport = useMemo(
+    () => evaluatePromotion(shadowReport, walkForwardReport, calibrationFreshness, driftReading),
+    [shadowReport, walkForwardReport, calibrationFreshness, driftReading],
   );
 
   // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
@@ -4393,6 +4411,7 @@ export default function App() {
       calibrationFreshness,
       targetHitRates,
       excursionStats,
+      governance,
       outcomeMatrix,
       shadowReport,
       independentReference,
@@ -4478,6 +4497,7 @@ export default function App() {
       calibrationFreshness,
       targetHitRates,
       excursionStats,
+      governance,
       outcomeMatrix,
       shadowReport,
       independentReference,
@@ -6929,6 +6949,7 @@ function ExpectancyCard() {
     calibrationFreshness,
     targetHitRates,
     excursionStats,
+    governance,
     shadowReport,
     driftReading,
     contextualRecall,
@@ -6939,6 +6960,7 @@ function ExpectancyCard() {
     calibrationFreshness?: CalibrationFreshness;
     targetHitRates?: TargetHitRateReport;
     excursionStats?: ExcursionStats;
+    governance?: GovernanceReport;
     shadowReport?: ShadowCalibrationReport;
     driftReading?: DriftReading;
     contextualRecall?: ContextualRecall | null;
@@ -7208,6 +7230,29 @@ function ExpectancyCard() {
           title={`Excursão OBSERVADA sobre ${excursionStats.measuredTrades} de ${excursionStats.totalTrades} trades resolvidos deste symbol:timeframe. "Calor típico" = mediana do MAE dos vencedores (quanto o preço andou CONTRA antes de o plano funcionar) e, entre parênteses, o pior caso — é ele que decide se o stop é sobrevivível na prática. "% do TP1" = quão longe os perdedores chegaram do primeiro alvo antes de reverter: perto de 100% aponta ALVO longe demais (estrutural); perto de 0% aponta LEITURA errada (direcional). Extremo entre os ticks realmente testemunhados por este terminal, nunca o caminho verdadeiro do preço; registros sem medição ficam de fora, nunca contam como excursão zero.`}
         >
           Caminho · {describeExcursionStats(excursionStats)}
+        </span>
+      )}
+      {/* MASTER ORDER Phase G (§75/§76) — GOVERNANÇA: "pode ser promovido?"
+          Composição pura dos quatro vereditos que já aparecem neste mesmo
+          card (shadow, walk-forward, frescor, drift) — zero estatística
+          nova. O que faltava não era medição: era alguém que os lesse
+          JUNTOS e dissesse em que ponto da esteira o candidato parou.
+
+          O estado final se chama ELEGÍVEL, nunca PROMOVIDO: §71 proíbe um
+          Candidate alterar o Núcleo silenciosamente, e não existe caminho
+          de código daqui para engine.direction. A promoção em si é decisão
+          do Operador. Fail-closed: portão que não pôde ser avaliado
+          REPROVA — ausência de evidência nunca é evidência de aprovação.
+          Ver nexus/model-governance.ts. */}
+      {governance && (
+        <span
+          className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight"
+          title={`Esteira de promoção (CANDIDATE → SHADOW → OOS → VALIDATION). ${governance.gates.map((g) => `${g.stage}: ${g.passed ? "passou" : "não passou"} — ${g.reason}`).join(" | ")}`}
+        >
+          Governança · {describeGovernance(governance)}
+          {governance.blockedBy !== null && (
+            <span className="block text-[#8ab4f8]/40">{governance.nextRequirement}</span>
+          )}
         </span>
       )}
       <OutcomeMatrixBlock />

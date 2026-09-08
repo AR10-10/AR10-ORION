@@ -9692,6 +9692,62 @@ de stop de volta. Registrado para que não seja "adicionado por simetria".
 
 LEI 24: display only. `engine.direction` nunca é lido nem tocado.
 
+### 6.123 Phase E/G — GOVERNANÇA: a esteira que responde "pode ser promovido?"
+
+Auditoria da Phase E antes de construir, item a item: **4 dos 6 já
+existiam inteiros** (rolling windows e walk-forward em
+`walk-forward-calibration.ts`, drift em `drift-detector.ts`, shadow em
+`shadow-calibration.ts`) e os outros 2 — *candidate* e *incumbent
+comparison* — já existiam **implícitos**: o cabeçalho de
+`shadow-calibration.ts` literalmente chama a versão congelada de
+"(incumbent)" e a ao vivo de "(challenger)".
+
+Ou seja: Phase E não precisava de estatística nova. A evidência dos
+quatro portões estava construída e testada, e **morria espalhada em
+quatro módulos que nunca se falavam**. Oitava ocorrência da família de
+defeito desta sessão — só que aqui a fronteira onde o dado morria não era
+dentro de uma função, era **entre módulos**. Ninguém respondia a pergunta
+final do §75: *"Pode ser promovido? GOVERNANCE"*.
+
+`nexus/model-governance.ts` compõe os quatro vereditos na esteira do §76:
+
+| Portão | Pergunta real | Fonte |
+|---|---|---|
+| CANDIDATE | existe um desafiante? | `shadow-calibration.ts` |
+| SHADOW | ele bateu o incumbente em dados que nenhum dos dois viu? | `shadow-calibration.ts` |
+| OOS | ele bate a **taxa base** fora-da-amostra? | `walk-forward-calibration.ts` |
+| VALIDATION | a evidência ainda vale **agora**? | `calibration-freshness.ts` + `drift-detector.ts` |
+
+**Três decisões que valem registrar:**
+
+1. **O módulo não calcula nada, e isso é travado por teste.** Um módulo de
+   governança que inventasse os próprios critérios daria autoridade de
+   decisão a números que ninguém mediu — seria exatamente o defeito que
+   ele existe para impedir. Um teste varre o arquivo (removendo
+   comentários **e literais de texto**) e exige que o único número no
+   código seja o `toFixed(4)` da formatação.
+2. **O estado final chama-se ELEGÍVEL, nunca PROMOVIDO.** §71 proíbe um
+   Candidate alterar o Núcleo silenciosamente; LEI 24 proíbe qualquer
+   camada de confluência decidir. Não existe caminho de código daqui para
+   `engine.direction`, e um teste garante que continue assim. A promoção
+   em si é decisão do Operador.
+3. **Fail-closed é o padrão, não a exceção.** Todo portão que não puder
+   ser avaliado **reprova**. Num módulo de promoção, ler ausência de
+   evidência como aprovação seria a falha mais cara possível.
+
+**Duas sutilezas de veredito herdadas das fontes, preservadas de
+propósito:** empate no shadow conta como *não melhorou* (nunca se
+arredonda a favor da mudança), e `RECOVERING` **não** bloqueia —
+`drift-detector.ts` distingue "mudou a favor do Operador" de "degradou"
+justamente para isso, e tratar uma melhora como bloqueio puniria o
+candidato pelo motivo errado. Só `DRIFT_CONFIRMED` e `DEGRADED` reprovam.
+
+A esteira é **sequencial**: o estágio reportado é o do primeiro portão que
+reprovou. Um candidato que não bate o incumbente não "está em validação"
+só porque a amostra está fresca. Mas os quatro portões são sempre
+avaliados e sempre exibidos — inclusive os não alcançados, porque
+escondê-los daria a impressão de que não existem.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar
