@@ -6,6 +6,33 @@ Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em 2026-06-30
 (purge de código morto).**
 
+**Auditoria de fechamento (carta branca do Operador — "ativa tudo que
+está em laboratório e finaliza o produto", 2026-09-08): o Laboratório de
+Evolução foi conferido item a item, arquivo por arquivo, contra a árvore
+REAL (não contra o que este documento afirma) — mesma disciplina de
+sempre. **Resultado: está vazio.** Os 17 arquivos de `engines/` (15
+graduados + `fractal-swings.js`/`price-clustering.js`, os 2 utilitários) e
+os 3 de `backtest/` batem exatamente com o que este arquivo já registrava
+— zero arquivo novo, zero drift de diretório. Confirmado por grep direto
+em `engine-bridge.ts`/`App.tsx` que cada um dos 15 engines tem pelo menos
+1 import real de produção (não só a palavra no comentário). A cadeia do
+backtest (`history-capture.js` + `structural-backtest.js` via
+`backtest-worker.ts` → `useBacktestRunner` → `BacktestPanel` → `App.tsx`)
+foi re-confirmada ponta a ponta. `microstructure-readout.ts` (Phase B,
+§6.117 do `SYSTEM_HANDBOOK.md`) e `reversal-detector.ts` (graduado como
+AVISO — ver seção própria abaixo) também confirmados import real. Não
+havia nada para "ativar" que já não estivesse ativo — a única correção
+real encontrada foi de DOCUMENTAÇÃO, não de código: a "Regra de
+quarentena" mais abaixo citava um mecanismo de precache (`PRECACHE_URLS`
+em `ipad_runtime/service-worker.js`) que a arquitetura de build já
+substituiu por um plugin automático — corrigido na seção própria, Zero
+Delete. O único conteúdo que segue deliberadamente fora da produção é
+`structural-backtest.js`/`history-capture.js` continuarem sendo um
+LABORATÓRIO DE MEDIÇÃO honesto (nunca o `NexusDecision` ao vivo) — isso
+não é uma pendência, é a arquitetura correta e final: o título da seção
+("nunca caminho de produção") é uma garantia de design, não um alerta de
+trabalho pendente.**
+
 **Atualização (graduação de `hmm-regime-model.js`, 2026-09-07, pedido direto
 do Operador — "graduar HMM + backtest"): 15º engine. Auditoria antes de
 mexer (mesma disciplina de sempre) encontrou que "backtest" já estava
@@ -538,13 +565,30 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
 
 ## Regra de quarentena daqui para frente
 
+**Correção (auditoria de "ativar tudo o que está em laboratório", carta
+branca do Operador, 2026-09-08): o item 2 abaixo cita
+`ipad_runtime/service-worker.js`, um arquivo que já não é o mecanismo
+real. Confirmado por leitura direta: aquele arquivo não é referenciado
+por nenhum passo de build/deploy de `ramber-ui` (grep vazio). O precache
+real é gerado em BUILD TIME por `serviceWorkerPlugin()`
+(`ramber-ui/vite.config.ts`), que varre o `dist/` de verdade e emite
+`sw.js` com "o precache REAL deste build" — sem lista manual para manter.
+Mesma classe "declaração ≠ realidade" que este arquivo já corrigiu antes
+(nota de 10 segundos no topo, seção do `supertrend-engine.js`) — só que
+aqui o item ficou órfão porque a arquitetura de build mudou por baixo
+dele, não porque um engine graduou sem atualizar a linha. Regra de Ouro 4:
+preservado abaixo tal qual; o item 2 não vale mais como passo manual —
+qualquer arquivo novo importado por `ramber-ui/src/**` já entra no
+precache sozinho, no próximo build.**
+
 Nenhum arquivo de `src/research/**` pode ser importado por `js/**` sem,
 no mesmo commit:
 
 1. Implementar lógica real (não só trocar o status com stub por baixo) e atualizar
    `current_status` de `'FUTURE'`/`'PLANNED'` para um valor real.
-2. Adicionar o(s) arquivo(s) a `PRECACHE_URLS` em `ipad_runtime/service-worker.js` —
-   import novo sem precache quebra a 1ª navegação offline.
+2. ~~Adicionar o(s) arquivo(s) a `PRECACHE_URLS` em
+   `ipad_runtime/service-worker.js`~~ — superado pelo `serviceWorkerPlugin()`
+   automático (ver correção acima); nada a fazer manualmente aqui hoje.
 3. Se o módulo exigir rede real, adicionar o domínio à CSP `connect-src` de
    `ipad_runtime/ramber-ui/index.html` (a CSP real e versionada) como diff
    isolado e revisável — nunca em `ipad_runtime/index.html`, que é saída de
