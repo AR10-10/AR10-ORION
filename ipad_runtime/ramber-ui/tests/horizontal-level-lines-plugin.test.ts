@@ -28,10 +28,29 @@ describe("HorizontalLevelLinesPlugin: contrato real de desenho", () => {
     expect(s).not.toMatch(/setLineDash/);
   });
 
-  it("largura TOTAL real (0 até a borda do plot) — comportamento correto aqui, ao contrário do EQH/EQL", () => {
+  it("largura TOTAL continua sendo o PADRÃO — quem não entrega toques desenha de ponta a ponta", () => {
+    // Atualizado na GRADUAÇÃO §4: o traço deixou de ser incondicionalmente
+    // `0 → cssWidth` e passou a ser o VALOR INICIAL, sobrescrito só quando
+    // o chamador entrega evidência de toque. Os 3 consumidores originais
+    // (premium_discount/scenario_projection/pivot_points) não entregam
+    // nada, então continuam byte a byte como antes — que é o comportamento
+    // correto para eles (pivô/faixa/projeção valem para a janela inteira).
     const s = src();
-    expect(s).toContain("ctx.moveTo(0, yCrisp);");
-    expect(s).toContain("ctx.lineTo(cssWidth, yCrisp);");
+    expect(s).toContain("let x1 = 0;");
+    expect(s).toContain("let x2 = cssWidth;");
+    expect(s).toContain("ctx.moveTo(x1, yCrisp);");
+    expect(s).toContain("ctx.lineTo(x2, yCrisp);");
+  });
+
+  it("o modo TRECHO é opt-in por evidência real — nunca liga sozinho", () => {
+    const s = src();
+    // Só entra em modo trecho com (a) índices de toque reais E (b) candles
+    // para traduzi-los em X. Faltando qualquer um, cai na largura total.
+    expect(s).toContain("resolveLevelTouchWindow(level.touchIndices)");
+    expect(s).toContain("if (window && seriesCandles && seriesCandles.length > 0)");
+    // A geometria do trecho é a que já existe para EQH/EQL, nunca uma
+    // segunda implementação da mesma conta.
+    expect(s).toContain("resolveEqualLevelSegment(xFirst, xLast, cssWidth)");
   });
 
   it("mesma arquitetura de canvas dos irmãos: dirty-flag + rAF, ResizeObserver, subscribeVisibleLogicalRangeChange", () => {
