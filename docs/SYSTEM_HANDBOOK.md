@@ -7657,8 +7657,113 @@ de editar) e teste atualizado 1:1. Não é a versão final — ver pendências.
 
 **Commits desta entrega:** `fb015a0` (2 comentários de duplicidade
 corrigidos), `7a00d5c` (labels/cores/AUTO-MANUAL). `npm run verify`
-verde nos dois. PR em andamento na branch
-`claude/localizar-arquivo-nuvem-qr0z6x`.
+verde nos dois. Mergeado em `main` como PR #28 (squash `2f1b060`).
+
+---
+
+### 6.97 "ORDEM DE SERVIÇO FINAL" (auditoria de fábrica/Living Cyborg) —
+3 decisões de escopo resolvidas ANTES do código + auto-cura real +
+3 achados de Golden Rule 3 fechados
+
+Quinta ordem da mesma família. Pedia, em resumo: remover todo botão
+AUTO/MANUAL (autonomia total sem controle do Operador), um sistema
+preditivo com ML pesado (LSTM/Monte Carlo) "exclusivamente no servidor"
+com resultados como "% de probabilidade" via WebSocket, e um "Ser Vivo"
+que aprende e ajusta seus próprios parâmetros. Três pedaços colidiam
+direto com regras permanentes deste projeto — resolvidos com o Operador
+via `AskUserQuestion` ANTES de qualquer linha de código, não depois:
+
+| Pedido | Conflito real | Resolução confirmada |
+|---|---|---|
+| ML pesado "exclusivamente no servidor", resultado via WebSocket | Este app é Local-First por princípio (`CLAUDE.md`) — não existe backend/servidor hoje; cálculo pesado já vai pra Web Worker/WASM (Regra de Ouro 6) exatamente pra nunca precisar de servidor | Preditivo continua local, em Web Worker — mesmo padrão já usado por todo cálculo pesado deste app. Servidor novo é uma iniciativa própria, fora desta entrega |
+| Remover todo AUTO/MANUAL, "decide sozinho... quando agir" | A Frente 2 (§6.96) tinha acabado de traduzir e confirmar como CORRETA a infra de AUTO/MANUAL por camada — default automático, override manual sempre 1 clique, nunca toca Risk/Decision | Override manual continua existindo; "decide sozinho" já é o comportamento DEFAULT hoje (Estado Inteligente Adaptativo) — nada a remover |
+| "Aprendizado contínuo... ajusta parâmetros automaticamente" | LEI 24 (Core Engine único emissor) e READ_ONLY/FAIL_CLOSED são permanentes, não relaxáveis sob nenhuma formulação | Escopo travado ao precedente JÁ autorizado uma vez (Entrega 42): suprimir só a EXIBIÇÃO de um badge por expectativa real do Track Record, nunca o cálculo real do Núcleo |
+
+**Achado explicitamente recusado, não negociado:** §5 pedia mostrar "87%
+de probabilidade de queda" — exatamente o exemplo literal que a Regra de
+Ouro 2 deste projeto proíbe (sem histórico de backtest real, seria um
+número calibrado inventado). Não foi posto em `AskUserQuestion` porque
+não é uma escolha de arquitetura — é uma regra fixa já resolvida:
+qualquer painel preditivo futuro mostra confluência/confiança real
+(mesma matemática honesta do Council/Multi-Timeframe Matrix), nunca uma
+probabilidade de mercado.
+
+**O que foi de fato construído, com as 3 decisões já resolvidas:**
+
+1. **Continuação da tradução (Frente 2 → aqui):** as 10 entradas
+   restantes do Chart Layers panel, as 5 Rows + 2 mapas de rótulo do
+   System Health widget, e os 3 rótulos independentes do orb
+   (SINCRONIZADO/FALHOU/DESATUALIZADO) — todos traduzidos pra English
+   Technical, mesma disciplina já estabelecida.
+2. **1 duplicata real consolidada:** auditoria dedicada (agente, 31
+   chamadas de ferramenta) investigou a reclamação "Validação
+   Multi-Camada/Multi-Agent Council/Market Intelligence mostram a mesma
+   métrica" — achado: NÃO se confirma como afirmação geral (a maioria do
+   conteúdo de cada painel é única), mas o selo "TAMANHO SUGERIDO" (Risk
+   Engine) estava redigitado byte a byte em 2 lugares. Extraído para
+   `nexus/risk-suggestion-label.ts` — zero funcionalidade perdida (as 2
+   exibições continuam), zero segundo cálculo.
+3. **Auto-cura real:** segunda auditoria dedicada (agente, 115 chamadas
+   de ferramenta) mapeou TODO mecanismo de recuperação existente antes de
+   construir qualquer coisa nova. Achado central: a maior parte da
+   "auto-cura" do app (self-diagnostics, organism-health, health-monitor)
+   já é, corretamente, só observação — as 2 únicas correções
+   automáticas reais (`ConnectionManager`: reconexão WS com
+   backoff+heartbeat; `MarketDataBus`: fail-closed servindo o último
+   snapshot bom) já existiam. O gap real: `WidgetErrorBoundary` isolava
+   um painel quebrado mas nunca dava ao Operador um jeito de tentar de
+   novo sem recarregar a página inteira. Fechado com um retry manual
+   (nunca automático — evita risco de loop numa causa persistente).
+4. **3 achados de Golden Rule 3 fechados** (mesma auditoria): tooltip da
+   Multi-Timeframe Matrix mostrando código cru (`sem_candles_reais_...`)
+   em vez de `humanizeReasonCode()`; barra BID/ASK do Order Flow caindo
+   num 50/50 fabricado sem leitura real do book; cor do preço ao vivo
+   herdando "verde/alta" quando `deltaPct` ainda era `null` (antes do
+   primeiro tick real).
+
+**O que este round honestamente NÃO fez** (registrado para a próxima
+rodada, nunca escondido):
+- **7 componentes fora de `<Widget>`** (TopBar, SiriformCoreCard,
+  ScoreContextCard, AssistantOrb, DirectionalSyncPanel,
+  MarketDirectionWidget, MarketBiasDecisionCard) não são isolados por
+  `WidgetErrorBoundary` — um erro neles ainda sobe até
+  `GlobalErrorBoundary` (recupera com honestidade, mas derruba o cockpit
+  inteiro, não só o painel). Envolvê-los é um refactor da árvore
+  principal de layout — precisa da própria iniciativa isolada, mesma
+  cautela já aplicada a mudanças de Main Thread.
+- **3 achados menores da mesma classe de bug** (código de razão cru:
+  Backtest Estrutural, comparação de baseline, Platt calibration) —
+  prioridade mais baixa (abas secundárias), mesma correção mecânica de
+  quando forem endereçados.
+- **Tradução completa de idioma**: System Health/Council/Market
+  Analysis/VWAP COMPRADOR-VENDEDOR continuam parcialmente em português
+  — o achado novo (VWAP/CVD "COMPRADOR"/"VENDEDOR") é um valor de
+  CONTRATO INTERNO, não só rótulo de UI: `directional-consensus.ts` já
+  normaliza "COMPRADOR" como sinônimo reconhecido de "BULLISH" em várias
+  tabelas — trocar o rótulo visível exigiria adicionar "BUYER"/"SELLER"
+  como sinônimos novos nessas tabelas, não só editar uma string; fica
+  para uma rodada com esse escopo específico, para não arriscar quebrar
+  a normalização em silêncio.
+- **Sistema preditivo novo**: NÃO construído nesta rodada — as 3 decisões
+  de escopo resolvidas acima definem COMO ele deveria ser feito (local,
+  Worker, confluência honesta nunca probabilidade), mas nenhum motor novo
+  foi implementado; a Ordem pedia auditoria/consolidação/auto-cura/idioma
+  primeiro, o preditivo fica registrado como pendência de uma frente
+  própria.
+- **"Auditoria de fábrica" completa (visual Elite/responsividade iPad
+  total)**: o pedido de layout "Elite" (painéis proporcionais,
+  colapsáveis, zero sobreposição, 44px de alvo de toque) é a mesma
+  responsividade total já deliberadamente adiada como "Frente 3" em
+  `docs/SYSTEM_HANDBOOK.md §6.96` — continua não iniciada, por decisão
+  explícita de não empacotar uma reforma visual grande demais dentro de
+  uma entrega já extensa sem sua própria auditoria dedicada.
+
+`npm run verify`: **290 arquivos / 4755 testes**, tsc limpo, build ok
+(1955 módulos). Verificado AO VIVO via Playwright: retry de painel
+wireado corretamente (sem erro real pra disparar no sandbox, cobertura
+automatizada confirma o código); barra Order Flow mostra a faixa neutra
+real (nunca o 50/50 fabricado); zero string antiga em português no
+fallback de erro; zero page error novo.
 
 ---
 
