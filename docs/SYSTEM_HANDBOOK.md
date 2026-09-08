@@ -9080,6 +9080,78 @@ inteiro some.
 `nexus/outcome-matrix.ts` (novo, puro, 29 testes: 24 de execução real +
 5 de fiação).
 
+### 6.113 Modo Shadow — o reajuste está ajudando, ou perseguindo ruído?
+
+Item §53 da §2 da ordem "EVOLUÇÃO COMPLETA", o último em aberto dela.
+
+#### A pergunta que ninguém estava fazendo
+
+A calibração de Platt é **reajustada continuamente** conforme trades
+resolvem. Isso levanta uma pergunta que nenhuma camada respondia:
+
+> *reajustar está MELHORANDO a previsão, ou só perseguindo ruído?*
+
+É a pergunta da §55 (anti-overfitting) e a contraparte **por evidência**
+da §52: `calibration-freshness.ts` (§6.110) responde *"a amostra está
+velha?"* por uma regra auto-referente — heurística honesta, mas
+heurística. Aqui se responde *"o reajuste ajudou?"* por **medição**, sobre
+dados que nenhum dos dois ajustes viu.
+
+#### O desenho, e por que não vaza futuro
+
+```
+[0 .............................. N-30) [N-30 ........ N)
+ └─ CONGELADA: treina só nos 30 mais antigos
+ └─────────── AO VIVO: treina em tudo antes da janela
+                                        └─ AVALIAÇÃO: nenhuma das duas viu
+```
+
+- **CONGELADA** (incumbent): ajuste sobre os primeiros 30 trades — a menor
+  amostra que este repositório declara válida, deliberadamente parada no
+  tempo.
+- **AO VIVO** (challenger): ajuste sobre tudo que precede a janela — o mais
+  fresco possível sem olhar o futuro.
+- Ambas pontuadas por **Brier Score** sobre a **mesma** janela retida.
+
+O candidato **nunca decide nada** — nenhum consumidor lê daqui direção,
+filtro ou probabilidade exibida. É o que faz disto shadow e não uma troca
+de modelo pela porta dos fundos (LEI 24, travado por teste de fiação).
+
+#### Zero limiar inventado
+
+Os dois 30 são o mesmo `MIN_TRADES_FOR_VALID_EXPECTANCY` importado. O
+mínimo total é **2×30+1**, e o "+1" não é escolha estética: é a condição de
+existência da comparação. Se a AO VIVO treinasse com os mesmos 30 da
+CONGELADA, os dois ajustes seriam idênticos e o veredito seria vazio.
+
+#### O que isto NÃO é
+
+**Não é um teste de significância.** A janela tem 30 trades e
+`TRACK_RECORD_HISTORY_CAP` limita o histórico a 100 — a diferença entre
+dois Brier sobre 30 pontos carrega incerteza larga. O módulo reporta os
+dois números reais, os três `n` e um veredito que é literalmente *"qual
+dos dois errou menos nesta janela"*. Leitura **direcional**, nunca
+conclusiva — por isso os `n` aparecem em toda parte, inclusive na linha da
+UI.
+
+Empate conta como "não melhorou": reajustar tem custo real (o modelo muda
+sob o Operador) e um empate não o justifica.
+
+`nexus/shadow-calibration.ts` (novo, puro, 22 testes: 18 de execução real
++ 4 de fiação). Um dos testes prova que o veredito **responde ao dado**:
+com ruído na primeira metade e sinal limpo na segunda, o ajuste fresco
+ganha — sem isso o módulo poderia estar devolvendo sempre a mesma resposta.
+
+#### A linha de maturidade ganhou o 4º degrau
+
+`shadowGate` (≥61) entra em `buildSampleMaturity` junto dos outros três, e
+a razão de escassez do Shadow passa por `reasonStillNeeded()` — sem isso o
+card voltaria a ter uma frase solta de "amostra insuficiente", exatamente
+o defeito que §6.110 corrigiu. Um teste que fixava a lista de três degraus
+foi atualizado para travar a **forma** da chamada em vez do número de
+degraus: a lista cresce por capacidade, e travar o número faria toda
+capacidade nova quebrar um teste que não é sobre ela.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar

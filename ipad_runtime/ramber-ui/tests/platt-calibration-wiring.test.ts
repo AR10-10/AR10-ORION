@@ -113,7 +113,13 @@ describe('ExpectancyCard: mostra a probabilidade calibrada real (Fase 3) — nun
     expect(block).toContain('reasonStillNeeded(calibrationResult?.reason, calibrationGate)');
     expect(block).toContain('{calibrationResult!.reason}');
     // A linha única existe e vem dos contadores reais, nunca de texto.
-    expect(block).toContain('const maturity = buildSampleMaturity([expectancyGate, calibrationGate, walkForwardGate]);');
+    // Um degrau por CAPACIDADE real — a lista cresce quando uma capacidade
+    // nova entra (o 4º é o modo Shadow, §53). O teste trava a forma da
+    // chamada, não um número fixo de degraus: o que não pode acontecer é
+    // uma capacidade escassa voltar a imprimir a sua própria frase de
+    // "amostra insuficiente" fora desta linha.
+    expect(block).toMatch(/const maturity = buildSampleMaturity\(\[expectancyGate, calibrationGate, walkForwardGate[^\]]*\]\);/);
+    expect(block).toContain('shadowGate');
     expect(block).toContain('have: calibrationResult?.sampleSize ?? 0');
     // E o limiar não é duplicado à mão aqui — vem do módulo que o declara.
     expect(block).toContain('need: MIN_TRADES_FOR_VALID_EXPECTANCY');

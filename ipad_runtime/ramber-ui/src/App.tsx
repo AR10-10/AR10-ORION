@@ -318,6 +318,12 @@ import {
   type TargetHitRateReport,
 } from "./nexus/target-hit-rate";
 import {
+  evaluateShadowCalibration,
+  describeShadowCalibration,
+  MIN_SHADOW_SAMPLE,
+  type ShadowCalibrationReport,
+} from "./nexus/shadow-calibration";
+import {
   buildOutcomeMatrix,
   buildArchiveOutcomeMatrix,
   informativeSlices,
@@ -3412,6 +3418,16 @@ export default function App() {
   // estatística. Ver o cabeçalho de nexus/outcome-matrix.ts.
   const outcomeMatrix: OutcomeMatrix = useMemo(() => buildOutcomeMatrix(trackRecordResults), [trackRecordResults]);
 
+  // Modo Shadow (§53): o candidato roda AO LADO do incumbente sobre a
+  // mesma amostra e nunca decide nada — nenhum consumidor lê daqui uma
+  // direção, um filtro ou uma probabilidade exibida (LEI 24). Responde por
+  // MEDIÇÃO a pergunta que calibration-freshness.ts responde por
+  // heurística: reajustar a calibração está ajudando, ou perseguindo ruído?
+  const shadowReport: ShadowCalibrationReport = useMemo(
+    () => evaluateShadowCalibration(trackRecordResults),
+    [trackRecordResults],
+  );
+
   // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
   // NUNCA valor monetário (o sistema não conhece o capital do operador).
   // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
@@ -4293,6 +4309,7 @@ export default function App() {
       calibrationFreshness,
       targetHitRates,
       outcomeMatrix,
+      shadowReport,
       contextualRecall,
       decisionDistance,
       directionalConsensus,
@@ -4374,6 +4391,7 @@ export default function App() {
       calibrationFreshness,
       targetHitRates,
       outcomeMatrix,
+      shadowReport,
       decisionDistance,
       directionalConsensus,
       liquidityMap,
@@ -6820,6 +6838,7 @@ function ExpectancyCard() {
     walkForwardReport,
     calibrationFreshness,
     targetHitRates,
+    shadowReport,
     contextualRecall,
   }: {
     expectancyFilter?: FilterResult;
@@ -6827,6 +6846,7 @@ function ExpectancyCard() {
     walkForwardReport?: WalkForwardReport;
     calibrationFreshness?: CalibrationFreshness;
     targetHitRates?: TargetHitRateReport;
+    shadowReport?: ShadowCalibrationReport;
     contextualRecall?: ContextualRecall | null;
   } = useContext(WidgetContext) || {};
   const stats = expectancyFilter?.stats ?? null;
@@ -6880,7 +6900,8 @@ function ExpectancyCard() {
     have: walkForwardReport?.usableTrades ?? 0,
     need: MIN_WALK_FORWARD_TRAIN + MIN_WALK_FORWARD_PREDICTIONS,
   };
-  const maturity = buildSampleMaturity([expectancyGate, calibrationGate, walkForwardGate]);
+  const shadowGate = { label: "shadow", have: shadowReport?.usableTrades ?? 0, need: MIN_SHADOW_SAMPLE };
+  const maturity = buildSampleMaturity([expectancyGate, calibrationGate, walkForwardGate, shadowGate]);
 
   return (
     <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
@@ -7004,6 +7025,26 @@ function ExpectancyCard() {
             >
               Frescor · {describeCalibrationFreshness(calibrationFreshness)}
             </span>
+          )}
+          {/* MODO SHADOW: a mesma pergunta do frescor, respondida por
+              medição em vez de heurística — "o reajuste ajudou?" em vez de
+              "a amostra está velha?". O candidato nunca decide nada; os
+              dois Brier e os três n ficam sempre visíveis, porque 30
+              retidos dão uma leitura DIRECIONAL, nunca uma prova
+              estatística. Ver nexus/shadow-calibration.ts. */}
+          {shadowReport?.status === "OK" ? (
+            <span
+              className={`text-[0.4rem] leading-tight ${
+                shadowReport.verdict === "REFIT_MELHOROU" ? "text-[#00ffaa]/80" : "text-[#f0d06f]/90"
+              }`}
+              title={`Modo Shadow: a calibração CONGELADA (ajustada só nos ${shadowReport.frozenTrainSize} trades mais antigos) e a AO VIVO (ajustada nos ${shadowReport.liveTrainSize} anteriores à janela) são pontuadas por Brier sobre os mesmos ${shadowReport.evalSize} trades retidos, que nenhuma das duas viu. Menor é melhor. Leitura direcional sobre ${shadowReport.evalSize} pontos — nunca um teste de significância. O candidato roda ao lado e não decide nada.`}
+            >
+              Shadow · {describeShadowCalibration(shadowReport)}
+            </span>
+          ) : (
+            reasonStillNeeded(shadowReport?.reason, shadowGate) && (
+              <span className="text-[0.4rem] text-[#8ab4f8]/60 leading-tight">{shadowReport!.reason}</span>
+            )
           )}
         </div>
       )}
