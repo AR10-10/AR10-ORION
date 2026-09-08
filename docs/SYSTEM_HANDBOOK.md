@@ -9381,6 +9381,36 @@ lado, jamais um valor que substitui outro. `connect-src` já continha
 execução real + 5 de fiação). Poller de 60s, desmontado com o efeito
 (a rota keyless tem cota mensal real).
 
+### 6.117 Phase B — microestrutura graduada: o achado da §6.115 chega à tela
+
+Graduação autorizada explicitamente pelo Operador. `microstructure-readout`
+nasceu como módulo de laboratório (§6.115), com a suíte provando o
+comportamento **antes** de qualquer ligação — a disciplina de "isolar antes
+de integrar". Agora está ligado.
+
+O que o Operador passa a ver, e que o organismo já calculava a cada
+mudança de order flow / trap / CVD / book **sem ninguém ler**:
+
+- **ABSORÇÃO OBSERVADA vs CONFIRMADA** — a distinção é o ponto: OBSERVADA é
+  o sinal de order flow sozinho; CONFIRMADA exigiu corroboração posterior de
+  `trap-detection.ts`.
+- **Muros por corretora** — contados **por venue** e **nunca somados**
+  (Ordem A2.1 §16). Book obsoleto não conta muro: um muro de 20s atrás pode
+  já não existir, e mostrá-lo como atual seria afirmar o que não se mediu.
+- **Intensidade de eventos** — contagem real na janela real. Intensidade
+  **não é direção**.
+
+Zero poluição por construção: absorção NONE some, muro zero some, zero
+eventos some, e o bloco inteiro desaparece quando nada foi medido.
+
+**A trava de fase virou trava de graduação.** O teste que falhava se algum
+arquivo de `src/` importasse o módulo cumpriu o papel dele; foi substituído
+por testes que falham se ele **voltar a ficar órfão** — o achado da §6.115
+não pode regredir em silêncio.
+
+LEI 24 intacta: leitura de evidência, travada por teste contra alimentar
+Núcleo ou Trade Plan.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar

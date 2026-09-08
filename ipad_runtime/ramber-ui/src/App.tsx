@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useTrackRecordArchive, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useRadarScanLatencySnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useTrackRecordArchive, useMicrostructureSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useRadarScanLatencySnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -274,6 +274,11 @@ import {
   type IndependentReferenceReading,
 } from "./nexus/independent-reference-price";
 import { fetchCoinGeckoReferencePrice } from "./gmil/providers/coingecko-provider";
+import {
+  buildMicrostructureReadout,
+  describeMicrostructureReadout,
+  type MicrostructureReadout,
+} from "./nexus/microstructure-readout";
 import { bestLevel } from "./nexus/cross-exchange-book";
 import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
 import { computeDirectionalConsensus, describeDirectionalConsensus, normalizeSide, sideFromSigned, computeLiquidityMap, liquidityBias, type DirectionalSource, type DirectionalConsensusReading, type LiquidityTarget, type LiquidityMapReading } from "./nexus/directional-consensus";
@@ -11621,6 +11626,17 @@ function OrderFlowWidget() {
   // substitui nenhum preço mostrado: aparece ao lado, como 2ª opinião.
   const { independentReference }: { independentReference?: IndependentReferenceReading } =
     useContext(WidgetContext) || {};
+  // MICROESTRUTURA (graduação Phase B, autorizada pelo Operador). O
+  // snapshot já era computado a cada mudança de order flow / trap / CVD /
+  // book e gravado na store — e NENHUM consumidor lia absorptionState,
+  // bidWalls/askWalls nem eventIntensity (achado da auditoria por AST,
+  // §6.115). O seletor useMicrostructureSnapshot também nunca fora usado.
+  // Lido AQUI, e não em App(): só este painel o consome.
+  const microstructureSnapshot = useMicrostructureSnapshot();
+  const microstructure: MicrostructureReadout = useMemo(
+    () => buildMicrostructureReadout(microstructureSnapshot),
+    [microstructureSnapshot],
+  );
   const { engine, orderflowState, orderflowReason, orderflowSignals, cvd } =
     useContext(WidgetContext) || {};
   const buyPercent: number | null = engine?.buyPercent ?? null;
@@ -11722,6 +11738,23 @@ function OrderFlowWidget() {
               title={`Referência independente (CoinGecko, preço agregado de muitas venues) confrontada com as ${independentReference.venueCount} corretoras conectadas. A tolerância é o spread REAL entre elas agora (${independentReference.venueSpreadPct?.toFixed(3)}%) — nunca um limiar fixo. FORA do ruído significa que a referência discorda mais do que as próprias corretoras discordam entre si, o que é informação real sobre o feed. Nunca substitui nenhum preço: é 2ª opinião, e o Núcleo não a lê.`}
             >
               REF. INDEPENDENTE · {describeIndependentReference(independentReference)}
+            </span>
+          </div>
+        )}
+        {/* MICROESTRUTURA REAL — só o que foi conquistado: absorção NONE
+            some, muro zero some, zero eventos some, e o bloco inteiro
+            desaparece quando não há nada medido. Venues NUNCA somadas
+            (Ordem A2.1 §16): 2 muros na Binance + 1 na MEXC são duas
+            leituras independentes, nunca "3 muros".
+            Ver nexus/microstructure-readout.ts. */}
+        {microstructure.visible && (
+          <div className="flex items-center gap-1.5 px-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#a78bfa]/70"></div>
+            <span
+              className="text-[0.4rem] leading-tight text-[#a78bfa]/85"
+              title={`Microestrutura real já computada pelo organismo. ABSORÇÃO OBSERVADA é o sinal de order flow sozinho; CONFIRMADA exigiu corroboração posterior de trap-detection — a distinção é o ponto. Muros são contados POR corretora e nunca somados entre elas. Intensidade é contagem de eventos na janela real, e intensidade não é direção. Book obsoleto não conta muro.`}
+            >
+              MICROESTRUTURA · {describeMicrostructureReadout(microstructure)}
             </span>
           </div>
         )}

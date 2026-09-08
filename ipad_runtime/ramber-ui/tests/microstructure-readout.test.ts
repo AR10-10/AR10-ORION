@@ -1,11 +1,13 @@
 // microstructure-readout.test.ts — execução REAL.
 //
-// MÓDULO DE LABORATÓRIO: NÃO está ligado à UI (MASTER ORDER §12 —
-// aprendizado nasce em Laboratory, Core protegido; e §73 — Phase A é
-// auditoria, a graduação é Phase B e depende do aval do Operador).
-// Estes testes provam o comportamento ANTES de qualquer graduação, que é
-// exatamente a disciplina do CLAUDE.md ("isolar antes de integrar").
+// GRADUADO (Phase B, autorizada explicitamente pelo Operador). Nasceu como
+// módulo de laboratório com a suíte abaixo provando o comportamento ANTES
+// de qualquer ligação — a disciplina do CLAUDE.md ("isolar antes de
+// integrar"). A antiga trava de fase (que falhava se algum arquivo de src/
+// o importasse) cumpriu o papel dela e virou a trava de GRADUAÇÃO no fim
+// deste arquivo: agora o que não pode é ele voltar a ficar órfão.
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { buildMicrostructureReadout, describeMicrostructureReadout } from '../src/nexus/microstructure-readout';
 import type { MicrostructureSnapshot } from '../src/nexus/microstructure-snapshot';
 import { MICROSTRUCTURE_SNAPSHOT_CONTRACT_VERSION } from '../src/nexus/microstructure-snapshot';
@@ -166,19 +168,23 @@ describe('microstructure-readout: pureza e composição', () => {
   });
 });
 
-describe('microstructure-readout: NÃO graduado (trava de fase)', () => {
-  it('nenhum consumidor em src/ ainda — graduação é Phase B, depende do Operador', async () => {
-    const { readFileSync, readdirSync, statSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const arquivos: string[] = [];
-    (function walk(d: string) {
-      for (const e of readdirSync(d)) {
-        const p = join(d, e);
-        if (statSync(p).isDirectory()) walk(p);
-        else if (/\.tsx?$/.test(p) && !p.endsWith('microstructure-readout.ts')) arquivos.push(p);
-      }
-    })(new URL('../src', import.meta.url).pathname);
-    const consumidores = arquivos.filter((f) => readFileSync(f, 'utf8').includes('microstructure-readout'));
-    expect(consumidores).toEqual([]);
+describe('microstructure-readout: GRADUADO (trava de graduação)', () => {
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
+
+  it('está realmente ligado — o achado da §6.115 não pode voltar a ficar órfão', () => {
+    expect(app).toContain('buildMicrostructureReadout(microstructureSnapshot)');
+    expect(app).toContain('describeMicrostructureReadout(microstructure)');
+  });
+
+  it('lê o seletor da store que também nunca tinha sido consumido', () => {
+    expect(app).toContain('useMicrostructureSnapshot()');
+  });
+
+  it('só desenha quando há leitura real (visible), nunca um bloco vazio', () => {
+    expect(app).toContain('{microstructure.visible && (');
+  });
+
+  it('é leitura de evidência: não alimenta Núcleo nem Trade Plan (LEI 24)', () => {
+    expect(app).not.toMatch(/microstructure[^\n]*\b(engine\.|tradePlan|buildTradePlan|riskSuggestion)\b/);
   });
 });
