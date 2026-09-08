@@ -9573,6 +9573,39 @@ travam a **forma** da chamada, não a contagem — a lista cresce por
 capacidade, e fixar o número faz toda capacidade nova quebrar um teste que
 não é sobre ela.
 
+### 6.121 §74-B RESEARCH — a pesquisa externa que eu tinha declarado pendente
+
+Declarei este bloco como **não feito** três vezes. Feito agora, em
+`docs/PESQUISA_REFERENCIAS_EXTERNAS.md`, no formato exato do §74-B.
+
+**Limite declarado no próprio documento:** foi lida a documentação oficial
+e as descrições de arquitetura, **não os códigos-fonte inteiros**, e nenhum
+projeto foi executado (este ambiente não tem egress para nada).
+
+**O achado principal — e ele critica algo que eu mesmo acabei de
+entregar:** **ADWIN é *parameter-free***. Ele deriva o corte por **limite
+de Hoeffding** em vez de exigir um número escolhido. Isso ataca exatamente
+a fraqueza que `drift-detector.ts` (§6.120) declara sobre si mesmo: as
+bandas 1σ/2σ/3σ são **convenção**, não derivação. Substituí-las pelo bound
+seria a **quinta** aplicação do princípio que o projeto já usa quatro vezes
+— *o limiar honesto é o que os próprios dados declaram* — e é a evolução
+recomendada, como **decisão de escopo do Operador**, porque trocaria o
+núcleo estatístico de um módulo recém-entregue.
+
+Outros dois que valem: o **stacked imbalance** do Freqtrade (desequilíbrio
+isolado é ruído; empilhado em níveis consecutivos é sinal — barato sobre
+dado já recebido) e o padrão **`t` decide / `t+1` executa** como invariante
+**testada**, não convenção respeitada.
+
+E três que **não** valem, com razão registrada: Page-Hinkley (troca
+convenção por convenção), footprint persistido (a própria doc do Freqtrade
+admite o custo de memória — incompatível com 60 FPS em iPad) e o motor de
+backtest completo (o AR10 usa desfecho REAL, não replay sintético).
+
+Um que é **proibido**: os **Executors** do Hummingbot são a camada que
+coloca e cancela ordens reais. Vale ler pela disciplina de fronteira, nunca
+importar.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar
