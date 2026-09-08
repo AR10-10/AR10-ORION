@@ -9321,6 +9321,96 @@ slippage, funding, expectancy, target hit rate) e Phase E itens 5-6
 (shadow, walk-forward) foram entregues nas rodadas §6.110-§6.113. As
 lacunas reais estão nas Phases B, C e E1-E4.
 
+### 6.116 Referência de preço independente de corretora — e a pesquisa honesta de fontes
+
+Pedido direto do Operador: *"localiza qualquer fonte de usar com dados
+reais... tipo TradingView, MT5... pra nós não só depender das corretoras"*.
+
+#### Pesquisa real (WebSearch, não suposição) — e o que ela derrubou
+
+| fonte | veredito |
+|---|---|
+| **TradingView** | Lightweight Charts é Apache 2.0 e **este projeto já a usa**. Advanced Charts é licença só-empresa e **você leva seus próprios dados** (Datafeed API). **A TradingView não fornece dados**: não existe API pública deles. |
+| **MT5** | Já pesquisado e respondido em `MARKET_DATA_FABRIC.md` §102: o pacote oficial fala com o terminal por **IPC local** ("must coexist on the same machine") — não há URL para um navegador chamar. As pontes comerciais exigem entregar credenciais da corretora a um terceiro. Continua `FUTURE` **por bloqueio estrutural**, não por prioridade. |
+| **CCXT** | Unifica 100+ exchanges e roda no browser, **mas depende de proxies para CORS** que a própria documentação descreve como instáveis. Seria regressão frente aos endpoints públicos que já funcionam. |
+| **CoinGecko** | Rota **keyless**, host **já na CSP**, preço **agregado por muitas venues**. A única genuinamente aditiva. |
+
+#### A lacuna real não era "faltam fontes"
+
+Auditoria mediu o estado: **Binance · MEXC · Bybit · OKX** — quatro fontes,
+**todas da mesma classe**. Se as corretoras concordarem num preço errado
+(feed degradado, símbolo trocado, book travado), quatro fontes concordam e
+nada as contradiz. E `detectSourceConflict` (`js/real-data/schema.js`) já
+existia, testado, e **nunca fora exercitado** — "com uma única fonte real
+não há ainda um par de leituras vivas para comparar".
+
+**Revisão declarada de decisão anterior:** `coingecko-provider.ts` dizia
+"não um segundo feed de preço BTC/USDT — isso já existe via Binance/MEXC".
+Aquilo respondia *"falta preço?"*. A pergunta agora é *"falta preço que não
+venha de corretora?"* — e aí a resposta muda. Requisito novo, não decisão
+errada.
+
+#### A tolerância é auto-referente — zero limiar inventado
+
+Varredura confirmou que **não existe** constante declarada para divergência
+entre fontes de preço. Então:
+
+> A referência está **DIVERGENTE** quando cai **fora do spread que as
+> próprias corretoras exibem entre si, agora**.
+
+Se Binance e MEXC discordam 0.12%, uma leitura independente a 0.08% do meio
+delas está **dentro do ruído do próprio mercado**. A 0.9%, está fora. Zero
+constante, e o piso **se adapta sozinho** — aperta em calmaria, abre em
+estresse. Um teste trava exatamente isso: *a mesma divergência muda de
+veredito quando o spread do mercado muda*.
+
+Com **uma** corretora só não há spread para medir → `DADOS_INSUFICIENTES`.
+Ausência de piso nunca vira piso fabricado (Regra de Ouro 3).
+
+A comparação em si é `detectSourceConflict`, reusada — este módulo só
+**decide a tolerância** e nomeia o resultado.
+
+#### Isolamento e LEI 24
+
+A referência **nunca** é fundida no preço de nenhuma venue e **não alimenta
+o Núcleo** — travado por teste de fiação. É segunda opinião exibida ao
+lado, jamais um valor que substitui outro. `connect-src` já continha
+`api.coingecko.com`: **zero superfície de rede nova, zero segredo**.
+
+`nexus/independent-reference-price.ts` (novo, puro, 21 testes: 16 de
+execução real + 5 de fiação). Poller de 60s, desmontado com o efeito
+(a rota keyless tem cota mensal real).
+
+### 6.117 Phase B — microestrutura graduada: o achado da §6.115 chega à tela
+
+Graduação autorizada explicitamente pelo Operador. `microstructure-readout`
+nasceu como módulo de laboratório (§6.115), com a suíte provando o
+comportamento **antes** de qualquer ligação — a disciplina de "isolar antes
+de integrar". Agora está ligado.
+
+O que o Operador passa a ver, e que o organismo já calculava a cada
+mudança de order flow / trap / CVD / book **sem ninguém ler**:
+
+- **ABSORÇÃO OBSERVADA vs CONFIRMADA** — a distinção é o ponto: OBSERVADA é
+  o sinal de order flow sozinho; CONFIRMADA exigiu corroboração posterior de
+  `trap-detection.ts`.
+- **Muros por corretora** — contados **por venue** e **nunca somados**
+  (Ordem A2.1 §16). Book obsoleto não conta muro: um muro de 20s atrás pode
+  já não existir, e mostrá-lo como atual seria afirmar o que não se mediu.
+- **Intensidade de eventos** — contagem real na janela real. Intensidade
+  **não é direção**.
+
+Zero poluição por construção: absorção NONE some, muro zero some, zero
+eventos some, e o bloco inteiro desaparece quando nada foi medido.
+
+**A trava de fase virou trava de graduação.** O teste que falhava se algum
+arquivo de `src/` importasse o módulo cumpriu o papel dele; foi substituído
+por testes que falham se ele **voltar a ficar órfão** — o achado da §6.115
+não pode regredir em silêncio.
+
+LEI 24 intacta: leitura de evidência, travada por teste contra alimentar
+Núcleo ou Trade Plan.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar

@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useTrackRecordArchive, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useRadarScanLatencySnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useDataFreshSinceSnapshot, useL2History, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useTrackRecordArchive, useMicrostructureSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useRadarScanLatencySnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -268,6 +268,18 @@ import { computeTpoProfile } from "./nexus/tpo-profile";
 // uso (expectancyFilter) e em CoreSignalBadge.
 import { simulateTradeCostsBatch } from "./nexus/trade-simulation";
 import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResult } from "./nexus/expectancy";
+import {
+  evaluateIndependentReference,
+  describeIndependentReference,
+  type IndependentReferenceReading,
+} from "./nexus/independent-reference-price";
+import { fetchCoinGeckoReferencePrice } from "./gmil/providers/coingecko-provider";
+import {
+  buildMicrostructureReadout,
+  describeMicrostructureReadout,
+  type MicrostructureReadout,
+} from "./nexus/microstructure-readout";
+import { bestLevel } from "./nexus/cross-exchange-book";
 import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
 import { computeDirectionalConsensus, describeDirectionalConsensus, normalizeSide, sideFromSigned, computeLiquidityMap, liquidityBias, type DirectionalSource, type DirectionalConsensusReading, type LiquidityTarget, type LiquidityMapReading } from "./nexus/directional-consensus";
 import { humanizeReasonCode } from "./nexus/reason-vocabulary";
@@ -3873,6 +3885,53 @@ export default function App() {
   // acima) — zero segunda leitura, só um segundo consumidor do dado real
   // já na store.
   const exchangeOrderBooks = useExchangeOrderBooks();
+
+  // ── REFERÊNCIA DE PREÇO INDEPENDENTE DE CORRETORA ────────────────────
+  // Pedido direto do Operador: "pra nós não só depender das corretoras".
+  // As 4 fontes atuais (Binance/MEXC/Bybit/OKX) são todas da MESMA classe:
+  // se concordarem num preço errado, nenhuma contradiz a outra. A leitura
+  // agregada da CoinGecko é a única fora dessa classe.
+  //
+  // Cadência de 60s: a rota keyless tem cota mensal real (10k), e este é
+  // um CROSS-CHECK de contexto, não um feed de execução — 1/min gasta
+  // ~43k/mês só se o terminal ficar aberto 24/7, então o poller para junto
+  // com a aba (o efeito é desmontado). Nunca no caminho crítico do ciclo.
+  const [referencePriceUsd, setReferencePriceUsd] = useState<number | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    const buscar = async () => {
+      const r = await fetchCoinGeckoReferencePrice(selectedAsset);
+      // Fail-closed: falha de rede/cota NUNCA congela o último preço como
+      // se fosse atual — vira ausência declarada, e a UI some.
+      if (vivo) setReferencePriceUsd(r.ok ? r.priceUsd : null);
+    };
+    void buscar();
+    const id = setInterval(() => void buscar(), 60_000);
+    return () => {
+      vivo = false;
+      clearInterval(id);
+    };
+  }, [selectedAsset]);
+
+  // Preço real POR corretora, do book real de cada uma — nunca fundido.
+  const venuePrices = useMemo(
+    () =>
+      Object.entries(exchangeOrderBooks)
+        .map(([venue, book]) => {
+          if (!book) return null;
+          const bid = bestLevel(book.bids ?? [], "bid");
+          const ask = bestLevel(book.asks ?? [], "ask");
+          return bid !== null && ask !== null ? { venue, price: (bid + ask) / 2 } : null;
+        })
+        .filter((x): x is { venue: string; price: number } => x !== null),
+    [exchangeOrderBooks],
+  );
+
+  const independentReference: IndependentReferenceReading = useMemo(
+    () => evaluateIndependentReference(venuePrices, referencePriceUsd),
+    [venuePrices, referencePriceUsd],
+  );
+
   // V-MAX Fase 2 (armadilhas institucionais): corroboração de eventos
   // REAIS — sweeps consumados (flag swept do motor SMC) + sinais reais de
   // ABSORPTION/EXHAUSTION na janela. Lista vazia = estado honesto comum.
@@ -4310,6 +4369,7 @@ export default function App() {
       targetHitRates,
       outcomeMatrix,
       shadowReport,
+      independentReference,
       contextualRecall,
       decisionDistance,
       directionalConsensus,
@@ -4392,6 +4452,7 @@ export default function App() {
       targetHitRates,
       outcomeMatrix,
       shadowReport,
+      independentReference,
       decisionDistance,
       directionalConsensus,
       liquidityMap,
@@ -11560,6 +11621,22 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
 
 // --- ORDER FLOW WIDGET ---
 function OrderFlowWidget() {
+  // Referência independente de corretora (pedido do Operador). Vive aqui
+  // porque é sobre PREÇO DE VENUE, que é o assunto deste painel — e nunca
+  // substitui nenhum preço mostrado: aparece ao lado, como 2ª opinião.
+  const { independentReference }: { independentReference?: IndependentReferenceReading } =
+    useContext(WidgetContext) || {};
+  // MICROESTRUTURA (graduação Phase B, autorizada pelo Operador). O
+  // snapshot já era computado a cada mudança de order flow / trap / CVD /
+  // book e gravado na store — e NENHUM consumidor lia absorptionState,
+  // bidWalls/askWalls nem eventIntensity (achado da auditoria por AST,
+  // §6.115). O seletor useMicrostructureSnapshot também nunca fora usado.
+  // Lido AQUI, e não em App(): só este painel o consome.
+  const microstructureSnapshot = useMicrostructureSnapshot();
+  const microstructure: MicrostructureReadout = useMemo(
+    () => buildMicrostructureReadout(microstructureSnapshot),
+    [microstructureSnapshot],
+  );
   const { engine, orderflowState, orderflowReason, orderflowSignals, cvd } =
     useContext(WidgetContext) || {};
   const buyPercent: number | null = engine?.buyPercent ?? null;
@@ -11638,6 +11715,49 @@ function OrderFlowWidget() {
             {ofState === "LIVE" ? "LIVE" : ofState === "ERROR" ? `FALHOU (${orderflowReason || DASH})` : "AGUARDANDO"}
           </span>
         </div>
+        {/* 2ª OPINIÃO FORA DA CLASSE "CORRETORA". As 4 fontes de preço do
+            app são todas exchanges: se concordarem num preço errado,
+            nenhuma contradiz a outra. A leitura agregada da CoinGecko é a
+            única capaz disso. A tolerância NÃO é inventada — é o spread
+            que as próprias corretoras exibem agora, então o piso se adapta
+            sozinho (aperta em calmaria, abre em estresse).
+            Ver nexus/independent-reference-price.ts. */}
+        {independentReference?.status === "OK" && (
+          <div className="flex items-center gap-1.5 px-1">
+            <div
+              className={`w-1.5 h-1.5 rounded-full ${
+                independentReference.verdict === "FORA_DO_RUIDO_DAS_CORRETORAS" ? "bg-[#f0d06f]" : "bg-[#8ab4f8]/50"
+              }`}
+            ></div>
+            <span
+              className={`text-[0.4rem] leading-tight ${
+                independentReference.verdict === "FORA_DO_RUIDO_DAS_CORRETORAS"
+                  ? "text-[#f0d06f]/90"
+                  : "text-[#8ab4f8]/60"
+              }`}
+              title={`Referência independente (CoinGecko, preço agregado de muitas venues) confrontada com as ${independentReference.venueCount} corretoras conectadas. A tolerância é o spread REAL entre elas agora (${independentReference.venueSpreadPct?.toFixed(3)}%) — nunca um limiar fixo. FORA do ruído significa que a referência discorda mais do que as próprias corretoras discordam entre si, o que é informação real sobre o feed. Nunca substitui nenhum preço: é 2ª opinião, e o Núcleo não a lê.`}
+            >
+              REF. INDEPENDENTE · {describeIndependentReference(independentReference)}
+            </span>
+          </div>
+        )}
+        {/* MICROESTRUTURA REAL — só o que foi conquistado: absorção NONE
+            some, muro zero some, zero eventos some, e o bloco inteiro
+            desaparece quando não há nada medido. Venues NUNCA somadas
+            (Ordem A2.1 §16): 2 muros na Binance + 1 na MEXC são duas
+            leituras independentes, nunca "3 muros".
+            Ver nexus/microstructure-readout.ts. */}
+        {microstructure.visible && (
+          <div className="flex items-center gap-1.5 px-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#a78bfa]/70"></div>
+            <span
+              className="text-[0.4rem] leading-tight text-[#a78bfa]/85"
+              title={`Microestrutura real já computada pelo organismo. ABSORÇÃO OBSERVADA é o sinal de order flow sozinho; CONFIRMADA exigiu corroboração posterior de trap-detection — a distinção é o ponto. Muros são contados POR corretora e nunca somados entre elas. Intensidade é contagem de eventos na janela real, e intensidade não é direção. Book obsoleto não conta muro.`}
+            >
+              MICROESTRUTURA · {describeMicrostructureReadout(microstructure)}
+            </span>
+          </div>
+        )}
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-1">
           {signals.length === 0 ? (
             <div className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest py-1">
