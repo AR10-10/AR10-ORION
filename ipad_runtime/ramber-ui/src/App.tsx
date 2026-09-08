@@ -9510,7 +9510,7 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
       )}
 
       {r && r.status !== "OK" && !estado.erro && (
-        <span className="text-[0.45rem] text-[#8ab4f8]/60">DADOS_INSUFICIENTES — {r.reason ?? "sem razão declarada"}</span>
+        <span className="text-[0.45rem] text-[#8ab4f8]/60">{humanizeReasonCode(r.reason) ?? "sem razão declarada"}</span>
       )}
 
       {agg && taxa && (
@@ -9559,7 +9559,7 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
                 </span>
               )}
               {comparison.reason && (
-                <span className="text-[0.42rem] text-[#8ab4f8]/60 leading-tight">{comparison.reason}</span>
+                <span className="text-[0.42rem] text-[#8ab4f8]/60 leading-tight">{humanizeReasonCode(comparison.reason)}</span>
               )}
               <span className="text-[0.4rem] text-[#8ab4f8]/45 leading-tight">{COMPARE_RUNS_AVISO}</span>
             </>

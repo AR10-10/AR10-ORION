@@ -169,7 +169,19 @@ export function calibrateConfidence(rawScore: number | null, results: TradeCostR
   // params nunca é null — mas o fail-closed fica explícito de qualquer
   // forma, nunca um cast silencioso.
   if (params === null) {
-    return { calibrated: false, probability: null, rawScore, sampleSize: usable.length, reason: "DADOS_INSUFICIENTES_PARA_CALIBRACAO" };
+    // Achado real da ORDEM DE SERVIÇO DEFINITIVA (§4, "nunca mostre 'Dados
+    // Insuficientes' sem explicar o porquê"): este ramo mostrava o código
+    // cru DADOS_INSUFICIENTES_PARA_CALIBRACAO — mesma classe de bug já
+    // fechada em reason-vocabulary.ts, mas esta função não passa por lá
+    // (as 2 razões irmãs acima já são prosa real, nunca um código). Fica
+    // consistente com elas em vez de indireção nova.
+    return {
+      calibrated: false,
+      probability: null,
+      rawScore,
+      sampleSize: usable.length,
+      reason: "Falha real no ajuste de calibração (Platt Scaling) — sem probabilidade calibrada nesta leitura.",
+    };
   }
 
   const probability = applyPlattScaling(rawScore, params);
