@@ -13,14 +13,26 @@
 // múltiplas fontes secundárias — mesma ressalva de honestidade de
 // mexc-futures-public.js: doc oficial bloqueada nesta sessão, HTTP 403).
 //
+// Correção (achado real, 2026-09-09, Operador reportou "MEXC não busca os
+// ativos"): a nota abaixo sobre "sem confirmação de um campo de estado
+// equivalente" ficou pra trás. `state` (string, "0"=enabled/"1"=delivery/
+// "2"=completed/"3"=offline/"4"=pause) é um campo REAL do payload de
+// /contract/detail — corroborado agora por uma fonte independente forte
+// que este sandbox não tinha quando este arquivo foi escrito (zero egress
+// a exchanges): o parser de mercados da ccxt (biblioteca de trading open-
+// source, produção real) lê exatamente esse campo pra decidir
+// `active: state == '0'`. Adicionado ADITIVAMENTE — `isHidden`/`apiAllowed`
+// continuam o piso de segurança que já existia; `state` é mais um filtro
+// real, nunca uma substituição. Ausência do campo (`undefined`/`null`)
+// NUNCA vira exclusão — Regra de Ouro 3, ausência não é prova de
+// inatividade — só um `state` PRESENTE e diferente de "0" exclui.
+//
 // Honestidade sobre o filtro de "ativo agora": ao contrário da Binance
 // (campo `status === "TRADING"` bem documentado e já usado em
-// binance-symbols.ts), não há confirmação de mesma confiança para um
-// campo de estado equivalente da MEXC — em vez de adivinhar um valor de
-// enum não confirmado (arriscando um fail-closed silencioso que exclui
-// tudo por engano), o filtro usa só os 2 campos reais que TÊM
-// corroboração razoável (`isHidden`/`apiAllowed`), documentado aqui como
-// limitação honesta, não uma garantia equivalente à da Binance.
+// binance-symbols.ts), a confirmação acima chegou por corroboração
+// externa (ccxt), nunca pela documentação oficial diretamente (ainda
+// bloqueada nesta sessão, HTTP 403/egress) — mesmo padrão de honestidade
+// das demais notas deste arquivo.
 export interface MexcUsdtSymbol {
   symbol: string; // par completo como a API devolve, ex. "BTC_USDT"
   baseAsset: string;
@@ -41,6 +53,7 @@ export function extractMexcUsdtSymbols(json: any): MexcUsdtSymbol[] {
     if ((row.settleCoin ?? row.quoteCoin) !== "USDT") continue;
     if (row.isHidden === true) continue;
     if (row.apiAllowed === false) continue;
+    if (row.state !== undefined && row.state !== null && String(row.state) !== "0") continue;
     out.push({ symbol: row.symbol, baseAsset: row.baseCoin });
   }
   return out;
@@ -48,14 +61,37 @@ export function extractMexcUsdtSymbols(json: any): MexcUsdtSymbol[] {
 
 /** Busca real — toda a lógica testável vive em extractMexcUsdtSymbols.
  *  Fail-closed: qualquer erro de rede/HTTP/parse devolve [] (nunca uma
- *  exceção não tratada, nunca uma lista velha). */
+ *  exceção não tratada, nunca uma lista velha). `console.warn` no motivo
+ *  REAL da falha (status HTTP, erro de rede/CORS, ou resposta sem
+ *  `success:true`) — nunca muda o contrato de retorno (Regra de Ouro 3:
+ *  fail-closed continua [], isto é só diagnóstico pra quem depurar
+ *  depois, achado real desta rodada: "MEXC não carrega" e "por quê" eram
+ *  indistinguíveis, os dois viravam silenciosamente [] sem rastro). */
 export async function fetchMexcUsdtSymbols(): Promise<MexcUsdtSymbol[]> {
   try {
     const res = await fetch(CONTRACT_DETAIL_URL);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.warn(`[mexc-symbols] HTTP ${res.status} de ${CONTRACT_DETAIL_URL} — devolvendo [] honesto.`);
+      return [];
+    }
     const json = await res.json();
-    return extractMexcUsdtSymbols(json);
-  } catch {
+    const out = extractMexcUsdtSymbols(json);
+    if (out.length === 0) {
+      console.warn(
+        `[mexc-symbols] resposta HTTP ok mas zero símbolo extraído — json.success=${json?.success}, ` +
+          `data é array? ${Array.isArray(json?.data)}, tamanho=${Array.isArray(json?.data) ? json.data.length : "n/a"}.`,
+      );
+    }
+    return out;
+  } catch (err) {
+    // Causa mais provável de um catch aqui num navegador real: falha de
+    // rede genuína OU um bloqueio de CORS (fetch() rejeita sem detalhe
+    // algum nesse segundo caso — limitação do próprio navegador, não
+    // deste código). Nunca verificado ao vivo nesta base (sandbox de
+    // implementação sem egress a exchanges) — se for CORS, nenhuma
+    // mudança de código do lado do cliente resolve; precisaria de proxy
+    // próprio, decisão de arquitetura fora do escopo deste fix pontual.
+    console.warn(`[mexc-symbols] fetch/parse falhou (rede ou possível CORS): ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
