@@ -9890,6 +9890,68 @@ Display only, LEI 24: computado só com o painel aberto (Main Thread
 sagrada), nunca reordena a lista existente, nenhum caminho para
 `engine.direction`.
 
+### 6.126 "ADAPTIVE TIMEFRAME INTELLIGENCE" — Stage 2: "qual o melhor tempo gráfico pra este ativo"
+
+Pedido direto do Operador (2026-09-08), reformulando a mesma comparação
+com sistemas de recomendação (YouTube/Google/X) já discutida na §6.125:
+"o sistema aprende com o histórico real e sugere qual tempo gráfico
+operar". Fecha os 2 dos 3 itens que a §6.125 tinha deixado
+"deliberadamente fora do Stage 1" — o terceiro (reordenar a lista do
+Radar) continua fora, sem pedido para isso.
+
+**"Comparar timeframes do MESMO ativo" deixou de precisar multiplicar
+chamadas REST.** A preocupação de custo original da §6.125 era sobre o
+SCANNER DE FUNDO (Radar) cobrir mais prazos por ciclo de rede real.
+`compareAssetTimeframes()` (novo, `nexus/opportunity-rank.ts`) é outra
+coisa: lê só o `trackRecordArchive` já persistido — trades que o Operador
+JÁ fez no passado, zero rede nova — para os 9 prazos de
+`MULTI_TIMEFRAME_LIST` (a MESMA régua já usada pelo §10 TIMEFRAME
+AGREEMENT, `multi-timeframe-engine.ts`, zero segunda enumeração).
+Refatoração interna: a avaliação símbolo:timeframe×archive de
+`computeOpportunityRank` (§6.125) virou uma função privada
+(`evaluateAgainstArchive`) que os dois caminhos chamam — zero segunda
+lógica de junção entre Stage 1 e Stage 2.
+
+**"Auto-troca do timeframe operacional" — a decisão que a §6.125 disse
+precisar de autorização explícita — foi perguntada de verdade.**
+`AskUserQuestion`: "só sugere, você confirma" (opção recomendada,
+escolhida) contra "troca sozinho ao mudar de ativo" e "troca sozinho a
+qualquer momento". `suggestBetterTimeframe()` (novo) só devolve um prazo
+alternativo quando ele já alcançou `ELEGIVEL` na MESMA esteira
+CANDIDATE→SHADOW→OOS→VALIDATION de `model-governance.ts` (§6.123) — zero
+limiar de amostra novo, reusa o veredito mais rigoroso que o sistema já
+sabe calcular. Fail-closed: sem candidato `ELEGIVEL`, ou quando o atual já
+é o melhor `ELEGIVEL` real, devolve `null` — ausência de sugestão é o
+padrão.
+
+**Por que isto não precisa de uma exceção formal de LEI 24 como a
+Entrega 42.** A Entrega 42 (CLAUDE.md) muda o VALOR que o badge do
+Núcleo mostra (`CoreSignalBadge`: LONG/SHORT vira NEUTRO) — uma
+substituição real da leitura exibida. Aqui `engine.direction`/
+`CoreSignalBadge` nunca são tocados, e a troca de timeframe de fato usa o
+MESMO `setChartTimeframe()` que o botão manual da régua já chama —
+equivalente em espécie ao botão "abrir candidato" que o Radar já usa para
+trocar de ativo (`setSelectedAsset`), nunca um caminho novo de decisão. A
+pergunta explícita ao Operador substitui a exceção formal porque não há
+o que "excepcionar": nenhuma segunda decisão de trading é gerada, LEI 24
+permanece intacta pela própria forma da função, não por uma licença dela.
+
+**`TimeframeSuggestionBanner` (novo, App.tsx, componente próprio dentro
+de `ChartWidget`) — mesma disciplina anti-4ª-consumidor da §6.125:**
+chama `useTrackRecordArchive()` no seu próprio corpo, nunca dentro de
+`App()` (trava real: `tests/opportunity-rank.test.ts`, mesma família de
+teste que já protegia `RadarPanel`/`OutcomeMatrixBlock`). A razão da
+sugestão (prazo + estágio da esteira + expectância R + amostra) fica
+sempre visível na própria faixa — nunca só em `title`/tooltip — e a
+sugestão é dispensável (um `X`) sem nunca trocar nada sozinha.
+
+**Ainda em aberto, honestamente:** a maioria dos ativos/prazos mostrará
+sem sugestão por muito tempo — `ELEGIVEL` exige amostra real
+(`MIN_TRADES_FOR_VALID_EXPECTANCY` = 30) mais toda a esteira de
+governança batendo, e a maior parte do histórico do Operador hoje ainda
+não chega lá. Isso não é um defeito desta rodada — é a mesma honestidade
+de sempre: sem prova real, sem sugestão fabricada.
+
 ---
 
 *Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar

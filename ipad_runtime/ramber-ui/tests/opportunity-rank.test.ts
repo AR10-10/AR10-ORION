@@ -7,15 +7,18 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   computeOpportunityRank,
+  compareAssetTimeframes,
+  suggestBetterTimeframe,
   rankOpportunities,
   describeOpportunity,
   type OpportunityReading,
 } from '../src/nexus/opportunity-rank';
+import { MULTI_TIMEFRAME_LIST } from '../src/nexus/multi-timeframe-engine';
 import { evaluateShadowCalibration } from '../src/nexus/shadow-calibration';
 import { evaluateWalkForwardCalibration } from '../src/nexus/walk-forward-calibration';
 import { measureCalibrationFreshness } from '../src/nexus/calibration-freshness';
 import { detectDrift } from '../src/nexus/drift-detector';
-import { evaluatePromotion } from '../src/nexus/model-governance';
+import { evaluatePromotion, type PromotionStage } from '../src/nexus/model-governance';
 import { simulateTradeCostsBatch } from '../src/nexus/trade-simulation';
 import { candleKey } from '../src/nexus/persistence';
 import type { RadarQualificationResult } from '../src/nexus/radar-qualification';
@@ -314,5 +317,149 @@ describe('opportunity-rank: fiação real em App.tsx — aditivo, display only (
   it('a ausência de histórico é rotulada honestamente na própria UI, nunca escondida', () => {
     expect(app).toContain('nunca foi aberto no gráfico');
     expect(app).toContain('describeOpportunity(opportunity)');
+  });
+});
+
+describe('compareAssetTimeframes: "qual o melhor tempo gráfico pra este ativo" (Stage 2)', () => {
+  it('devolve uma leitura por prazo da régua default (MULTI_TIMEFRAME_LIST), na mesma ordem', () => {
+    const r = compareAssetTimeframes('BTCUSDT', {}, NOW);
+    expect(r).toHaveLength(MULTI_TIMEFRAME_LIST.length);
+    expect(r.map((x) => x.timeframe)).toEqual([...MULTI_TIMEFRAME_LIST]);
+    expect(r.every((x) => x.status === 'SEM_HISTORICO')).toBe(true);
+  });
+
+  it('qualityIndex é SEMPRE null — nunca herda a leitura estrutural do Radar (que não existe para a maioria destes prazos)', () => {
+    const arq = { [candleKey('BTCUSDT', '15m')]: estadoComHistorico(40) };
+    const r = compareAssetTimeframes('BTCUSDT', arq, NOW);
+    expect(r.every((x) => x.qualityIndex === null)).toBe(true);
+  });
+
+  it('prazo com histórico real usa a MESMA avaliação de computeOpportunityRank — zero segunda lógica', () => {
+    const n = 45;
+    const arq = { [candleKey('ETHUSDT', '1h')]: estadoComHistorico(n) };
+    const viaCompare = compareAssetTimeframes('ETHUSDT', arq, NOW).find((x) => x.timeframe === '1h')!;
+    const viaCandidato = computeOpportunityRank([candidato({ symbol: 'ETHUSDT', timeframe: '1h' })], arq, NOW)[0];
+    // Mesmo status/amostra/governança/expectativa — só qualityIndex diverge
+    // de propósito (candidato do Radar carrega 0.72; aqui é sempre null).
+    expect(viaCompare.status).toBe(viaCandidato.status);
+    expect(viaCompare.sampleSize).toBe(viaCandidato.sampleSize);
+    expect(viaCompare.expectancyR).toBe(viaCandidato.expectancyR);
+    expect(viaCompare.governance).toEqual(viaCandidato.governance);
+    expect(viaCompare.qualityIndex).toBeNull();
+  });
+
+  it('prazos são pares INDEPENDENTES — histórico em 1h não vaza para 15m do mesmo ativo', () => {
+    const arq = { [candleKey('BTCUSDT', '1h')]: estadoComHistorico(50) };
+    const r = compareAssetTimeframes('BTCUSDT', arq, NOW, ['15m', '1h'] as const);
+    const quinze = r.find((x) => x.timeframe === '15m')!;
+    const umaHora = r.find((x) => x.timeframe === '1h')!;
+    expect(quinze.status).toBe('SEM_HISTORICO');
+    expect(umaHora.status).toBe('HISTORICO_REAL');
+  });
+
+  it('aceita uma régua de prazos custom, nunca obrigada a MULTI_TIMEFRAME_LIST', () => {
+    const r = compareAssetTimeframes('BTCUSDT', {}, NOW, ['5m', '4h']);
+    expect(r.map((x) => x.timeframe)).toEqual(['5m', '4h']);
+  });
+
+  it('null/undefined em archive nunca lança', () => {
+    expect(() => compareAssetTimeframes('BTCUSDT', null, NOW)).not.toThrow();
+    expect(() => compareAssetTimeframes('BTCUSDT', undefined, NOW)).not.toThrow();
+  });
+});
+
+describe('suggestBetterTimeframe: a sugestão (nunca troca automática — LEI 24/§71)', () => {
+  const gov = (stage: PromotionStage) => ({ stage, gates: [], blockedBy: null, nextRequirement: '' });
+
+  const reading = (over: Partial<OpportunityReading>): OpportunityReading => ({
+    symbol: 'BTCUSDT', timeframe: '15m', qualityIndex: null, status: 'SEM_HISTORICO',
+    sampleSize: 0, expectancyR: null, governance: null, ...over,
+  });
+
+  it('nenhum prazo alcançou ELEGIVEL => null, nunca uma sugestão fabricada', () => {
+    const atual = reading({ timeframe: '15m', status: 'HISTORICO_REAL', sampleSize: 40, expectancyR: 0.1, governance: gov('CANDIDATE') });
+    const todos = [atual, reading({ timeframe: '1h', status: 'HISTORICO_REAL', sampleSize: 35, expectancyR: 0.4, governance: gov('SHADOW') })];
+    expect(suggestBetterTimeframe(atual, todos)).toBeNull();
+  });
+
+  it('atual não é ELEGIVEL, existe um ELEGIVEL real em outro prazo => sugere esse', () => {
+    const atual = reading({ timeframe: '15m', status: 'HISTORICO_REAL', sampleSize: 40, expectancyR: 0.1, governance: gov('VALIDATION') });
+    const melhor = reading({ timeframe: '1h', status: 'HISTORICO_REAL', sampleSize: 60, expectancyR: 0.55, governance: gov('ELEGIVEL') });
+    const r = suggestBetterTimeframe(atual, [atual, melhor]);
+    expect(r?.timeframe).toBe('1h');
+  });
+
+  it('atual já é ELEGIVEL e nenhum outro ELEGIVEL bate a expectativa real dele => null', () => {
+    const atual = reading({ timeframe: '15m', status: 'HISTORICO_REAL', sampleSize: 60, expectancyR: 0.6, governance: gov('ELEGIVEL') });
+    const pior = reading({ timeframe: '1h', status: 'HISTORICO_REAL', sampleSize: 60, expectancyR: 0.2, governance: gov('ELEGIVEL') });
+    expect(suggestBetterTimeframe(atual, [atual, pior])).toBeNull();
+  });
+
+  it('atual já é ELEGIVEL mas outro ELEGIVEL tem expectativa REAL estritamente melhor => sugere esse', () => {
+    const atual = reading({ timeframe: '15m', status: 'HISTORICO_REAL', sampleSize: 60, expectancyR: 0.3, governance: gov('ELEGIVEL') });
+    const melhor = reading({ timeframe: '4h', status: 'HISTORICO_REAL', sampleSize: 60, expectancyR: 0.9, governance: gov('ELEGIVEL') });
+    const r = suggestBetterTimeframe(atual, [atual, melhor]);
+    expect(r?.timeframe).toBe('4h');
+  });
+
+  it('vários ELEGIVEL: sugere o de MAIOR expectância real, nunca o primeiro da lista', () => {
+    const atual = reading({ timeframe: '15m', status: 'SEM_HISTORICO' });
+    const medio = reading({ timeframe: '1h', status: 'HISTORICO_REAL', sampleSize: 60, expectancyR: 0.3, governance: gov('ELEGIVEL') });
+    const melhor = reading({ timeframe: '4h', status: 'HISTORICO_REAL', sampleSize: 60, expectancyR: 0.7, governance: gov('ELEGIVEL') });
+    const r = suggestBetterTimeframe(atual, [atual, medio, melhor]);
+    expect(r?.timeframe).toBe('4h');
+  });
+
+  it('nunca sugere o MESMO timeframe já selecionado', () => {
+    const atual = reading({ timeframe: '15m', status: 'HISTORICO_REAL', sampleSize: 60, expectancyR: 0.5, governance: gov('ELEGIVEL') });
+    // Mesmo se por algum motivo a lista contiver o próprio prazo atual de novo.
+    const duplicata = reading({ timeframe: '15m', status: 'HISTORICO_REAL', sampleSize: 999, expectancyR: 99, governance: gov('ELEGIVEL') });
+    expect(suggestBetterTimeframe(atual, [atual, duplicata])).toBeNull();
+  });
+
+  it('atual null (ativo nunca aberto em prazo nenhum) — qualquer ELEGIVEL real já é sugestão', () => {
+    const eleg = reading({ timeframe: '1h', status: 'HISTORICO_REAL', sampleSize: 60, expectancyR: 0.4, governance: gov('ELEGIVEL') });
+    expect(suggestBetterTimeframe(null, [eleg])?.timeframe).toBe('1h');
+    expect(suggestBetterTimeframe(undefined, [eleg])?.timeframe).toBe('1h');
+  });
+
+  it('null/undefined/vazio em all nunca lançam, sempre null', () => {
+    const atual = reading({ timeframe: '15m' });
+    expect(suggestBetterTimeframe(atual, null)).toBeNull();
+    expect(suggestBetterTimeframe(atual, undefined)).toBeNull();
+    expect(suggestBetterTimeframe(atual, [])).toBeNull();
+  });
+});
+
+describe('TimeframeSuggestionBanner: fiação real em App.tsx — sugere, NUNCA troca sozinho (LEI 24/§71)', () => {
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
+
+  it('existe como componente próprio — não é uma 4ª chamada a useTrackRecordArchive() dentro de App()', () => {
+    expect(app).toContain('function TimeframeSuggestionBanner()');
+    // Mesma disciplina do teste de outcome-matrix.test.ts: nenhuma chamada
+    // a useTrackRecordArchive() pode viver dentro do corpo de App().
+  });
+
+  it('a troca de verdade usa o MESMO setChartTimeframe do botão manual da régua — nunca um caminho novo', () => {
+    const banner = app.slice(app.indexOf('function TimeframeSuggestionBanner()'), app.indexOf('function UpdateAvailableBanner()'));
+    expect(banner).toContain('setChartTimeframe?.(suggestion.timeframe)');
+    // Zero import/uso de qualquer setter de engine.direction/Trade Plan aqui.
+    expect(banner).not.toMatch(/engine\.direction\s*=|setTradePlan|setEngineDirection/);
+  });
+
+  it('nunca troca sozinho: setChartTimeframe só é chamado dentro de um onClick, nunca em useEffect/useMemo', () => {
+    const banner = app.slice(app.indexOf('function TimeframeSuggestionBanner()'), app.indexOf('function UpdateAvailableBanner()'));
+    expect(banner).not.toMatch(/useEffect\([^)]*setChartTimeframe/s);
+    expect(banner).toMatch(/onClick=\{\(\)\s*=>\s*setChartTimeframe\?\.\(suggestion\.timeframe\)\}/);
+  });
+
+  it('a razão real (prazo + evidência) fica sempre visível na própria faixa, nunca só em tooltip/title', () => {
+    const banner = app.slice(app.indexOf('function TimeframeSuggestionBanner()'), app.indexOf('function UpdateAvailableBanner()'));
+    expect(banner).toContain('describeOpportunity(suggestion)');
+    expect(banner).not.toMatch(/title=\{[^}]*describeOpportunity/);
+  });
+
+  it('está montado na árvore de render (ChartWidget), não é uma função morta', () => {
+    expect(app).toContain('<TimeframeSuggestionBanner />');
   });
 });
