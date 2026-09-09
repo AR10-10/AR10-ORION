@@ -30,18 +30,34 @@
 // nesta base (reconstruiria contexto de Conselho/GMIL/fluxo que só existe
 // no momento real — ver o cabeçalho daquele módulo).
 //
-// ── ESCOPO DELIBERADAMENTE FORA DESTA RODADA ────────────────────────────
-// "Melhor timeframe PARA este ativo" (comparar 1m/5m/15m/1h do MESMO
-// símbolo, §3-§9 do documento do Operador) fica para uma rodada futura:
-// cada candidato do Radar hoje carrega UM timeframe só — o mesmo
-// selecionado no gráfico no instante do scan. Cobrir vários exigiria
-// multiplicar as chamadas REST do scanner, uma decisão de custo real que
-// não estava no escopo aprovado aqui.
+// ── STAGE 2 (2026-09-08, pedido direto do Operador — "qual seria o
+// melhor tempo gráfico pra operar", explicitamente comparado por ele à
+// arquitetura de recomendação do YouTube/Google/X) ──────────────────────
+// Os dois itens abaixo, que a nota original de Stage 1 tinha deixado de
+// fora, foram fechados nesta rodada: `compareAssetTimeframes()` e
+// `suggestBetterTimeframe()`.
 //
-// Auto-troca do timeframe operacional (§28-§29 do documento, hysteresis,
-// switch-guard) também fica de fora: mudar o timeframe que o Core Engine
-// lê é território de LEI 24/§71 — merece sua própria decisão explícita,
-// nunca entrar de carona numa rodada aditiva de exibição.
+// "Melhor timeframe PARA este ativo" deixou de precisar multiplicar
+// chamadas REST — a preocupação de custo original era sobre o SCANNER DE
+// FUNDO cobrir mais prazos por ciclo (Radar). `compareAssetTimeframes()` é
+// outra coisa: lê só o `trackRecordArchive` já persistido (trades que o
+// Operador JÁ fez no passado), zero rede nova, chamado sob demanda quando
+// o Operador está olhando aquele ativo — o mesmo padrão de custo de
+// `computeOpportunityRank`, nunca o do scanner.
+//
+// Auto-troca do timeframe operacional (a decisão que a nota original de
+// Stage 1 disse precisar de autorização explícita e nunca poderia entrar
+// de carona): perguntada de verdade ao Operador (`AskUserQuestion`,
+// resposta "Só sugere, você confirma") — igual em espírito à exceção
+// pontual da Entrega 42, mas categoricamente mais simples: aqui
+// `engine.direction`/`CoreSignalBadge` nunca são tocados, nenhuma segunda
+// decisão de trading é gerada. `suggestBetterTimeframe()` só devolve QUAL
+// prazo tem evidência real melhor; a troca de fato continua sendo o
+// MESMO `setChartTimeframe()` de sempre, dado pela mão do Operador — o
+// mesmo tipo de botão que o Radar já usa pra trocar de ativo
+// (`setSelectedAsset` em `openCandidate()`, App.tsx). Nunca automático,
+// nunca silencioso, razão sempre visível (número + estágio da esteira,
+// nunca escondido em tooltip).
 //
 // LEI 24: leitura pura sobre dados já reais. Zero direção, zero decisão,
 // zero caminho para engine.direction ou para o Trade Plan.
@@ -56,6 +72,7 @@ import { evaluateWalkForwardCalibration } from "./walk-forward-calibration";
 import { measureCalibrationFreshness } from "./calibration-freshness";
 import { detectDrift } from "./drift-detector";
 import { evaluatePromotion, type GovernanceReport, type PromotionStage } from "./model-governance";
+import { MULTI_TIMEFRAME_LIST } from "./multi-timeframe-engine";
 
 export type OpportunityEvidenceStatus = "HISTORICO_REAL" | "SEM_HISTORICO";
 
@@ -82,6 +99,48 @@ export interface OpportunityReading {
 }
 
 /**
+ * O NÚCLEO real de junção — um símbolo:timeframe contra o Track Record
+ * Archive. Função pura, privada: `computeOpportunityRank` (candidatos do
+ * Radar) e `compareAssetTimeframes` (um ativo, vários prazos) chamam a
+ * MESMA avaliação — zero segunda implementação entre os dois usos.
+ */
+function evaluateAgainstArchive(
+  symbol: string,
+  timeframe: string,
+  qualityIndex: number | null,
+  archive: Record<string, TrackRecordState>,
+  now: number,
+): OpportunityReading {
+  const key = candleKey(symbol, timeframe as Timeframe);
+  const entry = archive[key];
+  const history = entry && Array.isArray(entry.history) ? entry.history : [];
+  const results = history.length > 0 ? simulateTradeCostsBatch(history) : [];
+
+  if (results.length === 0) {
+    return { symbol, timeframe, qualityIndex, status: "SEM_HISTORICO", sampleSize: 0, expectancyR: null, governance: null };
+  }
+
+  // As MESMAS quatro chamadas do memo de App.tsx para o par ativo —
+  // aplicadas aqui a um par arquivado. Zero segunda implementação.
+  const shadow = evaluateShadowCalibration(results);
+  const walkForward = evaluateWalkForwardCalibration(results);
+  const freshness = measureCalibrationFreshness(results, now, timeframe);
+  const drift = detectDrift(results);
+  const governance = evaluatePromotion(shadow, walkForward, freshness, drift);
+  const expectancy = computeExpectancy(results);
+
+  return {
+    symbol,
+    timeframe,
+    qualityIndex,
+    status: "HISTORICO_REAL",
+    sampleSize: results.length,
+    expectancyR: expectancy?.expectancyR ?? null,
+    governance,
+  };
+}
+
+/**
  * Junta candidatos do Radar (qualidade do momento) com o Track Record
  * Archive (desfecho real, quando existe). Função pura — mesma amostra que
  * já alimenta shadow/walk-forward/drift/frescor para o par ATIVO, agora
@@ -97,44 +156,34 @@ export function computeOpportunityRank(
 ): OpportunityReading[] {
   const lista = Array.isArray(candidates) ? candidates : [];
   const arq = archive ?? {};
+  return lista.map((c) => evaluateAgainstArchive(c.symbol, c.timeframe, c.qualityIndex, arq, now));
+}
 
-  return lista.map((c): OpportunityReading => {
-    const key = candleKey(c.symbol, c.timeframe as Timeframe);
-    const entry = arq[key];
-    const history = entry && Array.isArray(entry.history) ? entry.history : [];
-    const results = history.length > 0 ? simulateTradeCostsBatch(history) : [];
-
-    if (results.length === 0) {
-      return {
-        symbol: c.symbol,
-        timeframe: c.timeframe,
-        qualityIndex: c.qualityIndex,
-        status: "SEM_HISTORICO",
-        sampleSize: 0,
-        expectancyR: null,
-        governance: null,
-      };
-    }
-
-    // As MESMAS quatro chamadas do memo de App.tsx para o par ativo —
-    // aplicadas aqui a um par arquivado. Zero segunda implementação.
-    const shadow = evaluateShadowCalibration(results);
-    const walkForward = evaluateWalkForwardCalibration(results);
-    const freshness = measureCalibrationFreshness(results, now, c.timeframe);
-    const drift = detectDrift(results);
-    const governance = evaluatePromotion(shadow, walkForward, freshness, drift);
-    const expectancy = computeExpectancy(results);
-
-    return {
-      symbol: c.symbol,
-      timeframe: c.timeframe,
-      qualityIndex: c.qualityIndex,
-      status: "HISTORICO_REAL",
-      sampleSize: results.length,
-      expectancyR: expectancy?.expectancyR ?? null,
-      governance,
-    };
-  });
+/**
+ * "Qual o melhor tempo gráfico pra operar ESTE ativo" — a comparação
+ * cross-timeframe pedida pelo Operador (§3-§9 do documento original,
+ * deliberadamente fora do Stage 1). Mesmo símbolo, um `OpportunityReading`
+ * por prazo real da régua — reusa a MESMA `evaluateAgainstArchive` de
+ * `computeOpportunityRank`, zero segunda lógica de junção.
+ *
+ * `qualityIndex` sempre null aqui: é a leitura ESTRUTURAL DO MOMENTO do
+ * Radar (confluence.intensity no instante do scan), que só existe para os
+ * poucos prazos que o scanner de fundo realmente varre
+ * (`RADAR_SCAN_TIMEFRAMES`) — inventar um valor para os demais seria
+ * fabricar leitura estrutural que não existe (Regra de Ouro 3).
+ *
+ * @param timeframes régua real a comparar — default é a MESMA lista
+ *   curada de `multi-timeframe-engine.ts` (já usada pelo §10 TIMEFRAME
+ *   AGREEMENT), nunca uma segunda enumeração de prazos.
+ */
+export function compareAssetTimeframes(
+  symbol: string,
+  archive: Record<string, TrackRecordState> | null | undefined,
+  now: number,
+  timeframes: readonly string[] = MULTI_TIMEFRAME_LIST,
+): OpportunityReading[] {
+  const arq = archive ?? {};
+  return timeframes.map((tf) => evaluateAgainstArchive(symbol, tf, null, arq, now));
 }
 
 // Ordem de preferência dos estágios da esteira, mais avançado primeiro.
@@ -169,6 +218,53 @@ export function rankOpportunities(
     }
     return (b.qualityIndex ?? 0) - (a.qualityIndex ?? 0);
   });
+}
+
+/**
+ * "Existe um prazo com evidência REAL melhor que o atual, pra este
+ * ativo?" — a peça de sugestão pedida pelo Operador ("joga qual o
+ * timeframe seria melhor"), nunca uma troca automática (LEI 24/§71: o
+ * Operador decidiu explicitamente que o Núcleo continua lendo o prazo que
+ * ELE escolhe — isto só sugere, a troca de verdade é o mesmo
+ * `setChartTimeframe` de sempre, disparado pela mão do Operador).
+ *
+ * FAIL-CLOSED, sem limiar novo: só sugere um prazo cujo `governance.stage`
+ * já é `ELEGIVEL` — a MESMA esteira CANDIDATE→SHADOW→OOS→VALIDATION de
+ * `model-governance.ts`, que já exige amostra real (`MIN_TRADES_FOR_VALID_
+ * EXPECTANCY`), comparação real contra o incumbente e ausência de drift.
+ * Não é um piso de amostra inventado aqui — é reusar o veredito mais
+ * rigoroso que este sistema já sabe calcular. Devolve `null` sempre que
+ * não houver nada real para sugerir (nenhum candidato ELEGIVEL, ou o
+ * atual já é o melhor ELEGIVEL) — ausência de sugestão é o padrão, nunca
+ * uma sugestão fabricada pra preencher a tela.
+ *
+ * @param current a leitura do prazo JÁ selecionado no gráfico (pode ser
+ *   `null` quando o ativo nunca foi aberto neste prazo — trata como "sem
+ *   base pra comparar", qualquer ELEGIVEL já é sugestão real).
+ * @param all as leituras de `compareAssetTimeframes` para o MESMO ativo.
+ */
+export function suggestBetterTimeframe(
+  current: OpportunityReading | null | undefined,
+  all: readonly OpportunityReading[] | null | undefined,
+): OpportunityReading | null {
+  const lista = Array.isArray(all) ? all : [];
+  const currentTimeframe = current?.timeframe ?? null;
+  const eligible = lista.filter((r) => r.timeframe !== currentTimeframe && r.governance?.stage === "ELEGIVEL");
+  if (eligible.length === 0) return null;
+
+  const best = eligible.reduce((acc, r) => ((r.expectancyR ?? -Infinity) > (acc.expectancyR ?? -Infinity) ? r : acc));
+
+  // Atual também ELEGIVEL: só vale a pena sugerir se a expectativa REAL do
+  // alternativo for estritamente melhor — nunca troca por empate/estágio
+  // igual sozinho.
+  if (current?.governance?.stage === "ELEGIVEL") {
+    const currentExp = current.expectancyR ?? -Infinity;
+    return (best.expectancyR ?? -Infinity) > currentExp ? best : null;
+  }
+
+  // Atual não alcançou ELEGIVEL (ou nem tem par arquivado): qualquer
+  // candidato que JÁ alcançou é, por definição, evidência real melhor.
+  return best;
 }
 
 /** Linha curta para a UI. O `n` viaja sempre junto do número — mesmo

@@ -344,6 +344,8 @@ import {
 } from "./nexus/model-governance";
 import {
   computeOpportunityRank,
+  compareAssetTimeframes,
+  suggestBetterTimeframe,
   describeOpportunity,
   type OpportunityReading,
 } from "./nexus/opportunity-rank";
@@ -6463,6 +6465,70 @@ function DataFreshnessBanner() {
 // (recarregar agora), sem nenhuma outra região aria-live cobrindo esta
 // informação — `role="status"` aqui é o próprio anúncio, não uma
 // duplicata de nada existente.
+// "Qual o melhor tempo gráfico pra operar este ativo" — pedido direto do
+// Operador (2026-09-08), comparado por ele à arquitetura de recomendação
+// do YouTube/Google/X: aprender com o histórico REAL e sugerir, nunca
+// fabricar confiança que a amostra não sustenta. `suggestBetterTimeframe()`
+// (nexus/opportunity-rank.ts) só devolve um prazo quando ele já alcançou
+// ELEGIVEL na MESMA esteira CANDIDATE→SHADOW→OOS→VALIDATION de
+// model-governance.ts — zero limiar novo, zero estatística própria aqui.
+//
+// LEI 24/§71: isto SÓ sugere. A troca de verdade é `setChartTimeframe()`,
+// a MESMA função que o botão manual da régua de timeframes já chama —
+// nunca um caminho novo, nunca automático, nunca silencioso (a razão real
+// — estágio + expectância R + amostra — fica sempre visível na própria
+// faixa, nunca só no tooltip). Decisão confirmada explicitamente pelo
+// Operador via AskUserQuestion ("Só sugere, você confirma").
+//
+// Não é uma segunda chamada a useTrackRecordArchive() dentro de App() —
+// vive em componente próprio, mesmo padrão de RadarPanel/OutcomeMatrixBlock
+// (tests/outcome-matrix.test.ts trava esse invariante).
+function TimeframeSuggestionBanner() {
+  const { selectedAsset, chartTimeframe, setChartTimeframe } = useContext(WidgetContext) || {};
+  const trackRecordArchive = useTrackRecordArchive();
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+  const freshnessMinuteBucket = Math.floor(Date.now() / 60_000);
+
+  const suggestion = useMemo(() => {
+    if (!selectedAsset || !chartTimeframe) return null;
+    const comparison = compareAssetTimeframes(selectedAsset, trackRecordArchive, freshnessMinuteBucket * 60_000);
+    const current = comparison.find((r) => r.timeframe === chartTimeframe) ?? null;
+    return suggestBetterTimeframe(current, comparison);
+  }, [selectedAsset, chartTimeframe, trackRecordArchive, freshnessMinuteBucket]);
+
+  const suggestionKey = suggestion ? `${selectedAsset}:${chartTimeframe}->${suggestion.timeframe}` : null;
+  if (!suggestion || !suggestionKey || dismissedKey === suggestionKey) return null;
+
+  return (
+    <div
+      role="status"
+      className="flex items-center justify-between gap-2 mb-1 px-2 py-1 rounded bg-[#00f0ff10] border border-[#00f0ff30] text-[0.5rem] leading-tight"
+    >
+      <span className="text-[#8ab4f8]/80">
+        <strong className="text-[#00f0ff] font-bold">{suggestion.timeframe}</strong> tem evidência real melhor que{" "}
+        <strong>{chartTimeframe}</strong> para {selectedAsset} — {describeOpportunity(suggestion)}
+      </span>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          type="button"
+          onClick={() => setChartTimeframe?.(suggestion.timeframe)}
+          className="px-2 py-0.5 rounded bg-[#00f0ff20] text-[#00f0ff] font-bold hover:bg-[#00f0ff30] transition-colors"
+        >
+          TROCAR
+        </button>
+        <button
+          type="button"
+          onClick={() => setDismissedKey(suggestionKey)}
+          aria-label="Dispensar sugestão de timeframe"
+          className="px-1 text-[#8ab4f8]/50 hover:text-[#8ab4f8] transition-colors"
+        >
+          <X size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function UpdateAvailableBanner() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
@@ -11728,6 +11794,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
         </div>
       }
     >
+      <TimeframeSuggestionBanner />
       {/* Zero repetição (protocolo §2): o antigo overlay com símbolo/preço
           gigante/variação/HIGH/VOL duplicava — em dobro ou triplo — dados que
           agora têm ocorrência única na barra de comando unificada. Removido
