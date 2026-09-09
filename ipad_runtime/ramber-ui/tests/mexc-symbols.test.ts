@@ -42,6 +42,30 @@ describe('mexc-symbols: extractMexcUsdtSymbols — só contratos USDT-M reais e 
     expect(extractMexcUsdtSymbols(raw)).toEqual([]);
   });
 
+  it('state:"0" (enabled, corroborado via ccxt) passa normalmente', () => {
+    const raw = { success: true, code: 0, data: [contractRow({ state: '0' })] };
+    expect(extractMexcUsdtSymbols(raw)).toEqual([{ symbol: 'BTC_USDT', baseAsset: 'BTC' }]);
+  });
+
+  it('state numérico 0 (não string) também passa — nunca depende do tipo exato', () => {
+    const raw = { success: true, code: 0, data: [contractRow({ state: 0 })] };
+    expect(extractMexcUsdtSymbols(raw)).toEqual([{ symbol: 'BTC_USDT', baseAsset: 'BTC' }]);
+  });
+
+  it('state "1"/"2"/"3"/"4" (delivery/completed/offline/pause) são excluídos', () => {
+    for (const state of ['1', '2', '3', '4']) {
+      const raw = { success: true, code: 0, data: [contractRow({ state })] };
+      expect(extractMexcUsdtSymbols(raw)).toEqual([]);
+    }
+  });
+
+  it('state ausente (undefined/null) NUNCA exclui — ausência não é prova de inatividade (Regra de Ouro 3)', () => {
+    expect(extractMexcUsdtSymbols({ success: true, code: 0, data: [contractRow({ state: undefined })] }))
+      .toEqual([{ symbol: 'BTC_USDT', baseAsset: 'BTC' }]);
+    expect(extractMexcUsdtSymbols({ success: true, code: 0, data: [contractRow({ state: null })] }))
+      .toEqual([{ symbol: 'BTC_USDT', baseAsset: 'BTC' }]);
+  });
+
   it('linha sem symbol/baseCoin real (tipos errados) é excluída', () => {
     const raw = { success: true, code: 0, data: [{ ...contractRow(), symbol: null }, { ...contractRow(), baseCoin: 42 }] };
     expect(extractMexcUsdtSymbols(raw)).toEqual([]);
@@ -89,5 +113,25 @@ describe('mexc-symbols: fetchMexcUsdtSymbols — fail-closed real de rede', () =
   it('fetch rejeitado (rede indisponível) devolve [] honesto, nunca lança', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
     expect(await fetchMexcUsdtSymbols()).toEqual([]);
+  });
+
+  it('achado real (Operador reportou "MEXC não busca"): cada falha loga o MOTIVO real, nunca só [] silencioso', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    await fetchMexcUsdtSymbols();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('503'));
+    warn.mockClear();
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await fetchMexcUsdtSymbols();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch'));
+    warn.mockClear();
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: false, code: 1, data: [] }) }));
+    await fetchMexcUsdtSymbols();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('success=false'));
+
+    warn.mockRestore();
   });
 });
